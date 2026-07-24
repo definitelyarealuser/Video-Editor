@@ -1,2 +1,36 @@
 # Video-Editor
-Drag and drop video file and bookend with a png. 
+
+A small local web app for bookending a sermon video with a title graphic.
+
+The rendered output is: **PNG** (held for N seconds) → **crossfade** → **your video** → **crossfade** → **PNG** (held for N seconds) → **fade to black**.
+
+## How it works
+
+- **Frontend**: a single static page (`public/`) with drag-and-drop zones for the video and PNG, number inputs for both bookend durations, the crossfade length, the final fade-to-black length, and the output file name. No build step, no framework.
+- **Backend**: an Express server (`server/`) that accepts the upload, probes the video with `ffprobe` (resolution, frame rate, duration, whether it has audio), builds an `ffmpeg` filter graph (`xfade` for video, `acrossfade` for audio, running in parallel so the crossfades stay in sync with silence under the bookend segments), and renders the final MP4. Progress streams back to the browser over Server-Sent Events.
+
+## Prerequisites
+
+- Node.js 18+
+- `ffmpeg` and `ffprobe` on your `PATH` (e.g. `sudo apt install ffmpeg` / `brew install ffmpeg`)
+
+## Run it
+
+```bash
+npm install
+npm start
+```
+
+Then open http://localhost:3000.
+
+1. Drag your bookend PNG into the left dropzone, and your sermon video into the right one.
+2. Set the start PNG duration, end PNG duration, crossfade duration, fade-to-black duration, and the output file name.
+3. Click **Render Video**. A progress bar tracks the ffmpeg render; when it finishes you get an in-browser preview and a download button.
+
+Uploaded source files are deleted as soon as a render finishes (or fails). Rendered outputs are cleaned up automatically after 2 hours.
+
+## Notes / tuning
+
+- The crossfade duration must be shorter than both PNG durations and the video's own length.
+- The PNG is letterboxed (scaled + padded with black) to match the video's resolution, so any aspect ratio works.
+- Video is re-encoded with `libx264`/`aac` (CRF 18) regardless of the source codec, since a filter graph like this requires decoding and re-encoding anyway.

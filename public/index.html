@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Sermon Video Editor</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <main class="page">
+    <header>
+      <h1>Sermon Video Editor</h1>
+      <p class="subtitle">Bookend a video with a title graphic: fade in from the PNG, crossfade into your video, crossfade back to the PNG, then fade to black.</p>
+    </header>
+
+    <form id="render-form">
+      <div class="dropzones">
+        <div class="dropzone" id="dz-png" data-kind="png">
+          <input type="file" id="input-png" accept="image/*" hidden />
+          <div class="dz-empty">
+            <div class="dz-icon">🖼️</div>
+            <div class="dz-label">Drop bookend PNG here</div>
+            <div class="dz-sub">or click to browse</div>
+          </div>
+          <div class="dz-filled" hidden>
+            <img id="png-preview" alt="PNG preview" />
+            <div class="dz-filename" id="png-filename"></div>
+            <button type="button" class="dz-clear" data-target="png">Remove</button>
+          </div>
+        </div>
+
+        <div class="dropzone" id="dz-video" data-kind="video">
+          <input type="file" id="input-video" accept="video/*" hidden />
+          <div class="dz-empty">
+            <div class="dz-icon">🎬</div>
+            <div class="dz-label">Drop sermon video here</div>
+            <div class="dz-sub">or click to browse</div>
+          </div>
+          <div class="dz-filled" hidden>
+            <video id="video-preview" muted></video>
+            <div class="dz-filename" id="video-filename"></div>
+            <button type="button" class="dz-clear" data-target="video">Remove</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="settings">
+        <div class="field">
+          <label for="startDuration">Start PNG duration (seconds)</label>
+          <input type="number" id="startDuration" name="startDuration" value="5" min="0.5" step="0.5" required />
+        </div>
+        <div class="field">
+          <label for="endDuration">End PNG duration (seconds)</label>
+          <input type="number" id="endDuration" name="endDuration" value="5" min="0.5" step="0.5" required />
+        </div>
+        <div class="field">
+          <label for="transition">Crossfade duration (seconds)</label>
+          <input type="number" id="transition" name="transition" value="1" min="0.1" step="0.1" required />
+        </div>
+        <div class="field">
+          <label for="fadeOut">Final fade-to-black (seconds)</label>
+          <input type="number" id="fadeOut" name="fadeOut" value="1.5" min="0.1" step="0.1" required />
+        </div>
+        <div class="field field-wide">
+          <label for="outputName">Output file name</label>
+          <div class="filename-input">
+            <input type="text" id="outputName" name="outputName" value="sermon-final" required />
+            <span>.mp4</span>
+          </div>
+        </div>
+      </div>
+
+      <button type="submit" id="render-btn" disabled>Render Video</button>
+    </form>
+
+    <section id="progress-section" hidden>
+      <div class="progress-track">
+        <div class="progress-fill" id="progress-fill"></div>
+      </div>
+      <div class="progress-label" id="progress-label">Starting…</div>
+    </section>
+
+    <section id="result-section" hidden>
+      <h2>Your video is ready</h2>
+      <video id="result-preview" controls></video>
+      <a id="download-link" class="download-btn" download>Download</a>
+    </section>
+
+    <section id="error-section" hidden>
+      <div class="error-box" id="error-message"></div>
+    </section>
+  </main>
+
+  <script src="app.js"></script>
+</body>
+</html>
