@@ -116,18 +116,24 @@ function buildFilterGraph({
   ];
 
   const mainAudioSource = hasAudio
-    ? `[1:a]aformat=sample_rates=48000:channel_layouts=stereo[maina]`
-    : `anullsrc=channel_layout=stereo:sample_rate=48000,atrim=0:${videoDuration},asetpts=PTS-STARTPTS[maina]`;
+    ? `[1:a]aformat=sample_rates=48000:channel_layouts=stereo[mainaSrc]`
+    : `anullsrc=channel_layout=stereo:sample_rate=48000,atrim=0:${videoDuration},asetpts=PTS-STARTPTS[mainaSrc]`;
 
-  const audioChain = [
-    mainAudioSource,
-  ];
+  const audioChain = [mainAudioSource];
+
+  // The MP3 export uses its own copy of the main audio (trimmed to just the
+  // clip itself, not the PNG holds), so split off a second copy up front
+  // when needed — a filter pad can only feed one downstream consumer.
+  const mainaLabel = needsMp3 ? 'maina' : 'mainaSrc';
+  if (needsMp3) {
+    audioChain.push(`[mainaSrc]asplit=2[maina][mainaMp3]`);
+  }
 
   if (crossfadeAudio) {
     audioChain.push(
       `anullsrc=channel_layout=stereo:sample_rate=48000,atrim=0:${startDuration},asetpts=PTS-STARTPTS[silence1]`,
       `anullsrc=channel_layout=stereo:sample_rate=48000,atrim=0:${endDuration},asetpts=PTS-STARTPTS[silence2]`,
-      `[silence1][maina]acrossfade=d=${transition}[xa1]`,
+      `[silence1][${mainaLabel}]acrossfade=d=${transition}[xa1]`,
       `[xa1][silence2]acrossfade=d=${transition}[xa2]`
     );
   } else {
@@ -136,7 +142,7 @@ function buildFilterGraph({
     audioChain.push(
       `anullsrc=channel_layout=stereo:sample_rate=48000,atrim=0:${offset1},asetpts=PTS-STARTPTS[silence1]`,
       `anullsrc=channel_layout=stereo:sample_rate=48000,atrim=0:${endDuration - transition},asetpts=PTS-STARTPTS[silence2]`,
-      `[silence1][maina][silence2]concat=n=3:v=0:a=1[xa2]`
+      `[silence1][${mainaLabel}][silence2]concat=n=3:v=0:a=1[xa2]`
     );
   }
 
@@ -145,15 +151,25 @@ function buildFilterGraph({
     audioChain.push(`[xa2]loudnorm=I=${targetLufs}:TP=-1.5:LRA=11[xa2n]`);
     lastAudioLabel = 'xa2n';
   }
+  audioChain.push(`[${lastAudioLabel}]afade=t=out:st=${fadeStart}:d=${fadeOut}[aout]`);
 
-  // A filter graph output pad can only be consumed by one -map, so when we're
-  // also producing a standalone MP3, split the finished audio into two identical pads.
-  const audioOutputLabels = needsMp3 ? ['aout', 'aoutMp3'] : ['aout'];
+  const audioOutputLabels = ['aout'];
+
   if (needsMp3) {
-    audioChain.push(`[${lastAudioLabel}]afade=t=out:st=${fadeStart}:d=${fadeOut}[afaded]`);
-    audioChain.push(`[afaded]asplit=2[aout][aoutMp3]`);
-  } else {
-    audioChain.push(`[${lastAudioLabel}]afade=t=out:st=${fadeStart}:d=${fadeOut}[aout]`);
+    // Just the clip's own audio (no PNG-hold silence), still fading up from
+    // silence and back down over `transition` seconds at each end, mirroring
+    // the crossfade the picture does — regardless of the full render's
+    // audio-crossfade toggle.
+    let mp3Label = 'mainaMp3';
+    if (normalize) {
+      audioChain.push(`[mainaMp3]loudnorm=I=${targetLufs}:TP=-1.5:LRA=11[mainaMp3n]`);
+      mp3Label = 'mainaMp3n';
+    }
+    audioChain.push(
+      `[${mp3Label}]afade=t=in:st=0:d=${transition}[mp3faded]`,
+      `[mp3faded]afade=t=out:st=${videoDuration - transition}:d=${transition}[aoutMp3]`
+    );
+    audioOutputLabels.push('aoutMp3');
   }
 
   return {
