@@ -25,9 +25,16 @@ Then open http://localhost:3000.
 
 1. Drag your bookend PNG into the left dropzone, and your sermon video into the right one.
 2. Set the start PNG duration, end PNG duration, crossfade duration, fade-to-black duration, and the output file name.
-3. Click **Render Video**. A progress bar tracks the ffmpeg render; when it finishes you get an in-browser preview and a download button.
+3. Optionally check **Normalize audio** and pick a target loudness (-20 to -10 LUFS, defaults to -14) and/or **Also render an MP3**.
+4. Click **Render Video**. A progress bar tracks the ffmpeg render; when it finishes you get an in-browser preview and download buttons (MP4, plus MP3 if requested).
 
 Uploaded source files are deleted as soon as a render finishes (or fails). Rendered outputs are cleaned up automatically after 2 hours.
+
+## Options
+
+- **Apply crossfade to audio too** (checked by default, next to the crossfade field): when checked, the audio under the bookends crossfades the same way the picture does (`acrossfade`). When unchecked, the audio hard-cuts to/from the main video's audio right as the picture's crossfade starts/ends instead of blending — total length is unaffected either way.
+- **Normalize audio**: runs the combined audio (video + bookend silence) through `loudnorm` (EBU R128) targeting the chosen integrated loudness before the final fade-out. Single-pass, so expect the result to land within roughly half a LU of the target.
+- **Also render an MP3**: exports a second file containing just the final, fully-processed audio track (same crossfade/normalization settings) as an MP3 alongside the MP4.
 
 ## Notes / tuning
 

@@ -15,9 +15,16 @@
   const resultSection = document.getElementById('result-section');
   const resultPreview = document.getElementById('result-preview');
   const downloadLink = document.getElementById('download-link');
+  const downloadMp3Link = document.getElementById('download-mp3-link');
 
   const errorSection = document.getElementById('error-section');
   const errorMessage = document.getElementById('error-message');
+
+  const normalizeAudioCheckbox = document.getElementById('normalizeAudio');
+  const targetLufsSelect = document.getElementById('targetLufs');
+  normalizeAudioCheckbox.addEventListener('change', () => {
+    targetLufsSelect.disabled = !normalizeAudioCheckbox.checked;
+  });
 
   function setupDropzone(zone, input, kind) {
     zone.addEventListener('click', (e) => {
@@ -99,6 +106,7 @@
   function resetPanels() {
     errorSection.hidden = true;
     resultSection.hidden = true;
+    downloadMp3Link.hidden = true;
     progressSection.hidden = false;
     progressFill.style.width = '0%';
     progressLabel.textContent = 'Uploading files…';
@@ -120,6 +128,10 @@
     formData.append('transition', document.getElementById('transition').value);
     formData.append('fadeOut', document.getElementById('fadeOut').value);
     formData.append('outputName', document.getElementById('outputName').value.trim());
+    formData.append('crossfadeAudio', document.getElementById('crossfadeAudio').checked);
+    formData.append('normalizeAudio', normalizeAudioCheckbox.checked);
+    formData.append('targetLufs', targetLufsSelect.value);
+    formData.append('exportMp3', document.getElementById('exportMp3').checked);
 
     let jobId;
     try {
@@ -149,10 +161,20 @@
         source.close();
         progressSection.hidden = true;
         resultSection.hidden = false;
+        const outputName = document.getElementById('outputName').value.trim();
         const url = `/api/download/${jobId}`;
         resultPreview.src = url;
         downloadLink.href = url;
-        downloadLink.download = document.getElementById('outputName').value.trim() + '.mp4';
+        downloadLink.download = outputName + '.mp4';
+
+        if (data.hasMp3) {
+          downloadMp3Link.href = `/api/download/${jobId}/mp3`;
+          downloadMp3Link.download = outputName + '.mp3';
+          downloadMp3Link.hidden = false;
+        } else {
+          downloadMp3Link.hidden = true;
+        }
+
         renderBtn.disabled = false;
         renderBtn.textContent = 'Render Video';
       }

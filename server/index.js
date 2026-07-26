@@ -64,6 +64,20 @@ function toPositiveFloat(value, fallback) {
   return isFinite(n) && n > 0 ? n : fallback;
 }
 
+function toBool(value, fallback) {
+  if (value === undefined || value === null) return fallback;
+  return value === 'true' || value === '1' || value === 'on';
+}
+
+const MIN_LUFS = -20;
+const MAX_LUFS = -10;
+
+function toLufs(value, fallback) {
+  const n = parseFloat(value);
+  if (!isFinite(n)) return fallback;
+  return Math.min(Math.max(n, MIN_LUFS), MAX_LUFS);
+}
+
 app.post(
   '/api/render',
   assignJobId,
@@ -91,6 +105,10 @@ app.post(
       const transition = toPositiveFloat(req.body.transition, 1);
       const fadeOut = toPositiveFloat(req.body.fadeOut, 1.5);
       const outputName = sanitizeFilename(req.body.outputName);
+      const crossfadeAudio = toBool(req.body.crossfadeAudio, true);
+      const normalize = toBool(req.body.normalizeAudio, false);
+      const targetLufs = toLufs(req.body.targetLufs, -14);
+      const exportMp3 = toBool(req.body.exportMp3, false);
 
       const videoInfo = await probe(videoFile.path);
       if (!videoInfo.duration || videoInfo.duration <= 0) {
@@ -112,11 +130,14 @@ app.post(
       }
 
       const outputPath = path.join(OUTPUT_DIR, `${jobId}.mp4`);
+      const mp3OutputPath = exportMp3 ? path.join(OUTPUT_DIR, `${jobId}.mp3`) : null;
       jobs.create(jobId, {
         status: 'rendering',
         progress: 0,
         outputPath,
         outputName: `${outputName}.mp4`,
+        mp3OutputPath,
+        mp3OutputName: mp3OutputPath ? `${outputName}.mp3` : null,
       });
 
       res.json({ jobId });
@@ -125,10 +146,14 @@ app.post(
         pngPath: pngFile.path,
         videoPath: videoFile.path,
         outputPath,
+        mp3OutputPath,
         startDuration,
         endDuration,
         transition,
         fadeOut,
+        crossfadeAudio,
+        normalize,
+        targetLufs,
         videoInfo,
         onProgress: (fraction) => {
           jobs.update(jobId, { progress: fraction });
@@ -169,7 +194,10 @@ app.get('/api/progress/:jobId', (req, res) => {
   });
   res.flushHeaders();
 
-  const send = (j) => res.write(`data: ${JSON.stringify({ status: j.status, progress: j.progress, error: j.error })}\n\n`);
+  const send = (j) =>
+    res.write(
+      `data: ${JSON.stringify({ status: j.status, progress: j.progress, error: j.error, hasMp3: !!j.mp3OutputPath })}\n\n`
+    );
   send(job);
 
   if (job.status === 'done' || job.status === 'error') {
@@ -194,6 +222,12 @@ app.get('/api/download/:jobId', (req, res) => {
   res.download(job.outputPath, job.outputName);
 });
 
+app.get('/api/download/:jobId/mp3', (req, res) => {
+  const job = jobs.get(req.params.jobId);
+  if (!job || job.status !== 'done' || !job.mp3OutputPath) return res.status(404).end();
+  res.download(job.mp3OutputPath, job.mp3OutputName);
+});
+
 app.listen(PORT, () => {
   console.log(`Sermon Video Editor running at http://localhost:${PORT}`);
 });
@@ -205,6 +239,7 @@ setInterval(() => {
   for (const job of jobs.jobs.values()) {
     if (now - job.createdAt > MAX_JOB_AGE_MS) {
       if (job.outputPath) fs.promises.rm(job.outputPath, { force: true }).catch(() => {});
+      if (job.mp3OutputPath) fs.promises.rm(job.mp3OutputPath, { force: true }).catch(() => {});
       jobs.delete(job.id);
     }
   }

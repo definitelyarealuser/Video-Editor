@@ -162,6 +162,78 @@ header h1 {
   color: var(--muted);
 }
 
+.inline-check {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 8px;
+  font-size: 0.82rem;
+  color: var(--muted);
+  cursor: pointer;
+  user-select: none;
+}
+
+.inline-check input[type="checkbox"] {
+  width: 15px;
+  height: 15px;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+
+.toggles {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 14px 16px;
+  margin-bottom: 24px;
+}
+
+.toggle-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.toggle-row .inline-check {
+  margin-top: 0;
+  font-size: 0.9rem;
+  color: var(--text);
+}
+
+.toggle-row select {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  color: var(--text);
+  border-radius: 8px;
+  padding: 6px 10px;
+  font-size: 0.9rem;
+}
+
+.toggle-row select:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.toggle-hint {
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
+.download-row {
+  display: flex;
+  justify-content: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.download-btn-secondary {
+  background: var(--accent);
+}
+
 #render-btn {
   width: 100%;
   padding: 14px;

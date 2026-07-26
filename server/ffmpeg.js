@@ -77,10 +77,28 @@ async function probe(filePath) {
  *  2. Crossfades (duration `transition`) into the main video
  *  3. Crossfades (duration `transition`) into the PNG (end) for `endDuration` seconds
  *  4. Fades to black over `fadeOut` seconds at the very end
- * Audio is built in parallel: silence under the PNG segments, crossfaded the
- * same way, then faded out alongside the picture.
+ * Audio is built in parallel, always ending up the same total length as the
+ * picture: silence under the PNG segments, then either crossfaded the same
+ * way as the video (`crossfadeAudio: true`) or hard-cut at the moment each
+ * video transition starts/ends (`crossfadeAudio: false`). Optionally the
+ * combined audio is loudness-normalized (EBU R128 `loudnorm`) before the
+ * final fade-out.
  */
-function buildFilterGraph({ width, height, fps, videoDuration, hasAudio, startDuration, endDuration, transition, fadeOut }) {
+function buildFilterGraph({
+  width,
+  height,
+  fps,
+  videoDuration,
+  hasAudio,
+  startDuration,
+  endDuration,
+  transition,
+  fadeOut,
+  crossfadeAudio,
+  normalize,
+  targetLufs,
+  needsMp3,
+}) {
   const totalDuration = startDuration + endDuration + videoDuration - 2 * transition;
   const offset1 = startDuration - transition;
   const offset2 = startDuration + videoDuration - 2 * transition;
@@ -102,25 +120,68 @@ function buildFilterGraph({ width, height, fps, videoDuration, hasAudio, startDu
     : `anullsrc=channel_layout=stereo:sample_rate=48000,atrim=0:${videoDuration},asetpts=PTS-STARTPTS[maina]`;
 
   const audioChain = [
-    `anullsrc=channel_layout=stereo:sample_rate=48000,atrim=0:${startDuration},asetpts=PTS-STARTPTS[silence1]`,
-    `anullsrc=channel_layout=stereo:sample_rate=48000,atrim=0:${endDuration},asetpts=PTS-STARTPTS[silence2]`,
     mainAudioSource,
-    `[silence1][maina]acrossfade=d=${transition}[xa1]`,
-    `[xa1][silence2]acrossfade=d=${transition}[xa2]`,
-    `[xa2]afade=t=out:st=${fadeStart}:d=${fadeOut}[aout]`,
   ];
+
+  if (crossfadeAudio) {
+    audioChain.push(
+      `anullsrc=channel_layout=stereo:sample_rate=48000,atrim=0:${startDuration},asetpts=PTS-STARTPTS[silence1]`,
+      `anullsrc=channel_layout=stereo:sample_rate=48000,atrim=0:${endDuration},asetpts=PTS-STARTPTS[silence2]`,
+      `[silence1][maina]acrossfade=d=${transition}[xa1]`,
+      `[xa1][silence2]acrossfade=d=${transition}[xa2]`
+    );
+  } else {
+    // No blend: silence runs right up to the moment the video transition begins/ends,
+    // then hard-cuts to/from the main audio. Segment lengths still sum to totalDuration.
+    audioChain.push(
+      `anullsrc=channel_layout=stereo:sample_rate=48000,atrim=0:${offset1},asetpts=PTS-STARTPTS[silence1]`,
+      `anullsrc=channel_layout=stereo:sample_rate=48000,atrim=0:${endDuration - transition},asetpts=PTS-STARTPTS[silence2]`,
+      `[silence1][maina][silence2]concat=n=3:v=0:a=1[xa2]`
+    );
+  }
+
+  let lastAudioLabel = 'xa2';
+  if (normalize) {
+    audioChain.push(`[xa2]loudnorm=I=${targetLufs}:TP=-1.5:LRA=11[xa2n]`);
+    lastAudioLabel = 'xa2n';
+  }
+
+  // A filter graph output pad can only be consumed by one -map, so when we're
+  // also producing a standalone MP3, split the finished audio into two identical pads.
+  const audioOutputLabels = needsMp3 ? ['aout', 'aoutMp3'] : ['aout'];
+  if (needsMp3) {
+    audioChain.push(`[${lastAudioLabel}]afade=t=out:st=${fadeStart}:d=${fadeOut}[afaded]`);
+    audioChain.push(`[afaded]asplit=2[aout][aoutMp3]`);
+  } else {
+    audioChain.push(`[${lastAudioLabel}]afade=t=out:st=${fadeStart}:d=${fadeOut}[aout]`);
+  }
 
   return {
     filterComplex: [...videoChain, ...audioChain].join(';'),
     totalDuration,
+    audioOutputLabels,
   };
 }
 
 /**
  * Kicks off the render. Calls onProgress(fractionComplete) periodically.
  */
-function render({ pngPath, videoPath, outputPath, startDuration, endDuration, transition, fadeOut, videoInfo, onProgress }) {
-  const { filterComplex, totalDuration } = buildFilterGraph({
+function render({
+  pngPath,
+  videoPath,
+  outputPath,
+  mp3OutputPath,
+  startDuration,
+  endDuration,
+  transition,
+  fadeOut,
+  crossfadeAudio,
+  normalize,
+  targetLufs,
+  videoInfo,
+  onProgress,
+}) {
+  const { filterComplex, totalDuration, audioOutputLabels } = buildFilterGraph({
     width: videoInfo.width,
     height: videoInfo.height,
     fps: videoInfo.fps,
@@ -130,6 +191,10 @@ function render({ pngPath, videoPath, outputPath, startDuration, endDuration, tr
     endDuration,
     transition,
     fadeOut,
+    crossfadeAudio,
+    normalize,
+    targetLufs,
+    needsMp3: !!mp3OutputPath,
   });
 
   const args = [
@@ -139,7 +204,7 @@ function render({ pngPath, videoPath, outputPath, startDuration, endDuration, tr
     '-loop', '1', '-t', String(endDuration), '-i', pngPath,
     '-filter_complex', filterComplex,
     '-map', '[vout]',
-    '-map', '[aout]',
+    '-map', `[${audioOutputLabels[0]}]`,
     '-c:v', 'libx264',
     '-preset', 'medium',
     '-crf', '18',
@@ -151,6 +216,10 @@ function render({ pngPath, videoPath, outputPath, startDuration, endDuration, tr
     '-nostats',
     outputPath,
   ];
+
+  if (mp3OutputPath) {
+    args.push('-map', `[${audioOutputLabels[1]}]`, '-c:a', 'libmp3lame', '-b:a', '192k', mp3OutputPath);
+  }
 
   return new Promise((resolve, reject) => {
     const proc = spawn('ffmpeg', args);
