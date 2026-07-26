@@ -54,7 +54,7 @@ function sanitizeFilename(name) {
   const cleaned = String(name || 'sermon-final')
     .trim()
     .replace(/[^a-zA-Z0-9-_ ]/g, '')
-    .replace(/\s+/g, '-')
+    .replace(/\s+/g, ' ')
     .slice(0, 100);
   return cleaned || 'sermon-final';
 }
