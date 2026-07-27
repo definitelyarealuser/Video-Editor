@@ -6,7 +6,7 @@ const multer = require('multer');
 
 const jobs = require('./jobs');
 const { probe, render, checkFfmpegAvailable } = require('./ffmpeg');
-const { extractPcmFloat32, transcribeInChunks } = require('./transcribe');
+const { extractPcmFloat32, transcribeInChunks, computeSpectralFlatness, CHUNK_SECONDS } = require('./transcribe');
 const { findSermonCandidates } = require('./sermonDetect');
 
 const PORT = process.env.PORT || 3000;
@@ -140,8 +140,16 @@ app.post('/api/analyze/:jobId', useJobIdFromParams, async (req, res) => {
 
   (async () => {
     const samples = await extractPcmFloat32(job.videoPath);
-    const { chunks } = await transcribeInChunks(samples, {
-      onProgress: (fraction) => jobs.update(jobId, { progress: fraction }),
+    // Spectral flatness runs as its own ffmpeg pass over the same audio - independent of
+    // transcription, so it runs in parallel rather than adding to the wait.
+    const [{ chunks }, flatnessByChunk] = await Promise.all([
+      transcribeInChunks(samples, {
+        onProgress: (fraction) => jobs.update(jobId, { progress: fraction }),
+      }),
+      computeSpectralFlatness(job.videoPath, CHUNK_SECONDS).catch(() => []), // non-essential signal; don't fail analysis if it errors
+    ]);
+    chunks.forEach((chunk, i) => {
+      if (flatnessByChunk[i] != null) chunk.flatness = flatnessByChunk[i];
     });
     const candidates = findSermonCandidates(chunks);
     jobs.update(jobId, { status: 'analyzed', progress: 1, candidates });

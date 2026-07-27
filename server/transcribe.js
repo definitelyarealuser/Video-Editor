@@ -23,6 +23,63 @@ function chunkRmsDbfs(samples) {
 }
 
 /**
+ * Runs ffmpeg's spectral-flatness analysis once over the whole audio track and averages the
+ * result into the same fixed-size chunk windows used for transcription. Low flatness = tonal/
+ * harmonic content (sustained notes, chords); high flatness = noise-like/broadband (consonants,
+ * unvoiced speech sounds). One ffmpeg pass, no per-chunk subprocess spawns, runs in parallel
+ * with transcription since the two don't depend on each other.
+ */
+function computeSpectralFlatness(videoPath, chunkSeconds = CHUNK_SECONDS) {
+  return new Promise((resolve, reject) => {
+    const args = [
+      '-i', videoPath,
+      '-vn', '-ac', '1', '-ar', String(SAMPLE_RATE),
+      '-af', 'aspectralstats=measure=flatness,ametadata=print:key=lavfi.aspectralstats.1.flatness',
+      '-f', 'null', '-',
+    ];
+    const proc = spawn('ffmpeg', args);
+    let stderrBuf = '';
+
+    proc.stderr.on('data', (d) => {
+      stderrBuf += d.toString();
+    });
+    proc.on('error', (err) => {
+      if (err.code === 'ENOENT') reject(new Error('ffmpeg was not found on PATH.'));
+      else reject(err);
+    });
+    proc.on('close', (code) => {
+      if (code !== 0) return reject(new Error(`Spectral analysis failed (exit ${code}):\n${stderrBuf.slice(-2000)}`));
+      resolve(bucketFlatnessByChunk(stderrBuf, chunkSeconds));
+    });
+  });
+}
+
+function bucketFlatnessByChunk(stderrText, chunkSeconds) {
+  const frameTimeRe = /pts_time:([\d.]+)/;
+  const flatnessRe = /flatness=([\d.]+)/;
+  const sums = [];
+  const counts = [];
+  let pendingTime = null;
+
+  for (const line of stderrText.split('\n')) {
+    const frameMatch = line.match(frameTimeRe);
+    if (frameMatch) {
+      pendingTime = parseFloat(frameMatch[1]);
+      continue;
+    }
+    const flatnessMatch = line.match(flatnessRe);
+    if (flatnessMatch && pendingTime !== null) {
+      const idx = Math.floor(pendingTime / chunkSeconds);
+      sums[idx] = (sums[idx] || 0) + parseFloat(flatnessMatch[1]);
+      counts[idx] = (counts[idx] || 0) + 1;
+      pendingTime = null;
+    }
+  }
+
+  return sums.map((sum, i) => (counts[i] ? sum / counts[i] : null));
+}
+
+/**
  * Decodes the audio track of a video into a mono 16kHz Float32Array via ffmpeg,
  * entirely in memory. Whisper (through @huggingface/transformers) wants raw
  * float samples in Node - there's no AudioContext to lean on outside a browser.
@@ -105,4 +162,4 @@ async function transcribeInChunks(floatArray, { onProgress } = {}) {
   return { chunks, totalDuration };
 }
 
-module.exports = { extractPcmFloat32, transcribeInChunks, CHUNK_SECONDS };
+module.exports = { extractPcmFloat32, transcribeInChunks, computeSpectralFlatness, CHUNK_SECONDS };
