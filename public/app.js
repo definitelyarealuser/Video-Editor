@@ -413,7 +413,7 @@
   // --- Dropzones ---
   function setupDropzone(zone, input, onFile) {
     zone.addEventListener('click', (e) => {
-      if (e.target.closest('.dz-clear')) return;
+      if (e.target.closest('.dz-clear') || e.target.closest('.dz-library')) return;
       input.click();
     });
 
@@ -461,6 +461,7 @@
     document.getElementById('png-preview').src = URL.createObjectURL(file);
     document.getElementById('png-filename').textContent = file.name;
     updateRenderButton();
+    saveToBookendLibrary(file);
   });
   dzPng.querySelector('.dz-clear').addEventListener('dz-clear-click', () => {
     state.png = null;
@@ -468,6 +469,82 @@
     inputPng.value = '';
     updateRenderButton();
   });
+
+  // Bookend image library: every PNG dropped in gets saved here (deduped server-side by
+  // content, so re-using the same one repeatedly doesn't pile up duplicates) so it can be
+  // picked again later without re-uploading.
+  const pngLibrarySection = document.getElementById('png-library');
+  const pngLibraryThumbs = document.getElementById('png-library-thumbs');
+  let bookendLibraryImages = [];
+
+  function renderBookendLibraryThumbs() {
+    pngLibrarySection.hidden = bookendLibraryImages.length === 0;
+    pngLibraryThumbs.innerHTML = '';
+    bookendLibraryImages.forEach((img) => {
+      const thumb = document.createElement('div');
+      thumb.className = 'dz-library-thumb';
+      thumb.title = img.name;
+
+      const imageEl = document.createElement('img');
+      imageEl.src = img.url;
+      imageEl.alt = img.name;
+      thumb.appendChild(imageEl);
+
+      const removeBtn = document.createElement('button');
+      removeBtn.type = 'button';
+      removeBtn.className = 'dz-library-remove';
+      removeBtn.title = 'Remove from library';
+      removeBtn.textContent = '×';
+      thumb.appendChild(removeBtn);
+
+      thumb.addEventListener('click', (e) => {
+        e.stopPropagation();
+        selectBookendLibraryImage(img);
+      });
+      removeBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        fetch(`/api/bookend-images/${img.id}`, { method: 'DELETE' }).catch(() => {});
+        bookendLibraryImages = bookendLibraryImages.filter((i) => i.id !== img.id);
+        renderBookendLibraryThumbs();
+      });
+
+      pngLibraryThumbs.appendChild(thumb);
+    });
+  }
+
+  function selectBookendLibraryImage(img) {
+    state.png = { libraryId: img.id, name: img.name, url: img.url };
+    showDzState(dzPng, 'dz-filled');
+    document.getElementById('png-preview').src = img.url;
+    document.getElementById('png-filename').textContent = img.name;
+    updateRenderButton();
+  }
+
+  function saveToBookendLibrary(file) {
+    const formData = new FormData();
+    formData.append('image', file);
+    fetch('/api/bookend-images', { method: 'POST', body: formData })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (!data || !data.image) return;
+        bookendLibraryImages = [data.image, ...bookendLibraryImages.filter((i) => i.id !== data.image.id)];
+        renderBookendLibraryThumbs();
+      })
+      .catch(() => {
+        // Non-critical - rendering still works even if the library save fails.
+      });
+  }
+
+  fetch('/api/bookend-images')
+    .then((res) => (res.ok ? res.json() : null))
+    .then((data) => {
+      if (!data) return;
+      bookendLibraryImages = data.images || [];
+      renderBookendLibraryThumbs();
+    })
+    .catch(() => {
+      // Non-critical - the dropzone still works without the library.
+    });
 
   // Video dropzone: uploads immediately so it can be analyzed/trimmed before rendering.
   function uploadVideo(file) {
@@ -651,7 +728,11 @@
     renderBtn.textContent = 'Rendering…';
 
     const formData = new FormData();
-    formData.append('png', state.png);
+    if (state.png && state.png.libraryId) {
+      formData.append('pngImageId', state.png.libraryId);
+    } else {
+      formData.append('png', state.png);
+    }
     formData.append('startDuration', document.getElementById('startDuration').value);
     formData.append('endDuration', document.getElementById('endDuration').value);
     formData.append('transition', document.getElementById('transition').value);

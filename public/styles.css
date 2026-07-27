@@ -122,6 +122,63 @@ header h1 {
 
 .dz-clear:hover { border-color: var(--error); color: var(--error); }
 
+.dz-library {
+  margin-top: 16px;
+  width: 100%;
+}
+
+.dz-library-label {
+  font-size: 0.75rem;
+  color: var(--muted);
+  margin-bottom: 8px;
+}
+
+.dz-library-thumbs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: center;
+}
+
+.dz-library-thumb {
+  position: relative;
+  width: 56px;
+  height: 56px;
+  border-radius: 6px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  background: repeating-conic-gradient(#33363f 0% 25%, #26282f 0% 50%) 50% / 12px 12px;
+  cursor: pointer;
+}
+
+.dz-library-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: block;
+}
+
+.dz-library-remove {
+  position: absolute;
+  top: -2px;
+  right: -2px;
+  width: 18px;
+  height: 18px;
+  line-height: 16px;
+  padding: 0;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+  background: var(--panel);
+  color: var(--muted);
+  font-size: 0.75rem;
+  cursor: pointer;
+}
+
+.dz-library-remove:hover {
+  border-color: var(--error);
+  color: var(--error);
+}
+
 .settings {
   display: grid;
   grid-template-columns: repeat(4, 1fr);

@@ -12,6 +12,7 @@ const { extractPcmFloat32, transcribeInChunks, computeSpectralFlatness, CHUNK_SE
 const { findSermonCandidates } = require('./sermonDetect');
 const { recordRender, getCalibratedDetectionOptions, getLastRenderSettings } = require('./history');
 const vimeo = require('./vimeo');
+const bookendImages = require('./bookendImages');
 
 const PORT = process.env.PORT || 3000;
 const ROOT = path.join(__dirname, '..');
@@ -25,6 +26,7 @@ for (const dir of [UPLOAD_DIR, OUTPUT_DIR]) {
 
 const app = express();
 app.use(express.static(path.join(ROOT, 'public')));
+app.use('/bookend-images', express.static(bookendImages.IMAGES_DIR));
 
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
@@ -41,7 +43,7 @@ const upload = multer({
   storage,
   limits: { fileSize: MAX_UPLOAD_BYTES },
   fileFilter: (req, file, cb) => {
-    if (file.fieldname === 'png') {
+    if (file.fieldname === 'png' || file.fieldname === 'image') {
       if (!/^image\//.test(file.mimetype)) return cb(new Error('The bookend graphic must be an image file (PNG recommended).'));
     }
     if (file.fieldname === 'video') {
@@ -216,9 +218,27 @@ app.post('/api/render/:jobId', useJobIdFromParams, upload.single('png'), async (
       await cleanupPng();
       return res.status(500).json({ error: 'ffmpeg/ffprobe is not installed on the server. Install ffmpeg and restart the app.' });
     }
-    if (!req.file) {
+    let pngPath = req.file ? req.file.path : null;
+    if (!pngPath && req.body.pngImageId) {
+      const libraryImage = bookendImages.getImage(req.body.pngImageId);
+      if (libraryImage) pngPath = path.join(bookendImages.IMAGES_DIR, libraryImage.storedFilename);
+    }
+    if (!pngPath) {
       await cleanupPng();
-      return res.status(400).json({ error: 'A PNG graphic is required.' });
+      return res.status(400).json({ error: 'A bookend graphic is required.' });
+    }
+
+    // Whichever way the graphic arrived, make sure it's in the library so it can be picked
+    // again next time without re-uploading - saveImage/touchImage both dedupe/no-op safely if
+    // it's already there (e.g. the client's own background save-on-drop already handled it).
+    if (req.file) {
+      try {
+        bookendImages.saveImage({ sourcePath: req.file.path, originalName: req.file.originalname, mimetype: req.file.mimetype });
+      } catch {
+        // Non-critical - rendering itself doesn't depend on the library save succeeding.
+      }
+    } else if (req.body.pngImageId) {
+      bookendImages.touchImage(req.body.pngImageId);
     }
 
     const fullDuration = job.videoInfo.duration;
@@ -279,7 +299,7 @@ app.post('/api/render/:jobId', useJobIdFromParams, upload.single('png'), async (
     const renderSettings = { startDuration, endDuration, transition, fadeOut, crossfadeAudio, normalize, targetLufs, exportMp3 };
 
     render({
-      pngPath: req.file.path,
+      pngPath,
       videoPath: job.videoPath,
       outputPath,
       mp3OutputPath,
@@ -414,6 +434,42 @@ app.get('/api/download/:jobId/mp3', (req, res) => {
   const job = jobs.get(req.params.jobId);
   if (!job || job.status !== 'done' || !job.mp3OutputPath) return res.status(404).end();
   res.sendFile(job.mp3OutputPath);
+});
+
+function toClientImage(entry) {
+  return { id: entry.id, name: entry.name, url: `/bookend-images/${entry.storedFilename}`, uploadedAt: entry.uploadedAt };
+}
+
+// The bookend image library: saved automatically whenever a PNG is dropped in (see
+// /api/render below too, as a fallback), so past graphics can be reused without re-uploading.
+app.post('/api/bookend-images', assignJobId, upload.single('image'), async (req, res) => {
+  const cleanup = () => fs.promises.rm(path.join(UPLOAD_DIR, req.jobId), { recursive: true, force: true }).catch(() => {});
+  if (!req.file) {
+    await cleanup();
+    return res.status(400).json({ error: 'No image provided.' });
+  }
+  try {
+    const entry = bookendImages.saveImage({
+      sourcePath: req.file.path,
+      originalName: req.file.originalname,
+      mimetype: req.file.mimetype,
+    });
+    res.json({ image: toClientImage(entry) });
+  } catch (err) {
+    res.status(500).json({ error: err.message || 'Failed to save image.' });
+  } finally {
+    await cleanup();
+  }
+});
+
+app.get('/api/bookend-images', (req, res) => {
+  res.json({ images: bookendImages.listImages().map(toClientImage) });
+});
+
+app.delete('/api/bookend-images/:id', (req, res) => {
+  const ok = bookendImages.deleteImage(req.params.id);
+  if (!ok) return res.status(404).json({ error: 'Not found.' });
+  res.json({ ok: true });
 });
 
 // Last-used render settings (fade durations, crossfade, normalization, etc.), so the form can
