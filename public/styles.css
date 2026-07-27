@@ -263,6 +263,29 @@ header h1 {
   font-size: 0.82rem;
 }
 
+.detect-btn {
+  display: block;
+  width: 100%;
+  background: var(--accent);
+  border: none;
+  color: white;
+  border-radius: 10px;
+  padding: 14px;
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+  margin-bottom: 18px;
+}
+
+.detect-btn:hover {
+  background: var(--accent-hover);
+}
+
+.detect-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
 .trim-slider {
   position: relative;
   height: 28px;
@@ -385,30 +408,45 @@ header h1 {
   color: var(--accent);
 }
 
-.trim-actions {
+.playback-controls {
   display: flex;
   gap: 10px;
-  flex-wrap: wrap;
-  margin-bottom: 4px;
+  margin-top: 4px;
 }
 
-.secondary-btn {
+.playback-btn {
+  flex: 1;
   background: var(--bg);
   border: 1px solid var(--border);
   color: var(--text);
   border-radius: 8px;
-  padding: 8px 14px;
-  font-size: 0.85rem;
+  padding: 11px 10px;
+  font-size: 0.9rem;
+  font-weight: 500;
   cursor: pointer;
+  text-align: center;
 }
 
-.secondary-btn:hover {
+.playback-btn:hover {
   border-color: var(--accent);
+  color: var(--accent);
 }
 
-.secondary-btn:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
+.playback-btn-primary {
+  flex: 1.3;
+  background: var(--panel);
+  border: 1px solid var(--accent);
+  color: var(--accent);
+  font-weight: 700;
+}
+
+.playback-btn-primary:hover {
+  background: rgba(91, 141, 239, 0.12);
+}
+
+@media (max-width: 480px) {
+  .playback-controls { flex-wrap: wrap; }
+  .playback-btn { flex: 1 1 100%; }
 }
 
 .detect-progress {

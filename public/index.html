@@ -52,6 +52,8 @@
       <section class="trim-panel" id="trim-panel" hidden>
         <h3>Trim to just the sermon <span class="trim-panel-hint">(optional — leave as-is to use the whole file)</span></h3>
 
+        <button type="button" id="detect-sermon-btn" class="detect-btn">✨ Auto-Detect Sermon</button>
+
         <div class="trim-slider" id="trim-slider">
           <div class="trim-track"></div>
           <div class="trim-range-fill" id="trim-range-fill"></div>
@@ -84,20 +86,10 @@
           </div>
         </div>
 
-        <div class="trim-actions">
-          <button type="button" id="jump-start-btn" class="secondary-btn">⏮ Jump to start</button>
-          <button type="button" id="play-pause-btn" class="secondary-btn">▶ Play</button>
-          <button type="button" id="jump-end-btn" class="secondary-btn">⏭ Jump to end</button>
-        </div>
-
-        <div class="trim-actions">
-          <button type="button" id="preview-start-btn" class="secondary-btn">▶ Preview start</button>
-          <button type="button" id="preview-end-btn" class="secondary-btn">▶ Preview end</button>
-        </div>
-
-        <div class="trim-actions">
-          <button type="button" id="detect-sermon-btn" class="secondary-btn">✨ Auto-detect sermon</button>
-          <button type="button" id="reset-trim-btn" class="secondary-btn">Reset to full video</button>
+        <div class="playback-controls">
+          <button type="button" id="preview-start-btn" class="playback-btn">⏮ Preview Start</button>
+          <button type="button" id="play-pause-btn" class="playback-btn playback-btn-primary">▶ Play</button>
+          <button type="button" id="preview-end-btn" class="playback-btn">Preview End ⏭</button>
         </div>
 
         <div id="detect-progress" class="detect-progress" hidden>

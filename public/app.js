@@ -44,11 +44,8 @@
   const trimDurationLabel = document.getElementById('trim-duration-label');
   const previewStartBtn = document.getElementById('preview-start-btn');
   const previewEndBtn = document.getElementById('preview-end-btn');
-  const jumpStartBtn = document.getElementById('jump-start-btn');
-  const jumpEndBtn = document.getElementById('jump-end-btn');
   const playPauseBtn = document.getElementById('play-pause-btn');
   const detectSermonBtn = document.getElementById('detect-sermon-btn');
-  const resetTrimBtn = document.getElementById('reset-trim-btn');
   const detectProgress = document.getElementById('detect-progress');
   const detectProgressFill = document.getElementById('detect-progress-fill');
   const detectProgressLabel = document.getElementById('detect-progress-label');
@@ -163,8 +160,6 @@
     });
   });
 
-  resetTrimBtn.addEventListener('click', () => setTrimRange(0, state.videoDuration));
-
   previewStartBtn.addEventListener('click', () => {
     const start = parseFloat(trimStartHandle.value);
     const end = parseFloat(trimEndHandle.value);
@@ -176,17 +171,6 @@
     const end = parseFloat(trimEndHandle.value);
     playRange(Math.max(start, end - PREVIEW_END_SECONDS), end);
   });
-
-  function jumpTo(time) {
-    if (!videoPreview.src) return;
-    stopActivePlayback();
-    videoPreview.pause();
-    videoPreview.muted = false;
-    videoPreview.currentTime = Math.max(0, Math.min(time, state.videoDuration));
-  }
-
-  jumpStartBtn.addEventListener('click', () => jumpTo(parseFloat(trimStartHandle.value)));
-  jumpEndBtn.addEventListener('click', () => jumpTo(parseFloat(trimEndHandle.value)));
 
   function updatePlayPauseLabel() {
     playPauseBtn.textContent = videoPreview.paused ? '▶ Play' : '⏹ Stop';
