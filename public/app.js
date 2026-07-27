@@ -149,6 +149,19 @@
     playRange(Math.max(start, end - SNIPPET_SECONDS), end);
   });
 
+  // Fine-tune nudge buttons: step a handle by a fixed amount once dragging has gotten it
+  // close, for precision a mouse drag on a slider spanning a multi-hour file can't give.
+  // Reuses the same 'input'/'change' handlers as dragging, so nudging gets the identical
+  // live-scrub-then-snippet-preview feedback.
+  document.querySelectorAll('.nudge-btn').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const handle = btn.dataset.handle === 'start' ? trimStartHandle : trimEndHandle;
+      handle.value = parseFloat(handle.value) + parseFloat(btn.dataset.delta);
+      handle.dispatchEvent(new Event('input', { bubbles: true }));
+      handle.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+  });
+
   resetTrimBtn.addEventListener('click', () => setTrimRange(0, state.videoDuration));
 
   previewTrimBtn.addEventListener('click', () => {
@@ -173,7 +186,7 @@
   jumpEndBtn.addEventListener('click', () => jumpTo(parseFloat(trimEndHandle.value)));
 
   function updatePlayPauseLabel() {
-    playPauseBtn.textContent = videoPreview.paused ? '▶ Play' : '⏸ Pause';
+    playPauseBtn.textContent = videoPreview.paused ? '▶ Play' : '⏹ Stop';
   }
   videoPreview.addEventListener('play', updatePlayPauseLabel);
   videoPreview.addEventListener('pause', updatePlayPauseLabel);

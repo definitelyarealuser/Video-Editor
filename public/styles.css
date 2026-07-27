@@ -348,6 +348,43 @@ header h1 {
   font-size: 0.85rem;
 }
 
+.fine-tune {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+
+.fine-tune-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.fine-tune-label {
+  font-size: 0.78rem;
+  color: var(--muted);
+  width: 40px;
+  flex-shrink: 0;
+}
+
+.nudge-btn {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  color: var(--text);
+  border-radius: 6px;
+  padding: 4px 9px;
+  font-size: 0.78rem;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+}
+
+.nudge-btn:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
 .trim-actions {
   display: flex;
   gap: 10px;
