@@ -3,6 +3,25 @@ const { spawn } = require('child_process');
 const SAMPLE_RATE = 16000;
 const CHUNK_SECONDS = 30; // Whisper's native window size - avoids wasted padding/splitting.
 
+// Chunks quieter than this are skipped entirely (no transcription call, text stays empty).
+// -40 dBFS is well below normal speech/singing levels but above typical room-noise floor, so it
+// only catches true silence/dead air, not quiet music. This both saves inference time (skipped
+// chunks are common in a worship set with instrumental breaks and transition silence) and avoids
+// a known Whisper failure mode: it sometimes hallucinates text - repeated phrases, stock
+// training-data artifacts - when fed near-silent audio with no real signal to anchor on, which
+// would otherwise corrupt the word-density signal the sermon detector relies on.
+const SILENCE_DBFS_THRESHOLD = -40;
+
+function chunkRmsDbfs(samples) {
+  if (!samples.length) return -Infinity;
+  let sumSquares = 0;
+  for (let i = 0; i < samples.length; i++) {
+    sumSquares += samples[i] * samples[i];
+  }
+  const rms = Math.sqrt(sumSquares / samples.length);
+  return rms > 0 ? 20 * Math.log10(rms) : -Infinity;
+}
+
 /**
  * Decodes the audio track of a video into a mono 16kHz Float32Array via ffmpeg,
  * entirely in memory. Whisper (through @huggingface/transformers) wants raw
@@ -59,18 +78,28 @@ async function transcribeInChunks(floatArray, { onProgress } = {}) {
   const chunkSamples = CHUNK_SECONDS * SAMPLE_RATE;
   const totalDuration = totalSamples / SAMPLE_RATE;
   const chunks = [];
+  let skippedCount = 0;
+  let totalCount = 0;
 
   for (let start = 0; start < totalSamples; start += chunkSamples) {
     const end = Math.min(start + chunkSamples, totalSamples);
     const slice = floatArray.subarray(start, end);
-    const result = await transcriber(slice);
-    const text = (result && result.text) || '';
-    chunks.push({
-      start: start / SAMPLE_RATE,
-      end: end / SAMPLE_RATE,
-      text: text.trim(),
-    });
+    totalCount++;
+
+    let text = '';
+    if (chunkRmsDbfs(slice) > SILENCE_DBFS_THRESHOLD) {
+      const result = await transcriber(slice);
+      text = ((result && result.text) || '').trim();
+    } else {
+      skippedCount++;
+    }
+
+    chunks.push({ start: start / SAMPLE_RATE, end: end / SAMPLE_RATE, text });
     if (onProgress) onProgress(Math.min(end / totalSamples, 1));
+  }
+
+  if (skippedCount > 0) {
+    console.log(`Transcription: skipped ${skippedCount}/${totalCount} silent chunks (below ${SILENCE_DBFS_THRESHOLD} dBFS)`);
   }
 
   return { chunks, totalDuration };

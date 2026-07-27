@@ -37,7 +37,7 @@ The uploaded video is kept on the server until a render actually succeeds (so a 
 
 Full-service files (worship set → announcements/talking heads → sermon → worship → announcements) can be dropped in as-is. **Auto-detect sermon**:
 
-1. Transcribes the whole file locally in 30-second windows using Whisper (`Xenova/whisper-tiny.en`).
+1. Transcribes the whole file locally in 30-second windows using Whisper (`Xenova/whisper-tiny.en`) - windows quieter than -40 dBFS (true silence/dead air, not quiet music) are skipped without a transcription call at all, which both speeds things up and avoids a known Whisper failure mode where it hallucinates text on near-silent audio.
 2. Scores each window by words-per-minute to tell sustained speech apart from music/singing (low word density) or silence.
 3. Merges consecutive speech windows into candidate blocks (tolerating a couple of quiet windows mid-block, so a pause for prayer or a hushed moment doesn't split it), and ranks candidates by how close they are to a typical ~35-minute sermon length (30-45 min is treated as comfortably normal).
 4. Gives a candidate's score a boost if its opening seconds contain a greeting/self-introduction ("good morning", "my name is...") and a smaller boost if its closing seconds contain prayer language ("let us pray", "amen", "in Jesus' name") - soft signals, not requirements, since neither is guaranteed every week.
