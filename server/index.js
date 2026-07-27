@@ -242,6 +242,11 @@ app.post('/api/render/:jobId', useJobIdFromParams, upload.single('png'), async (
     const exportMp3 = toBool(req.body.exportMp3, false);
     const publishToVimeo = toBool(req.body.publishToVimeo, false) && vimeo.isConfigured();
     const vimeoDescription = String(req.body.vimeoDescription || '').slice(0, 5000);
+    // Which configured showcases to actually add it to for this render - defaults to "all of
+    // them" (undefined) when the field wasn't sent, e.g. by an older client.
+    const vimeoShowcaseIds = req.body.vimeoShowcaseIds !== undefined
+      ? String(req.body.vimeoShowcaseIds).split(',').map((s) => s.trim()).filter(Boolean)
+      : undefined;
 
     if (transition >= startDuration || transition >= endDuration || transition >= effectiveDuration) {
       await cleanupPng();
@@ -317,6 +322,7 @@ app.post('/api/render/:jobId', useJobIdFromParams, upload.single('png'), async (
               filePath: outputPath,
               name: outputName,
               description: vimeoDescription,
+              showcaseIds: vimeoShowcaseIds,
               onProgress: (fraction) => jobs.update(jobId, { progress: fraction }),
             })
             .then(({ videoUrl, showcaseResults }) => {
@@ -416,6 +422,17 @@ app.get('/api/preferences', (req, res) => {
 // is true, since without a token there's nothing it could do.
 app.get('/api/vimeo-status', (req, res) => {
   res.json({ configured: vimeo.isConfigured(), showcaseCount: vimeo.getShowcaseIds().length });
+});
+
+// Real showcase names for the configured IDs, so the publish dialog can offer a friendly
+// checkbox list instead of raw numbers.
+app.get('/api/vimeo-showcases', async (req, res) => {
+  if (!vimeo.isConfigured()) return res.json({ showcases: [] });
+  try {
+    res.json({ showcases: await vimeo.getShowcaseDetails() });
+  } catch (err) {
+    res.status(500).json({ error: err.message || 'Could not fetch Vimeo showcases.' });
+  }
 });
 
 app.listen(PORT, () => {

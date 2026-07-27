@@ -138,10 +138,10 @@
       <div class="toggles">
         <div class="toggle-row">
           <label class="inline-check">
-            <input type="checkbox" id="normalizeAudio" />
+            <input type="checkbox" id="normalizeAudio" checked />
             Normalize audio to
           </label>
-          <select id="targetLufs" disabled>
+          <select id="targetLufs">
             <option value="-20">-20</option>
             <option value="-19">-19</option>
             <option value="-18">-18</option>
@@ -158,7 +158,7 @@
         </div>
         <div class="toggle-row">
           <label class="inline-check">
-            <input type="checkbox" id="exportMp3" />
+            <input type="checkbox" id="exportMp3" checked />
             Also render an MP3 of the final audio
           </label>
         </div>
@@ -204,6 +204,10 @@
       <p class="modal-hint">This choice applies to this render only - you'll be asked again next time.</p>
       <label for="vimeo-description">Sermon description (for Vimeo)</label>
       <textarea id="vimeo-description" rows="4" placeholder="What's being taught this morning…"></textarea>
+
+      <label>Add to showcases</label>
+      <div id="vimeo-showcase-checks" class="vimeo-showcase-checks"></div>
+
       <div class="modal-actions">
         <button type="button" id="render-only-btn" class="modal-btn-secondary">Render Only</button>
         <button type="button" id="render-publish-btn" class="modal-btn-primary">Render &amp; Publish to Vimeo</button>

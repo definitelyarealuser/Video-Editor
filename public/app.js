@@ -39,6 +39,7 @@
 
   const vimeoConfirmOverlay = document.getElementById('vimeo-confirm-overlay');
   const vimeoDescriptionInput = document.getElementById('vimeo-description');
+  const vimeoShowcaseChecks = document.getElementById('vimeo-showcase-checks');
   const renderOnlyBtn = document.getElementById('render-only-btn');
   const renderPublishBtn = document.getElementById('render-publish-btn');
 
@@ -51,21 +52,58 @@
       state.vimeoConfigured = false;
     });
 
-  // Resolves with { publish, description } once the user picks a button - always a deliberate
-  // choice each time (no "remember this" option), per how this app is meant to be used.
+  // Fetched once, up front, so opening the dialog doesn't need a network round-trip - real
+  // showcase names beat showing raw IDs to choose from.
+  state.vimeoShowcases = [];
+  fetch('/api/vimeo-showcases')
+    .then((res) => res.json())
+    .then((data) => {
+      state.vimeoShowcases = data.showcases || [];
+    })
+    .catch(() => {
+      state.vimeoShowcases = [];
+    });
+
+  function renderVimeoShowcaseChecks() {
+    vimeoShowcaseChecks.innerHTML = '';
+    if (!state.vimeoShowcases.length) {
+      const note = document.createElement('div');
+      note.className = 'showcase-load-error';
+      note.textContent = 'No showcases configured (VIMEO_SHOWCASE_IDS) - the video will just upload without being added to one.';
+      vimeoShowcaseChecks.appendChild(note);
+      return;
+    }
+    state.vimeoShowcases.forEach((s) => {
+      const label = document.createElement('label');
+      const checkbox = document.createElement('input');
+      checkbox.type = 'checkbox';
+      checkbox.value = s.id;
+      checkbox.checked = true; // all showcases selected by default, matching the original always-add-to-all behavior
+      label.appendChild(checkbox);
+      label.appendChild(document.createTextNode(s.name));
+      vimeoShowcaseChecks.appendChild(label);
+    });
+  }
+
+  // Resolves with { publish, description, showcaseIds } once the user picks a button - always a
+  // deliberate choice each time (no "remember this" option), per how this app is meant to be used.
   function confirmVimeoPublish() {
     return new Promise((resolve) => {
-      vimeoDescriptionInput.value = '';
+      vimeoDescriptionInput.value = 'Core Text: TBD';
+      renderVimeoShowcaseChecks();
       vimeoConfirmOverlay.hidden = false;
       vimeoDescriptionInput.focus();
+      // Select just "TBD" so typing immediately replaces it, leaving "Core Text: " intact.
+      vimeoDescriptionInput.setSelectionRange(11, 14);
 
       const onRenderOnly = () => {
         cleanup();
-        resolve({ publish: false, description: '' });
+        resolve({ publish: false, description: '', showcaseIds: [] });
       };
       const onRenderPublish = () => {
+        const showcaseIds = Array.from(vimeoShowcaseChecks.querySelectorAll('input[type="checkbox"]:checked')).map((c) => c.value);
         cleanup();
-        resolve({ publish: true, description: vimeoDescriptionInput.value.trim() });
+        resolve({ publish: true, description: vimeoDescriptionInput.value.trim(), showcaseIds });
       };
       function cleanup() {
         vimeoConfirmOverlay.hidden = true;
@@ -526,9 +564,9 @@
     // Confirmed up front, before rendering even starts, so publishing can run automatically
     // once the render finishes with no further approval needed - but it's always a fresh,
     // deliberate choice, never remembered from a previous render.
-    const { publish: publishToVimeo, description: vimeoDescription } = state.vimeoConfigured
+    const { publish: publishToVimeo, description: vimeoDescription, showcaseIds: vimeoShowcaseIds } = state.vimeoConfigured
       ? await confirmVimeoPublish()
-      : { publish: false, description: '' };
+      : { publish: false, description: '', showcaseIds: [] };
 
     resetPanels();
     renderBtn.disabled = true;
@@ -549,6 +587,7 @@
     formData.append('trimEnd', trimEndHandle.value);
     formData.append('publishToVimeo', publishToVimeo);
     formData.append('vimeoDescription', vimeoDescription);
+    formData.append('vimeoShowcaseIds', vimeoShowcaseIds.join(','));
 
     let jobId;
     try {

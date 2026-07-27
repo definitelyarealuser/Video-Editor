@@ -669,6 +669,34 @@ header h1 {
   margin-bottom: 18px;
 }
 
+.vimeo-showcase-checks {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 18px;
+}
+
+.vimeo-showcase-checks label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.9rem;
+  color: var(--text);
+  cursor: pointer;
+}
+
+.vimeo-showcase-checks input[type="checkbox"] {
+  width: 15px;
+  height: 15px;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+
+.vimeo-showcase-checks .showcase-load-error {
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
 .modal-actions {
   display: flex;
   gap: 10px;

@@ -24,11 +24,32 @@ function getClient() {
 }
 
 /**
- * Uploads `filePath` to Vimeo with the given title/description, then adds it to every showcase
- * ID in VIMEO_SHOWCASE_IDS. A failure adding to one showcase doesn't abort the others - the
- * result reports per-showcase success/failure so the caller can surface exactly what happened.
+ * Looks up the real name of each configured showcase, so the UI can offer a friendly checkbox
+ * list instead of raw IDs. A showcase whose lookup fails (bad ID, no longer accessible) still
+ * shows up - just labeled with the ID and flagged - rather than silently vanishing from the list.
  */
-async function uploadAndPublish({ filePath, name, description, onProgress }) {
+async function getShowcaseDetails() {
+  const client = getClient();
+  const showcaseIds = getShowcaseIds();
+  const results = [];
+  for (const id of showcaseIds) {
+    try {
+      const res = await client.request({ method: 'GET', path: `/albums/${id}` });
+      results.push({ id, name: (res.body && res.body.name) || `Showcase ${id}` });
+    } catch (err) {
+      results.push({ id, name: `Showcase ${id} (not found)`, error: err.message || String(err) });
+    }
+  }
+  return results;
+}
+
+/**
+ * Uploads `filePath` to Vimeo with the given title/description, then adds it to `showcaseIds`
+ * (defaults to every ID in VIMEO_SHOWCASE_IDS if not given - e.g. a caller that never offered a
+ * choice). A failure adding to one showcase doesn't abort the others - the result reports
+ * per-showcase success/failure so the caller can surface exactly what happened.
+ */
+async function uploadAndPublish({ filePath, name, description, showcaseIds, onProgress }) {
   const client = getClient();
 
   const videoUri = await new Promise((resolve, reject) => {
@@ -46,9 +67,9 @@ async function uploadAndPublish({ filePath, name, description, onProgress }) {
   const videoId = videoUri.split('/').pop();
   const videoUrl = `https://vimeo.com/${videoId}`;
 
-  const showcaseIds = getShowcaseIds();
+  const targetShowcaseIds = showcaseIds || getShowcaseIds();
   const showcaseResults = [];
-  for (const showcaseId of showcaseIds) {
+  for (const showcaseId of targetShowcaseIds) {
     try {
       await client.request({ method: 'PUT', path: `/me/albums/${showcaseId}/videos/${videoId}` });
       showcaseResults.push({ showcaseId, ok: true });
@@ -60,4 +81,4 @@ async function uploadAndPublish({ filePath, name, description, onProgress }) {
   return { videoUri, videoUrl, showcaseResults };
 }
 
-module.exports = { isConfigured, getShowcaseIds, uploadAndPublish };
+module.exports = { isConfigured, getShowcaseIds, getShowcaseDetails, uploadAndPublish };
