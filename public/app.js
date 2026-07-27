@@ -490,22 +490,9 @@
       imageEl.alt = img.name;
       thumb.appendChild(imageEl);
 
-      const removeBtn = document.createElement('button');
-      removeBtn.type = 'button';
-      removeBtn.className = 'dz-library-remove';
-      removeBtn.title = 'Remove from library';
-      removeBtn.textContent = '×';
-      thumb.appendChild(removeBtn);
-
       thumb.addEventListener('click', (e) => {
         e.stopPropagation();
         selectBookendLibraryImage(img);
-      });
-      removeBtn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        fetch(`/api/bookend-images/${img.id}`, { method: 'DELETE' }).catch(() => {});
-        bookendLibraryImages = bookendLibraryImages.filter((i) => i.id !== img.id);
-        renderBookendLibraryThumbs();
       });
 
       pngLibraryThumbs.appendChild(thumb);
@@ -545,6 +532,116 @@
     .catch(() => {
       // Non-critical - the dropzone still works without the library.
     });
+
+  // Library management: a separate "Edit…" dialog lists every saved image with a Delete
+  // button, each guarded by its own confirmation dialog - deleting is deliberately a couple
+  // of steps away from the one-click thumbnails used to just pick an image.
+  const libraryEditOverlay = document.getElementById('library-edit-overlay');
+  const libraryEditList = document.getElementById('library-edit-list');
+  const libraryEditCloseBtn = document.getElementById('library-edit-close-btn');
+  const pngLibraryEditBtn = document.getElementById('png-library-edit-btn');
+
+  const libraryDeleteConfirmOverlay = document.getElementById('library-delete-confirm-overlay');
+  const libraryDeleteConfirmName = document.getElementById('library-delete-confirm-name');
+  const libraryDeleteCancelBtn = document.getElementById('library-delete-cancel-btn');
+  const libraryDeleteConfirmBtn = document.getElementById('library-delete-confirm-btn');
+
+  function onLibraryEditKeydown(e) {
+    if (e.key === 'Escape') closeLibraryEditOverlay();
+  }
+  function openLibraryEditOverlay() {
+    renderLibraryEditList();
+    libraryEditOverlay.hidden = false;
+    document.addEventListener('keydown', onLibraryEditKeydown);
+  }
+  function closeLibraryEditOverlay() {
+    libraryEditOverlay.hidden = true;
+    document.removeEventListener('keydown', onLibraryEditKeydown);
+  }
+
+  pngLibraryEditBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    openLibraryEditOverlay();
+  });
+  libraryEditCloseBtn.addEventListener('click', closeLibraryEditOverlay);
+  libraryEditOverlay.addEventListener('click', (e) => {
+    if (e.target === libraryEditOverlay) closeLibraryEditOverlay();
+  });
+
+  function renderLibraryEditList() {
+    libraryEditList.innerHTML = '';
+    if (bookendLibraryImages.length === 0) {
+      const empty = document.createElement('div');
+      empty.className = 'library-edit-empty';
+      empty.textContent = 'No saved images yet.';
+      libraryEditList.appendChild(empty);
+      return;
+    }
+    bookendLibraryImages.forEach((img) => {
+      const row = document.createElement('div');
+      row.className = 'library-edit-row';
+
+      const imageEl = document.createElement('img');
+      imageEl.src = img.url;
+      imageEl.alt = img.name;
+      row.appendChild(imageEl);
+
+      const name = document.createElement('div');
+      name.className = 'library-edit-row-name';
+      name.textContent = img.name;
+      row.appendChild(name);
+
+      const deleteBtn = document.createElement('button');
+      deleteBtn.type = 'button';
+      deleteBtn.className = 'library-edit-delete-btn';
+      deleteBtn.textContent = 'Delete';
+      deleteBtn.addEventListener('click', () => confirmDeleteLibraryImage(img));
+      row.appendChild(deleteBtn);
+
+      libraryEditList.appendChild(row);
+    });
+  }
+
+  function confirmDeleteLibraryImage(img) {
+    libraryDeleteConfirmName.textContent = `Delete "${img.name}"? This can't be undone.`;
+    libraryDeleteConfirmOverlay.hidden = false;
+
+    const onCancel = () => cleanup();
+    const onConfirm = async () => {
+      cleanup();
+      try {
+        await fetch(`/api/bookend-images/${img.id}`, { method: 'DELETE' });
+      } catch {
+        // Non-critical - it'll just still be there next time; not worth surfacing an error for.
+      }
+      bookendLibraryImages = bookendLibraryImages.filter((i) => i.id !== img.id);
+      // The currently-selected PNG can't stay pointed at a now-deleted library image.
+      if (state.png && state.png.libraryId === img.id) {
+        state.png = null;
+        showDzState(dzPng, 'dz-empty');
+        updateRenderButton();
+      }
+      renderBookendLibraryThumbs();
+      renderLibraryEditList();
+    };
+    const onOverlayClick = (e) => {
+      if (e.target === libraryDeleteConfirmOverlay) onCancel();
+    };
+    const onKeydown = (e) => {
+      if (e.key === 'Escape') onCancel();
+    };
+    function cleanup() {
+      libraryDeleteConfirmOverlay.hidden = true;
+      libraryDeleteCancelBtn.removeEventListener('click', onCancel);
+      libraryDeleteConfirmBtn.removeEventListener('click', onConfirm);
+      libraryDeleteConfirmOverlay.removeEventListener('click', onOverlayClick);
+      document.removeEventListener('keydown', onKeydown);
+    }
+    libraryDeleteCancelBtn.addEventListener('click', onCancel);
+    libraryDeleteConfirmBtn.addEventListener('click', onConfirm);
+    libraryDeleteConfirmOverlay.addEventListener('click', onOverlayClick);
+    document.addEventListener('keydown', onKeydown);
+  }
 
   // Video dropzone: uploads immediately so it can be analyzed/trimmed before rendering.
   function uploadVideo(file) {

@@ -22,7 +22,10 @@
             <div class="dz-label">Drop bookend image here</div>
             <div class="dz-sub">or click to browse</div>
             <div class="dz-library" id="png-library" hidden>
-              <div class="dz-library-label">Or choose from your library:</div>
+              <div class="dz-library-header">
+                <div class="dz-library-label">Or choose from your library:</div>
+                <button type="button" id="png-library-edit-btn" class="dz-library-edit-btn">Edit…</button>
+              </div>
               <div class="dz-library-thumbs" id="png-library-thumbs"></div>
             </div>
           </div>
@@ -242,6 +245,28 @@
         <button type="button" id="vimeo-cancel-btn" class="modal-btn-ghost">Cancel</button>
         <button type="button" id="render-only-btn" class="modal-btn-secondary">Render Only</button>
         <button type="button" id="render-publish-btn" class="modal-btn-primary">Render &amp; Publish to Vimeo</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal-overlay" id="library-edit-overlay" hidden>
+    <div class="modal-dialog">
+      <h3>Bookend Image Library</h3>
+      <p class="modal-hint">Delete images you no longer need. This doesn't affect anything already rendered.</p>
+      <div id="library-edit-list" class="library-edit-list"></div>
+      <div class="modal-actions">
+        <button type="button" id="library-edit-close-btn" class="modal-btn-secondary">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal-overlay" id="library-delete-confirm-overlay" hidden>
+    <div class="modal-dialog">
+      <h3>Delete this image?</h3>
+      <p class="modal-hint" id="library-delete-confirm-name"></p>
+      <div class="modal-actions">
+        <button type="button" id="library-delete-cancel-btn" class="modal-btn-secondary">Cancel</button>
+        <button type="button" id="library-delete-confirm-btn" class="modal-btn-primary modal-btn-danger">Delete</button>
       </div>
     </div>
   </div>

@@ -127,10 +127,30 @@ header h1 {
   width: 100%;
 }
 
+.dz-library-header {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
 .dz-library-label {
   font-size: 0.75rem;
   color: var(--muted);
-  margin-bottom: 8px;
+}
+
+.dz-library-edit-btn {
+  background: none;
+  border: none;
+  color: var(--accent);
+  font-size: 0.75rem;
+  cursor: pointer;
+  padding: 0;
+}
+
+.dz-library-edit-btn:hover {
+  text-decoration: underline;
 }
 
 .dz-library-thumbs {
@@ -156,27 +176,6 @@ header h1 {
   height: 100%;
   object-fit: contain;
   display: block;
-}
-
-.dz-library-remove {
-  position: absolute;
-  top: -2px;
-  right: -2px;
-  width: 18px;
-  height: 18px;
-  line-height: 16px;
-  padding: 0;
-  border-radius: 50%;
-  border: 1px solid var(--border);
-  background: var(--panel);
-  color: var(--muted);
-  font-size: 0.75rem;
-  cursor: pointer;
-}
-
-.dz-library-remove:hover {
-  border-color: var(--error);
-  color: var(--error);
 }
 
 .settings {
@@ -853,4 +852,70 @@ label.core-text-label {
 .modal-btn-ghost:hover {
   color: var(--text);
   text-decoration: underline;
+}
+
+.modal-btn-danger {
+  background: var(--error);
+  border-color: var(--error);
+}
+
+.modal-btn-danger:hover {
+  background: #c94456;
+}
+
+.library-edit-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 320px;
+  overflow-y: auto;
+  margin-bottom: 18px;
+}
+
+.library-edit-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.library-edit-row img {
+  width: 40px;
+  height: 40px;
+  border-radius: 6px;
+  object-fit: contain;
+  background: repeating-conic-gradient(#33363f 0% 25%, #26282f 0% 50%) 50% / 10px 10px;
+  flex: 0 0 auto;
+}
+
+.library-edit-row-name {
+  flex: 1;
+  font-size: 0.85rem;
+  color: var(--text);
+  word-break: break-all;
+}
+
+.library-edit-delete-btn {
+  flex: 0 0 auto;
+  background: none;
+  border: 1px solid var(--border);
+  color: var(--error);
+  border-radius: 6px;
+  padding: 5px 12px;
+  font-size: 0.8rem;
+  cursor: pointer;
+}
+
+.library-edit-delete-btn:hover {
+  border-color: var(--error);
+  background: rgba(229, 86, 107, 0.1);
+}
+
+.library-edit-empty {
+  color: var(--muted);
+  font-size: 0.85rem;
+  padding: 8px 0;
 }
