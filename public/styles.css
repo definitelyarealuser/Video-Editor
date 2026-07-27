@@ -581,3 +581,127 @@ header h1 {
   line-height: 1.5;
   white-space: pre-wrap;
 }
+
+.vimeo-status-section {
+  margin-top: 24px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 18px;
+}
+
+.vimeo-result {
+  margin-top: 12px;
+  text-align: center;
+}
+
+.vimeo-result a {
+  color: var(--accent);
+  font-weight: 600;
+  word-break: break-all;
+}
+
+.vimeo-showcase-list {
+  list-style: none;
+  margin: 10px 0 0;
+  padding: 0;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+.vimeo-showcase-list li.showcase-ok::before {
+  content: "✓ ";
+  color: var(--success);
+}
+
+.vimeo-showcase-list li.showcase-failed::before {
+  content: "✗ ";
+  color: var(--error);
+}
+
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  z-index: 100;
+}
+
+.modal-dialog {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 24px;
+  max-width: 480px;
+  width: 100%;
+}
+
+.modal-dialog h3 {
+  margin: 0 0 8px;
+}
+
+.modal-hint {
+  color: var(--muted);
+  font-size: 0.85rem;
+  margin: 0 0 16px;
+}
+
+.modal-dialog label {
+  display: block;
+  font-size: 0.85rem;
+  color: var(--muted);
+  margin-bottom: 6px;
+}
+
+.modal-dialog textarea {
+  width: 100%;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  color: var(--text);
+  border-radius: 8px;
+  padding: 10px 12px;
+  font-family: inherit;
+  font-size: 0.9rem;
+  resize: vertical;
+  margin-bottom: 18px;
+}
+
+.modal-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.modal-btn-secondary,
+.modal-btn-primary {
+  flex: 1;
+  padding: 11px 10px;
+  border-radius: 8px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+  text-align: center;
+}
+
+.modal-btn-secondary {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  color: var(--text);
+}
+
+.modal-btn-secondary:hover {
+  border-color: var(--accent);
+}
+
+.modal-btn-primary {
+  background: var(--accent);
+  border: 1px solid var(--accent);
+  color: white;
+}
+
+.modal-btn-primary:hover {
+  background: var(--accent-hover);
+}

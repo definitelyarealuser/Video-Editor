@@ -7,7 +7,7 @@ The rendered output is: **PNG** (held for N seconds) → **crossfade** → **you
 ## How it works
 
 - **Frontend**: a single static page (`public/`) with a drag-and-drop zone for the video (uploads immediately, then offers a trim scrubber), a drag-and-drop zone for the PNG, number inputs for both bookend durations, the crossfade length, the final fade-to-black length, and the output file name. No build step, no framework.
-- **Backend**: an Express server (`server/`) that probes the video with `ffprobe` (resolution, frame rate, duration, whether it has audio), optionally transcribes it locally (`@huggingface/transformers` running Whisper, entirely in Node - no Python, no external API calls once the model is cached) to suggest a sermon start/end, then builds an `ffmpeg` filter graph (`xfade` for video, `acrossfade` for audio, running in parallel so the crossfades stay in sync with silence under the bookend segments) and renders the final MP4. Progress streams back to the browser over Server-Sent Events.
+- **Backend**: an Express server (`server/`) that probes the video with `ffprobe` (resolution, frame rate, duration, whether it has audio), optionally transcribes it locally (`@huggingface/transformers` running Whisper, entirely in Node - no Python, no external API calls once the model is cached) to suggest a sermon start/end, then builds an `ffmpeg` filter graph (`xfade` for video, `acrossfade` for audio, running in parallel so the crossfades stay in sync with silence under the bookend segments) and renders the final MP4. Progress streams back to the browser over Server-Sent Events. Optionally (see [Publishing to Vimeo](#publishing-to-vimeo)) uploads the finished MP4 straight to Vimeo and adds it to configured showcases.
 
 ## Prerequisites
 
@@ -29,9 +29,22 @@ Then open http://localhost:3000.
 3. Drag your bookend PNG into its dropzone.
 4. Set the start PNG duration, end PNG duration, crossfade duration, fade-to-black duration, and the output file name.
 5. Optionally check **Normalize audio** and pick a target loudness (-20 to -10 LUFS, defaults to -14) and/or **Also render an MP3**.
-6. Click **Render Video**. A progress bar tracks the ffmpeg render; when it finishes you get an in-browser preview and download buttons (MP4, plus MP3 if requested).
+6. Click **Render Video**. If [Vimeo publishing](#publishing-to-vimeo) is set up, you'll be asked right then whether to publish this render - a progress bar tracks the ffmpeg render either way; when it finishes you get an in-browser preview and download buttons (MP4, plus MP3 if requested), and the Vimeo upload (if you opted in) runs automatically afterward with no further clicks needed.
 
 The uploaded video is kept on the server until a render actually succeeds (so a render error - e.g. a crossfade duration that's too long - doesn't force you to re-upload a multi-GB file, just fix the setting and retry). Everything is cleaned up automatically after 2 hours regardless.
+
+## Publishing to Vimeo
+
+Optional, and off by default - the app works exactly as before if you skip this section entirely.
+
+1. Copy `.env.example` to `.env` and fill in:
+   - `VIMEO_ACCESS_TOKEN`: a personal access token from https://developer.vimeo.com/apps, with the `public`, `private`, `upload`, `edit`, and `interact` scopes. Requires a Vimeo plan that supports API uploads (Pro/Business/Premium - not the free tier).
+   - `VIMEO_SHOWCASE_IDS`: comma-separated showcase (album) IDs every published video gets added to - find an ID in the showcase's URL (`vimeo.com/showcase/XXXXXXX`). Update this whenever the year or sermon series changes.
+2. Restart the app (`npm start`) so it picks up `.env`.
+
+With that in place, clicking **Render Video** shows a **"Publish to Vimeo?"** dialog - it's a deliberate choice every time, never remembered from a previous render. Choose **Render & Publish to Vimeo** and add a description (what's being taught that morning), and once rendering finishes, the app uploads the MP4 with that description, titles it using your output file name, and adds it to every configured showcase automatically - no separate manual step. A results panel shows the Vimeo link and which showcases succeeded or failed (one showcase failing, e.g. a stale ID, doesn't block the others). Choosing **Render Only** just renders normally, same as if Vimeo weren't configured at all.
+
+`.env` is gitignored - the token never gets committed. SoundCloud publishing isn't automated (SoundCloud has approved very few new API applications in years); that upload stays a manual step for now.
 
 ## Auto-detect sermon
 

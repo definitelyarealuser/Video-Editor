@@ -183,10 +183,33 @@
       </div>
     </section>
 
+    <section id="vimeo-status-section" class="vimeo-status-section" hidden>
+      <div class="progress-track"><div class="progress-fill" id="vimeo-progress-fill"></div></div>
+      <div class="progress-label" id="vimeo-status-label">Publishing to Vimeo…</div>
+      <div id="vimeo-result" class="vimeo-result" hidden>
+        <a id="vimeo-result-link" href="#" target="_blank" rel="noopener"></a>
+        <ul id="vimeo-showcase-list" class="vimeo-showcase-list"></ul>
+      </div>
+      <div id="vimeo-error" class="error-box" hidden></div>
+    </section>
+
     <section id="error-section" hidden>
       <div class="error-box" id="error-message"></div>
     </section>
   </main>
+
+  <div class="modal-overlay" id="vimeo-confirm-overlay" hidden>
+    <div class="modal-dialog">
+      <h3>Publish to Vimeo?</h3>
+      <p class="modal-hint">This choice applies to this render only - you'll be asked again next time.</p>
+      <label for="vimeo-description">Sermon description (for Vimeo)</label>
+      <textarea id="vimeo-description" rows="4" placeholder="What's being taught this morning…"></textarea>
+      <div class="modal-actions">
+        <button type="button" id="render-only-btn" class="modal-btn-secondary">Render Only</button>
+        <button type="button" id="render-publish-btn" class="modal-btn-primary">Render &amp; Publish to Vimeo</button>
+      </div>
+    </div>
+  </div>
 
   <script src="app.js"></script>
 </body>

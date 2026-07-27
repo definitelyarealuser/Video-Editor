@@ -1,3 +1,5 @@
+require('dotenv').config();
+
 const path = require('path');
 const fs = require('fs');
 const crypto = require('crypto');
@@ -9,6 +11,7 @@ const { probe, render, checkFfmpegAvailable } = require('./ffmpeg');
 const { extractPcmFloat32, transcribeInChunks, computeSpectralFlatness, CHUNK_SECONDS } = require('./transcribe');
 const { findSermonCandidates } = require('./sermonDetect');
 const { recordRender, getCalibratedDetectionOptions, getLastRenderSettings } = require('./history');
+const vimeo = require('./vimeo');
 
 const PORT = process.env.PORT || 3000;
 const ROOT = path.join(__dirname, '..');
@@ -237,6 +240,8 @@ app.post('/api/render/:jobId', useJobIdFromParams, upload.single('png'), async (
     const normalize = toBool(req.body.normalizeAudio, false);
     const targetLufs = toLufs(req.body.targetLufs, -14);
     const exportMp3 = toBool(req.body.exportMp3, false);
+    const publishToVimeo = toBool(req.body.publishToVimeo, false) && vimeo.isConfigured();
+    const vimeoDescription = String(req.body.vimeoDescription || '').slice(0, 5000);
 
     if (transition >= startDuration || transition >= endDuration || transition >= effectiveDuration) {
       await cleanupPng();
@@ -261,6 +266,7 @@ app.post('/api/render/:jobId', useJobIdFromParams, upload.single('png'), async (
       outputName: `${outputName}.mp4`,
       mp3OutputPath,
       mp3OutputName: mp3OutputPath ? `${outputName}.mp3` : null,
+      willPublishToVimeo: publishToVimeo,
     });
 
     res.json({ jobId });
@@ -300,6 +306,26 @@ app.post('/api/render/:jobId', useJobIdFromParams, upload.single('png'), async (
           renderSettings,
         });
         cleanupAll();
+
+        // Publishing was confirmed up front (at the "Render" click), so it runs automatically
+        // here with no further approval needed - but only ever when that confirmation actually
+        // happened for this specific render.
+        if (publishToVimeo) {
+          jobs.update(jobId, { status: 'publishing', progress: 0, error: null });
+          vimeo
+            .uploadAndPublish({
+              filePath: outputPath,
+              name: outputName,
+              description: vimeoDescription,
+              onProgress: (fraction) => jobs.update(jobId, { progress: fraction }),
+            })
+            .then(({ videoUrl, showcaseResults }) => {
+              jobs.update(jobId, { status: 'published', progress: 1, vimeoUrl: videoUrl, vimeoShowcaseResults: showcaseResults });
+            })
+            .catch((err) => {
+              jobs.update(jobId, { status: 'publish-error', error: err.message });
+            });
+        }
       })
       .catch((err) => {
         jobs.update(jobId, { status: 'error', error: err.message });
@@ -339,18 +365,26 @@ app.get('/api/progress/:jobId', (req, res) => {
         error: j.error,
         hasMp3: !!j.mp3OutputPath,
         candidates: j.candidates || undefined,
+        vimeoUrl: j.vimeoUrl || undefined,
+        vimeoShowcaseResults: j.vimeoShowcaseResults || undefined,
       })}\n\n`
     );
   send(job);
 
-  const terminal = (status) => ['done', 'error', 'analyzed'].includes(status);
-  if (terminal(job.status)) {
+  // 'done' isn't terminal when a Vimeo publish was confirmed for this render - the same stream
+  // keeps going through 'publishing' to 'published'/'publish-error', which are terminal.
+  const terminal = (j) => {
+    if (['error', 'analyzed', 'published', 'publish-error'].includes(j.status)) return true;
+    if (j.status === 'done') return !j.willPublishToVimeo;
+    return false;
+  };
+  if (terminal(job)) {
     return res.end();
   }
 
   const onUpdate = (j) => {
     send(j);
-    if (terminal(j.status)) {
+    if (terminal(j)) {
       jobs.removeListener(`update:${jobId}`, onUpdate);
       res.end();
     }
@@ -376,6 +410,12 @@ app.get('/api/download/:jobId/mp3', (req, res) => {
 // pre-fill with whatever this install actually tends to use instead of fixed HTML defaults.
 app.get('/api/preferences', (req, res) => {
   res.json({ renderSettings: getLastRenderSettings() });
+});
+
+// Whether Vimeo publishing is set up at all - the frontend only offers the option when this
+// is true, since without a token there's nothing it could do.
+app.get('/api/vimeo-status', (req, res) => {
+  res.json({ configured: vimeo.isConfigured(), showcaseCount: vimeo.getShowcaseIds().length });
 });
 
 app.listen(PORT, () => {

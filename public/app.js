@@ -4,6 +4,7 @@
     videoJobId: null,
     videoDuration: 0,
     candidates: [],
+    vimeoConfigured: false,
   };
 
   const dzPng = document.getElementById('dz-png');
@@ -27,6 +28,54 @@
 
   const errorSection = document.getElementById('error-section');
   const errorMessage = document.getElementById('error-message');
+
+  const vimeoStatusSection = document.getElementById('vimeo-status-section');
+  const vimeoProgressFill = document.getElementById('vimeo-progress-fill');
+  const vimeoStatusLabel = document.getElementById('vimeo-status-label');
+  const vimeoResult = document.getElementById('vimeo-result');
+  const vimeoResultLink = document.getElementById('vimeo-result-link');
+  const vimeoShowcaseList = document.getElementById('vimeo-showcase-list');
+  const vimeoError = document.getElementById('vimeo-error');
+
+  const vimeoConfirmOverlay = document.getElementById('vimeo-confirm-overlay');
+  const vimeoDescriptionInput = document.getElementById('vimeo-description');
+  const renderOnlyBtn = document.getElementById('render-only-btn');
+  const renderPublishBtn = document.getElementById('render-publish-btn');
+
+  fetch('/api/vimeo-status')
+    .then((res) => res.json())
+    .then((data) => {
+      state.vimeoConfigured = !!data.configured;
+    })
+    .catch(() => {
+      state.vimeoConfigured = false;
+    });
+
+  // Resolves with { publish, description } once the user picks a button - always a deliberate
+  // choice each time (no "remember this" option), per how this app is meant to be used.
+  function confirmVimeoPublish() {
+    return new Promise((resolve) => {
+      vimeoDescriptionInput.value = '';
+      vimeoConfirmOverlay.hidden = false;
+      vimeoDescriptionInput.focus();
+
+      const onRenderOnly = () => {
+        cleanup();
+        resolve({ publish: false, description: '' });
+      };
+      const onRenderPublish = () => {
+        cleanup();
+        resolve({ publish: true, description: vimeoDescriptionInput.value.trim() });
+      };
+      function cleanup() {
+        vimeoConfirmOverlay.hidden = true;
+        renderOnlyBtn.removeEventListener('click', onRenderOnly);
+        renderPublishBtn.removeEventListener('click', onRenderPublish);
+      }
+      renderOnlyBtn.addEventListener('click', onRenderOnly);
+      renderPublishBtn.addEventListener('click', onRenderPublish);
+    });
+  }
 
   const normalizeAudioCheckbox = document.getElementById('normalizeAudio');
   const targetLufsSelect = document.getElementById('targetLufs');
@@ -448,14 +497,38 @@
     errorSection.hidden = true;
     resultSection.hidden = true;
     downloadMp3Link.hidden = true;
+    vimeoStatusSection.hidden = true;
+    vimeoResult.hidden = true;
+    vimeoError.hidden = true;
     progressSection.hidden = false;
     progressFill.style.width = '0%';
     progressLabel.textContent = 'Uploading files…';
   }
 
+  function finishRenderCycle() {
+    renderBtn.disabled = false;
+    renderBtn.textContent = 'Render Video';
+    // The server deletes the uploaded video after a successful render, so
+    // reset the dropzone/trim panel - a fresh render needs a fresh upload.
+    state.videoJobId = null;
+    state.videoDuration = 0;
+    state.candidates = [];
+    showDzState(dzVideo, 'dz-empty');
+    inputVideo.value = '';
+    trimPanel.hidden = true;
+    updateRenderButton();
+  }
+
   form.addEventListener('submit', async (e) => {
     e.preventDefault();
     if (!state.videoJobId || !state.png) return;
+
+    // Confirmed up front, before rendering even starts, so publishing can run automatically
+    // once the render finishes with no further approval needed - but it's always a fresh,
+    // deliberate choice, never remembered from a previous render.
+    const { publish: publishToVimeo, description: vimeoDescription } = state.vimeoConfigured
+      ? await confirmVimeoPublish()
+      : { publish: false, description: '' };
 
     resetPanels();
     renderBtn.disabled = true;
@@ -474,6 +547,8 @@
     formData.append('exportMp3', document.getElementById('exportMp3').checked);
     formData.append('trimStart', trimStartHandle.value);
     formData.append('trimEnd', trimEndHandle.value);
+    formData.append('publishToVimeo', publishToVimeo);
+    formData.append('vimeoDescription', vimeoDescription);
 
     let jobId;
     try {
@@ -490,17 +565,21 @@
     const source = new EventSource(`/api/progress/${jobId}`);
     source.onmessage = (evt) => {
       const data = JSON.parse(evt.data);
+
       if (data.status === 'error') {
         source.close();
         showError(data.error || 'Rendering failed.');
         return;
       }
-      const pct = Math.round((data.progress || 0) * 100);
-      progressFill.style.width = pct + '%';
-      progressLabel.textContent = `Rendering… ${pct}%`;
+
+      if (data.status === 'rendering') {
+        const pct = Math.round((data.progress || 0) * 100);
+        progressFill.style.width = pct + '%';
+        progressLabel.textContent = `Rendering… ${pct}%`;
+        return;
+      }
 
       if (data.status === 'done') {
-        source.close();
         progressSection.hidden = true;
         resultSection.hidden = false;
         const outputName = document.getElementById('outputName').value.trim();
@@ -517,16 +596,49 @@
           downloadMp3Link.hidden = true;
         }
 
-        renderBtn.textContent = 'Render Video';
-        // The server deletes the uploaded video after a successful render, so
-        // reset the dropzone/trim panel - a fresh render needs a fresh upload.
-        state.videoJobId = null;
-        state.videoDuration = 0;
-        state.candidates = [];
-        showDzState(dzVideo, 'dz-empty');
-        inputVideo.value = '';
-        trimPanel.hidden = true;
-        updateRenderButton();
+        if (publishToVimeo) {
+          vimeoStatusSection.hidden = false;
+          vimeoProgressFill.style.width = '0%';
+          vimeoStatusLabel.textContent = 'Publishing to Vimeo…';
+        } else {
+          source.close();
+          finishRenderCycle();
+        }
+        return;
+      }
+
+      if (data.status === 'publishing') {
+        const pct = Math.round((data.progress || 0) * 100);
+        vimeoProgressFill.style.width = pct + '%';
+        vimeoStatusLabel.textContent = `Publishing to Vimeo… ${pct}%`;
+        return;
+      }
+
+      if (data.status === 'published') {
+        source.close();
+        vimeoProgressFill.style.width = '100%';
+        vimeoStatusLabel.textContent = 'Published to Vimeo';
+        vimeoResult.hidden = false;
+        vimeoResultLink.href = data.vimeoUrl;
+        vimeoResultLink.textContent = data.vimeoUrl;
+        vimeoShowcaseList.innerHTML = '';
+        (data.vimeoShowcaseResults || []).forEach((r) => {
+          const li = document.createElement('li');
+          li.className = r.ok ? 'showcase-ok' : 'showcase-failed';
+          li.textContent = r.ok ? `Added to showcase ${r.showcaseId}` : `Showcase ${r.showcaseId} failed: ${r.error}`;
+          vimeoShowcaseList.appendChild(li);
+        });
+        finishRenderCycle();
+        return;
+      }
+
+      if (data.status === 'publish-error') {
+        source.close();
+        vimeoStatusLabel.textContent = 'Vimeo publish failed';
+        vimeoError.hidden = false;
+        vimeoError.textContent = data.error || 'Unknown error publishing to Vimeo.';
+        finishRenderCycle();
+        return;
       }
     };
     source.onerror = () => {

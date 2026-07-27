@@ -4,5 +4,6 @@ uploads/*
 output/*
 !output/.gitkeep
 data/
+.env
 *.log
 .DS_Store
