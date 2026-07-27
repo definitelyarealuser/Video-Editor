@@ -135,6 +135,18 @@
     targetLufsSelect.disabled = !normalizeAudioCheckbox.checked;
   });
 
+  const exportMp3Checkbox = document.getElementById('exportMp3');
+  // The idle label reflects whatever's checked right now - only touched outside an
+  // in-flight render, so it never clobbers the "Rendering…" state.
+  function idleRenderLabel() {
+    return exportMp3Checkbox.checked ? 'Render Audio and Video' : 'Render Video';
+  }
+  function refreshIdleRenderLabel() {
+    if (renderBtn.textContent !== 'Rendering…') renderBtn.textContent = idleRenderLabel();
+  }
+  exportMp3Checkbox.addEventListener('change', refreshIdleRenderLabel);
+  refreshIdleRenderLabel();
+
   // Pre-fill render settings with whatever was actually used last time, instead of the fixed
   // HTML defaults - this install's own preferences, remembered locally (server/history.js).
   (async function loadPreferences() {
@@ -156,7 +168,8 @@
       if (typeof s.targetLufs === 'number' && document.querySelector(`#targetLufs option[value="${s.targetLufs}"]`)) {
         targetLufsSelect.value = String(s.targetLufs);
       }
-      if (typeof s.exportMp3 === 'boolean') document.getElementById('exportMp3').checked = s.exportMp3;
+      if (typeof s.exportMp3 === 'boolean') exportMp3Checkbox.checked = s.exportMp3;
+      refreshIdleRenderLabel();
     } catch {
       // Non-critical - just leave the HTML defaults in place.
     }
@@ -560,7 +573,8 @@
 
   function updateRenderButton() {
     const nameFilled = nameFieldIds.every((id) => document.getElementById(id).value.trim().length > 0);
-    renderBtn.disabled = !(state.videoJobId && state.png && nameFilled);
+    const coreTextFilled = document.getElementById('coreText').value.trim().length > 0;
+    renderBtn.disabled = !(state.videoJobId && state.png && nameFilled && coreTextFilled);
     updateOutputNamePreview();
   }
 
@@ -572,6 +586,7 @@
   const coreTextPreview = document.getElementById('coreTextPreview');
   coreTextInput.addEventListener('input', () => {
     coreTextPreview.textContent = `Core text: ${coreTextInput.value.trim()}`;
+    updateRenderButton();
   });
 
   document.getElementById('use-today-btn').addEventListener('click', () => {
@@ -589,7 +604,7 @@
     errorMessage.textContent = message;
     progressSection.hidden = true;
     renderBtn.disabled = false;
-    renderBtn.textContent = 'Render Video';
+    renderBtn.textContent = idleRenderLabel();
   }
 
   function resetPanels() {
@@ -606,7 +621,7 @@
 
   function finishRenderCycle() {
     renderBtn.disabled = false;
-    renderBtn.textContent = 'Render Video';
+    renderBtn.textContent = idleRenderLabel();
     // The server deletes the uploaded video after a successful render, so
     // reset the dropzone/trim panel - a fresh render needs a fresh upload.
     state.videoJobId = null;
