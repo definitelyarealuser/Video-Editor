@@ -156,6 +156,7 @@ header h1 {
 .filename-input {
   display: flex;
   align-items: center;
+  min-height: 40px;
   background: var(--panel);
   border: 1px solid var(--border);
   border-radius: 8px;
@@ -226,6 +227,9 @@ label.core-text-label {
 
 .core-text-preview {
   margin-top: 4px;
+  display: flex;
+  align-items: center;
+  min-height: 40px;
   padding: 10px 12px;
   background: var(--panel);
   border: 1px solid var(--border);
