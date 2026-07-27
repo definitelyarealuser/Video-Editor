@@ -741,9 +741,11 @@
         vimeoResultLink.textContent = data.vimeoUrl;
         vimeoShowcaseList.innerHTML = '';
         (data.vimeoShowcaseResults || []).forEach((r) => {
+          const showcase = state.vimeoShowcases.find((s) => String(s.id) === String(r.showcaseId));
+          const label = showcase ? showcase.name : r.showcaseId;
           const li = document.createElement('li');
           li.className = r.ok ? 'showcase-ok' : 'showcase-failed';
-          li.textContent = r.ok ? `Added to showcase ${r.showcaseId}` : `Showcase ${r.showcaseId} failed: ${r.error}`;
+          li.textContent = r.ok ? `Added to showcase ${label}` : `Showcase ${label} failed: ${r.error}`;
           vimeoShowcaseList.appendChild(li);
         });
         finishRenderCycle();
