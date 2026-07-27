@@ -179,9 +179,9 @@ header h1 {
 }
 
 .use-today-btn {
-  background: var(--panel);
-  border: 1px solid var(--border);
-  color: var(--text);
+  background: color-mix(in srgb, var(--accent) 14%, var(--panel));
+  border: 1px solid color-mix(in srgb, var(--accent) 40%, var(--border));
+  color: var(--accent);
   border-radius: 8px;
   padding: 0 14px;
   font-size: 0.85rem;
@@ -190,6 +190,7 @@ header h1 {
 }
 
 .use-today-btn:hover {
+  background: color-mix(in srgb, var(--accent) 24%, var(--panel));
   border-color: var(--accent);
 }
 
