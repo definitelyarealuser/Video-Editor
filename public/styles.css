@@ -44,7 +44,7 @@ header h1 {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 16px;
-  margin-bottom: 24px;
+  margin-bottom: 36px;
 }
 
 @media (max-width: 640px) {
@@ -126,7 +126,7 @@ header h1 {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
   gap: 16px;
-  margin-bottom: 24px;
+  margin-bottom: 36px;
 }
 
 .field-wide { grid-column: 1 / -1; }
@@ -214,8 +214,8 @@ label.core-text-label {
 }
 
 .core-text-label-title {
-  font-size: 1.05rem;
-  color: var(--text);
+  font-size: 0.8rem;
+  color: var(--muted);
 }
 
 .core-text-preview {
@@ -272,7 +272,7 @@ label.core-text-label {
   border: 1px solid var(--border);
   border-radius: 10px;
   padding: 14px 16px;
-  margin-bottom: 24px;
+  margin-bottom: 36px;
 }
 
 .toggle-row {
@@ -323,7 +323,7 @@ label.core-text-label {
   border: 1px solid var(--border);
   border-radius: 10px;
   padding: 18px 18px 20px;
-  margin-bottom: 24px;
+  margin-bottom: 36px;
 }
 
 .trim-panel h3 {
