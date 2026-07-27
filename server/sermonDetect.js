@@ -23,6 +23,7 @@ const DEFAULT_OPTIONS = {
   idealMinutes: 35, // typical sermon length to score candidates against (church reports 30-45min, ~35 average)
   scoreSigmaMinutes: 12, // how forgiving the duration scoring is around idealMinutes
   minCandidateMinutes: 5, // ignore runs shorter than this outright
+  skipPenalties: false, // ignore the repeated-phrase/spectral-flatness discounts - used as a fallback pass
 };
 
 // Cheap content signal on top of the duration/density scoring: sermons here tend to open with
@@ -68,9 +69,12 @@ function uniqueWordRatio(text) {
 }
 
 // The count actually used for speech/music classification: raw word count, discounted when the
-// text looks like a repeated chorus and/or the audio itself measures as tonal.
-function effectiveWordCount(chunk) {
+// text looks like a repeated chorus and/or the audio itself measures as tonal. `skipPenalties`
+// disables both discounts - used as a fallback when the full scoring finds nothing at all,
+// since a lower-confidence suggestion beats no suggestion.
+function effectiveWordCount(chunk, skipPenalties = false) {
   let count = wordCount(chunk.text);
+  if (skipPenalties) return count;
   if (count >= REPETITION_MIN_WORDS && uniqueWordRatio(chunk.text) < REPETITION_RATIO_THRESHOLD) {
     count *= REPETITION_PENALTY;
   }
@@ -80,17 +84,17 @@ function effectiveWordCount(chunk) {
   return count;
 }
 
-function wordsPerMinute(chunk) {
+function wordsPerMinute(chunk, skipPenalties = false) {
   const durationMin = (chunk.end - chunk.start) / 60;
   if (durationMin <= 0) return 0;
-  return effectiveWordCount(chunk) / durationMin;
+  return effectiveWordCount(chunk, skipPenalties) / durationMin;
 }
 
 function findSermonCandidates(chunks, options = {}) {
   const opts = { ...DEFAULT_OPTIONS, ...options };
   if (!chunks.length) return [];
 
-  const flags = chunks.map((c) => wordsPerMinute(c) >= opts.minWordsPerMinute);
+  const flags = chunks.map((c) => wordsPerMinute(c, opts.skipPenalties) >= opts.minWordsPerMinute);
 
   const runs = [];
   let runStart = null;
@@ -118,7 +122,7 @@ function findSermonCandidates(chunks, options = {}) {
     const start = run[0].start;
     const end = run[run.length - 1].end;
     const durationMin = (end - start) / 60;
-    const totalWords = run.reduce((sum, c) => sum + effectiveWordCount(c), 0);
+    const totalWords = run.reduce((sum, c) => sum + effectiveWordCount(c, opts.skipPenalties), 0);
     const avgWpm = durationMin > 0 ? totalWords / durationMin : 0;
 
     const durationScore = Math.exp(-((durationMin - opts.idealMinutes) ** 2) / (2 * opts.scoreSigmaMinutes ** 2));

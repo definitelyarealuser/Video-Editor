@@ -151,7 +151,28 @@ app.post('/api/analyze/:jobId', useJobIdFromParams, async (req, res) => {
     chunks.forEach((chunk, i) => {
       if (flatnessByChunk[i] != null) chunk.flatness = flatnessByChunk[i];
     });
-    const candidates = findSermonCandidates(chunks);
+
+    const withText = chunks.filter((c) => c.text).length;
+    console.log(
+      `Analyze ${jobId}: ${chunks.length} chunks total, ${withText} with transcribed text, ` +
+        `${chunks.filter((c) => c.flatness != null).length} with a flatness reading.`
+    );
+
+    // Full scoring (with the repetition/flatness discounts) gives the best result, but a
+    // real recording can come out quieter/noisier/more repetitive than the synthetic signals
+    // this was calibrated against - so if it finds nothing, fall back to progressively looser
+    // passes rather than leaving the user with no suggestion at all.
+    let candidates = findSermonCandidates(chunks);
+    if (!candidates.length) {
+      console.log(`Analyze ${jobId}: no candidates with full scoring, retrying with repetition/flatness discounts disabled`);
+      candidates = findSermonCandidates(chunks, { skipPenalties: true });
+    }
+    if (!candidates.length) {
+      console.log(`Analyze ${jobId}: still nothing, retrying with a looser speech threshold`);
+      candidates = findSermonCandidates(chunks, { skipPenalties: true, minWordsPerMinute: 35, maxGapChunks: 4, minCandidateMinutes: 3 });
+    }
+    console.log(`Analyze ${jobId}: ${candidates.length} candidate(s) found.`);
+
     jobs.update(jobId, { status: 'analyzed', progress: 1, candidates });
   })().catch((err) => {
     jobs.update(jobId, { status: 'error', error: err.message });
