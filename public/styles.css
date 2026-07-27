@@ -218,8 +218,14 @@ label.core-text-label {
   color: var(--muted);
 }
 
-.core-text-preview {
+.core-text-preview-note {
   margin-top: 8px;
+  font-size: 0.75rem;
+  color: var(--muted);
+}
+
+.core-text-preview {
+  margin-top: 4px;
   padding: 10px 12px;
   background: var(--panel);
   border: 1px solid var(--border);
