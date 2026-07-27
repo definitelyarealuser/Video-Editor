@@ -40,6 +40,7 @@
   const vimeoConfirmOverlay = document.getElementById('vimeo-confirm-overlay');
   const vimeoDescriptionInput = document.getElementById('vimeo-description');
   const vimeoShowcaseChecks = document.getElementById('vimeo-showcase-checks');
+  const vimeoCancelBtn = document.getElementById('vimeo-cancel-btn');
   const renderOnlyBtn = document.getElementById('render-only-btn');
   const renderPublishBtn = document.getElementById('render-publish-btn');
 
@@ -85,8 +86,10 @@
     });
   }
 
-  // Resolves with { publish, description, showcaseIds } once the user picks a button - always a
-  // deliberate choice each time (no "remember this" option), per how this app is meant to be used.
+  // Resolves with { cancelled: true } if the user backs out entirely (Cancel, clicking outside
+  // the dialog, or Escape) - the caller should skip rendering altogether in that case. Otherwise
+  // resolves with { publish, description, showcaseIds } - always a deliberate choice each time
+  // (no "remember this" option), per how this app is meant to be used.
   function confirmVimeoPublish() {
     return new Promise((resolve) => {
       vimeoDescriptionInput.value = 'Core Text: TBD';
@@ -96,6 +99,10 @@
       // Select just "TBD" so typing immediately replaces it, leaving "Core Text: " intact.
       vimeoDescriptionInput.setSelectionRange(11, 14);
 
+      const onCancel = () => {
+        cleanup();
+        resolve({ cancelled: true });
+      };
       const onRenderOnly = () => {
         cleanup();
         resolve({ publish: false, description: '', showcaseIds: [] });
@@ -105,13 +112,25 @@
         cleanup();
         resolve({ publish: true, description: vimeoDescriptionInput.value.trim(), showcaseIds });
       };
+      const onOverlayClick = (e) => {
+        if (e.target === vimeoConfirmOverlay) onCancel();
+      };
+      const onKeydown = (e) => {
+        if (e.key === 'Escape') onCancel();
+      };
       function cleanup() {
         vimeoConfirmOverlay.hidden = true;
+        vimeoCancelBtn.removeEventListener('click', onCancel);
         renderOnlyBtn.removeEventListener('click', onRenderOnly);
         renderPublishBtn.removeEventListener('click', onRenderPublish);
+        vimeoConfirmOverlay.removeEventListener('click', onOverlayClick);
+        document.removeEventListener('keydown', onKeydown);
       }
+      vimeoCancelBtn.addEventListener('click', onCancel);
       renderOnlyBtn.addEventListener('click', onRenderOnly);
       renderPublishBtn.addEventListener('click', onRenderPublish);
+      vimeoConfirmOverlay.addEventListener('click', onOverlayClick);
+      document.addEventListener('keydown', onKeydown);
     });
   }
 
@@ -564,9 +583,12 @@
     // Confirmed up front, before rendering even starts, so publishing can run automatically
     // once the render finishes with no further approval needed - but it's always a fresh,
     // deliberate choice, never remembered from a previous render.
-    const { publish: publishToVimeo, description: vimeoDescription, showcaseIds: vimeoShowcaseIds } = state.vimeoConfigured
+    const vimeoChoice = state.vimeoConfigured
       ? await confirmVimeoPublish()
       : { publish: false, description: '', showcaseIds: [] };
+    if (vimeoChoice.cancelled) return; // back out entirely - no render, nothing changes
+
+    const { publish: publishToVimeo, description: vimeoDescription, showcaseIds: vimeoShowcaseIds } = vimeoChoice;
 
     resetPanels();
     renderBtn.disabled = true;

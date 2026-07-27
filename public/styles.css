@@ -733,3 +733,19 @@ header h1 {
 .modal-btn-primary:hover {
   background: var(--accent-hover);
 }
+
+.modal-btn-ghost {
+  flex: 0 0 auto;
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--muted);
+  padding: 11px 14px;
+  border-radius: 8px;
+  font-size: 0.9rem;
+  cursor: pointer;
+}
+
+.modal-btn-ghost:hover {
+  color: var(--text);
+  text-decoration: underline;
+}
