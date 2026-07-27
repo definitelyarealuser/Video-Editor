@@ -6,12 +6,14 @@ const multer = require('multer');
 
 const jobs = require('./jobs');
 const { probe, render, checkFfmpegAvailable } = require('./ffmpeg');
+const { extractPcmFloat32, transcribeInChunks } = require('./transcribe');
+const { findSermonCandidates } = require('./sermonDetect');
 
 const PORT = process.env.PORT || 3000;
 const ROOT = path.join(__dirname, '..');
 const UPLOAD_DIR = path.join(ROOT, 'uploads');
 const OUTPUT_DIR = path.join(ROOT, 'output');
-const MAX_UPLOAD_BYTES = 8 * 1024 * 1024 * 1024; // 8GB, generous for sermon-length video files
+const MAX_UPLOAD_BYTES = 8 * 1024 * 1024 * 1024; // 8GB, generous for full-service-length video files
 
 for (const dir of [UPLOAD_DIR, OUTPUT_DIR]) {
   fs.mkdirSync(dir, { recursive: true });
@@ -39,7 +41,7 @@ const upload = multer({
       if (!/^image\//.test(file.mimetype)) return cb(new Error('The bookend graphic must be an image file (PNG recommended).'));
     }
     if (file.fieldname === 'video') {
-      if (!/^video\//.test(file.mimetype)) return cb(new Error('The sermon file must be a video file.'));
+      if (!/^video\//.test(file.mimetype)) return cb(new Error('The video file must be a video file.'));
     }
     cb(null, true);
   },
@@ -47,6 +49,11 @@ const upload = multer({
 
 function assignJobId(req, res, next) {
   req.jobId = crypto.randomUUID();
+  next();
+}
+
+function useJobIdFromParams(req, res, next) {
+  req.jobId = req.params.jobId;
   next();
 }
 
@@ -64,6 +71,11 @@ function toPositiveFloat(value, fallback) {
   return isFinite(n) && n > 0 ? n : fallback;
 }
 
+function toNonNegativeFloat(value, fallback) {
+  const n = parseFloat(value);
+  return isFinite(n) && n >= 0 ? n : fallback;
+}
+
 function toBool(value, fallback) {
   if (value === undefined || value === null) return fallback;
   return value === 'true' || value === '1' || value === 'on';
@@ -78,103 +90,169 @@ function toLufs(value, fallback) {
   return Math.min(Math.max(n, MIN_LUFS), MAX_LUFS);
 }
 
-app.post(
-  '/api/render',
-  assignJobId,
-  upload.fields([{ name: 'video', maxCount: 1 }, { name: 'png', maxCount: 1 }]),
-  async (req, res) => {
-    const jobId = req.jobId;
+// --- Step 1: upload the source video on its own, ahead of any render settings ---
+// Decoupling this lets the (potentially very large, hours-long) file get analyzed
+// and trimmed before the user ever touches the PNG/render options.
+app.post('/api/upload-video', assignJobId, upload.single('video'), async (req, res) => {
+  const jobId = req.jobId;
+  const cleanup = () => fs.promises.rm(path.join(UPLOAD_DIR, jobId), { recursive: true, force: true }).catch(() => {});
 
-    const cleanupUpload = () => fs.promises.rm(path.join(UPLOAD_DIR, jobId), { recursive: true, force: true }).catch(() => {});
+  try {
+    if (!(await checkFfmpegAvailable())) {
+      await cleanup();
+      return res.status(500).json({ error: 'ffmpeg/ffprobe is not installed on the server. Install ffmpeg and restart the app.' });
+    }
+    if (!req.file) {
+      await cleanup();
+      return res.status(400).json({ error: 'A video file is required.' });
+    }
 
-    try {
-      if (!(await checkFfmpegAvailable())) {
-        await cleanupUpload();
-        return res.status(500).json({ error: 'ffmpeg/ffprobe is not installed on the server. Install ffmpeg and restart the app.' });
-      }
+    const videoInfo = await probe(req.file.path);
+    if (!videoInfo.duration || videoInfo.duration <= 0) {
+      await cleanup();
+      return res.status(400).json({ error: 'Could not read a duration from the uploaded video file. Is it a valid video?' });
+    }
 
-      const videoFile = req.files && req.files.video && req.files.video[0];
-      const pngFile = req.files && req.files.png && req.files.png[0];
-      if (!videoFile || !pngFile) {
-        await cleanupUpload();
-        return res.status(400).json({ error: 'Both a video file and a PNG graphic are required.' });
-      }
+    jobs.create(jobId, {
+      status: 'uploaded',
+      progress: 1,
+      videoPath: req.file.path,
+      videoInfo,
+    });
 
-      const startDuration = toPositiveFloat(req.body.startDuration, 5);
-      const endDuration = toPositiveFloat(req.body.endDuration, 5);
-      const transition = toPositiveFloat(req.body.transition, 1);
-      const fadeOut = toPositiveFloat(req.body.fadeOut, 1.5);
-      const outputName = sanitizeFilename(req.body.outputName);
-      const crossfadeAudio = toBool(req.body.crossfadeAudio, true);
-      const normalize = toBool(req.body.normalizeAudio, false);
-      const targetLufs = toLufs(req.body.targetLufs, -14);
-      const exportMp3 = toBool(req.body.exportMp3, false);
+    res.json({ jobId, duration: videoInfo.duration, width: videoInfo.width, height: videoInfo.height, hasAudio: videoInfo.hasAudio });
+  } catch (err) {
+    await cleanup();
+    if (!res.headersSent) res.status(500).json({ error: err.message || 'Unexpected server error.' });
+  }
+});
 
-      const videoInfo = await probe(videoFile.path);
-      if (!videoInfo.duration || videoInfo.duration <= 0) {
-        await cleanupUpload();
-        return res.status(400).json({ error: 'Could not read a duration from the uploaded video file. Is it a valid video?' });
-      }
+// --- Step 2 (optional): analyze the uploaded video to suggest a sermon start/end ---
+app.post('/api/analyze/:jobId', useJobIdFromParams, async (req, res) => {
+  const jobId = req.jobId;
+  const job = jobs.get(jobId);
+  if (!job || !job.videoPath) {
+    return res.status(404).json({ error: 'Upload a video first.' });
+  }
 
-      if (transition >= startDuration || transition >= endDuration || transition >= videoInfo.duration) {
-        await cleanupUpload();
-        return res.status(400).json({
-          error: `The crossfade duration (${transition}s) must be shorter than the start image duration, end image duration, and the video itself.`,
-        });
-      }
+  jobs.update(jobId, { status: 'analyzing', progress: 0, error: null, candidates: null });
+  res.json({ jobId });
 
-      const totalDuration = startDuration + endDuration + videoInfo.duration - 2 * transition;
-      if (fadeOut >= totalDuration) {
-        await cleanupUpload();
-        return res.status(400).json({ error: `The fade-to-black duration (${fadeOut}s) is longer than the whole rendered video.` });
-      }
+  (async () => {
+    const samples = await extractPcmFloat32(job.videoPath);
+    const { chunks } = await transcribeInChunks(samples, {
+      onProgress: (fraction) => jobs.update(jobId, { progress: fraction }),
+    });
+    const candidates = findSermonCandidates(chunks);
+    jobs.update(jobId, { status: 'analyzed', progress: 1, candidates });
+  })().catch((err) => {
+    jobs.update(jobId, { status: 'error', error: err.message });
+  });
+});
 
-      const outputPath = path.join(OUTPUT_DIR, `${jobId}.mp4`);
-      const mp3OutputPath = exportMp3 ? path.join(OUTPUT_DIR, `${jobId}.mp3`) : null;
-      jobs.create(jobId, {
-        status: 'rendering',
-        progress: 0,
-        outputPath,
-        outputName: `${outputName}.mp4`,
-        mp3OutputPath,
-        mp3OutputName: mp3OutputPath ? `${outputName}.mp3` : null,
+// --- Step 3: render, using the already-uploaded (and optionally trimmed) video ---
+app.post('/api/render/:jobId', useJobIdFromParams, upload.single('png'), async (req, res) => {
+  const jobId = req.jobId;
+  const job = jobs.get(jobId);
+
+  const cleanupPng = () => (req.file ? fs.promises.rm(req.file.path, { force: true }).catch(() => {}) : Promise.resolve());
+  const cleanupAll = () => fs.promises.rm(path.join(UPLOAD_DIR, jobId), { recursive: true, force: true }).catch(() => {});
+
+  try {
+    if (!job || !job.videoPath) {
+      await cleanupPng();
+      return res.status(404).json({ error: 'Upload a video first (this session may have expired - try re-uploading).' });
+    }
+    if (!(await checkFfmpegAvailable())) {
+      await cleanupPng();
+      return res.status(500).json({ error: 'ffmpeg/ffprobe is not installed on the server. Install ffmpeg and restart the app.' });
+    }
+    if (!req.file) {
+      await cleanupPng();
+      return res.status(400).json({ error: 'A PNG graphic is required.' });
+    }
+
+    const fullDuration = job.videoInfo.duration;
+    const trimStart = toNonNegativeFloat(req.body.trimStart, 0);
+    const trimEnd = toPositiveFloat(req.body.trimEnd, fullDuration);
+    const isTrimmed = trimStart > 0.001 || trimEnd < fullDuration - 0.001;
+    if (isTrimmed && trimEnd - trimStart < 1) {
+      await cleanupPng();
+      return res.status(400).json({ error: 'The trimmed range is too short.' });
+    }
+    const effectiveDuration = isTrimmed ? trimEnd - trimStart : fullDuration;
+
+    const startDuration = toPositiveFloat(req.body.startDuration, 5);
+    const endDuration = toPositiveFloat(req.body.endDuration, 5);
+    const transition = toPositiveFloat(req.body.transition, 1);
+    const fadeOut = toPositiveFloat(req.body.fadeOut, 1.5);
+    const outputName = sanitizeFilename(req.body.outputName);
+    const crossfadeAudio = toBool(req.body.crossfadeAudio, true);
+    const normalize = toBool(req.body.normalizeAudio, false);
+    const targetLufs = toLufs(req.body.targetLufs, -14);
+    const exportMp3 = toBool(req.body.exportMp3, false);
+
+    if (transition >= startDuration || transition >= endDuration || transition >= effectiveDuration) {
+      await cleanupPng();
+      return res.status(400).json({
+        error: `The crossfade duration (${transition}s) must be shorter than the start image duration, end image duration, and the (trimmed) video itself.`,
       });
+    }
 
-      res.json({ jobId });
+    const totalDuration = startDuration + endDuration + effectiveDuration - 2 * transition;
+    if (fadeOut >= totalDuration) {
+      await cleanupPng();
+      return res.status(400).json({ error: `The fade-to-black duration (${fadeOut}s) is longer than the whole rendered video.` });
+    }
 
-      render({
-        pngPath: pngFile.path,
-        videoPath: videoFile.path,
-        outputPath,
-        mp3OutputPath,
-        startDuration,
-        endDuration,
-        transition,
-        fadeOut,
-        crossfadeAudio,
-        normalize,
-        targetLufs,
-        videoInfo,
-        onProgress: (fraction) => {
-          jobs.update(jobId, { progress: fraction });
-        },
+    const outputPath = path.join(OUTPUT_DIR, `${jobId}.mp4`);
+    const mp3OutputPath = exportMp3 ? path.join(OUTPUT_DIR, `${jobId}.mp3`) : null;
+    jobs.update(jobId, {
+      status: 'rendering',
+      progress: 0,
+      error: null,
+      outputPath,
+      outputName: `${outputName}.mp4`,
+      mp3OutputPath,
+      mp3OutputName: mp3OutputPath ? `${outputName}.mp3` : null,
+    });
+
+    res.json({ jobId });
+
+    render({
+      pngPath: req.file.path,
+      videoPath: job.videoPath,
+      outputPath,
+      mp3OutputPath,
+      trimStart: isTrimmed ? trimStart : null,
+      trimEnd: isTrimmed ? trimEnd : null,
+      startDuration,
+      endDuration,
+      transition,
+      fadeOut,
+      crossfadeAudio,
+      normalize,
+      targetLufs,
+      videoInfo: { ...job.videoInfo, duration: effectiveDuration },
+      onProgress: (fraction) => {
+        jobs.update(jobId, { progress: fraction });
+      },
+    })
+      .then(() => {
+        jobs.update(jobId, { status: 'done', progress: 1 });
+        cleanupAll();
       })
-        .then(() => {
-          jobs.update(jobId, { status: 'done', progress: 1 });
-          cleanupUpload();
-        })
-        .catch((err) => {
-          jobs.update(jobId, { status: 'error', error: err.message });
-          cleanupUpload();
-        });
-    } catch (err) {
-      await cleanupUpload();
-      if (!res.headersSent) {
-        res.status(500).json({ error: err.message || 'Unexpected server error.' });
-      }
+      .catch((err) => {
+        jobs.update(jobId, { status: 'error', error: err.message });
+        cleanupPng();
+      });
+  } catch (err) {
+    await cleanupPng();
+    if (!res.headersSent) {
+      res.status(500).json({ error: err.message || 'Unexpected server error.' });
     }
   }
-);
+});
 
 app.use((err, req, res, next) => {
   // Handles multer errors (bad mimetype, file too large) thrown before the route handler runs.
@@ -196,17 +274,24 @@ app.get('/api/progress/:jobId', (req, res) => {
 
   const send = (j) =>
     res.write(
-      `data: ${JSON.stringify({ status: j.status, progress: j.progress, error: j.error, hasMp3: !!j.mp3OutputPath })}\n\n`
+      `data: ${JSON.stringify({
+        status: j.status,
+        progress: j.progress,
+        error: j.error,
+        hasMp3: !!j.mp3OutputPath,
+        candidates: j.candidates || undefined,
+      })}\n\n`
     );
   send(job);
 
-  if (job.status === 'done' || job.status === 'error') {
+  const terminal = (status) => ['done', 'error', 'analyzed'].includes(status);
+  if (terminal(job.status)) {
     return res.end();
   }
 
   const onUpdate = (j) => {
     send(j);
-    if (j.status === 'done' || j.status === 'error') {
+    if (terminal(j.status)) {
       jobs.removeListener(`update:${jobId}`, onUpdate);
       res.end();
     }
@@ -232,12 +317,15 @@ app.listen(PORT, () => {
   console.log(`Sermon Video Editor running at http://localhost:${PORT}`);
 });
 
-// Sweep old finished/failed output files periodically so disk usage doesn't grow unbounded.
+// Sweep old jobs periodically so disk usage doesn't grow unbounded - this now also
+// covers uploaded-but-never-rendered videos, since those can now sit around much
+// longer (through analysis + manual review) than the old single-request flow.
 const MAX_JOB_AGE_MS = 2 * 60 * 60 * 1000; // 2 hours
 setInterval(() => {
   const now = Date.now();
   for (const job of jobs.jobs.values()) {
     if (now - job.createdAt > MAX_JOB_AGE_MS) {
+      fs.promises.rm(path.join(UPLOAD_DIR, job.id), { recursive: true, force: true }).catch(() => {});
       if (job.outputPath) fs.promises.rm(job.outputPath, { force: true }).catch(() => {});
       if (job.mp3OutputPath) fs.promises.rm(job.mp3OutputPath, { force: true }).catch(() => {});
       jobs.delete(job.id);

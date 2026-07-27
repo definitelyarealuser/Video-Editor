@@ -187,6 +187,8 @@ function render({
   videoPath,
   outputPath,
   mp3OutputPath,
+  trimStart,
+  trimEnd,
   startDuration,
   endDuration,
   transition,
@@ -213,10 +215,15 @@ function render({
     needsMp3: !!mp3OutputPath,
   });
 
+  const videoInputArgs =
+    trimStart != null && trimEnd != null
+      ? ['-ss', String(trimStart), '-to', String(trimEnd), '-i', videoPath]
+      : ['-i', videoPath];
+
   const args = [
     '-y',
     '-loop', '1', '-t', String(startDuration), '-i', pngPath,
-    '-i', videoPath,
+    ...videoInputArgs,
     '-loop', '1', '-t', String(endDuration), '-i', pngPath,
     '-filter_complex', filterComplex,
     '-map', '[vout]',

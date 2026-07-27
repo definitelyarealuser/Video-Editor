@@ -1,5 +1,10 @@
 (() => {
-  const state = { png: null, video: null };
+  const state = {
+    png: null,
+    videoJobId: null,
+    videoDuration: 0,
+    candidates: [],
+  };
 
   const dzPng = document.getElementById('dz-png');
   const dzVideo = document.getElementById('dz-video');
@@ -7,6 +12,9 @@
   const inputVideo = document.getElementById('input-video');
   const renderBtn = document.getElementById('render-btn');
   const form = document.getElementById('render-form');
+
+  const videoUploadPct = document.getElementById('video-upload-pct');
+  const videoUploadFill = document.getElementById('video-upload-fill');
 
   const progressSection = document.getElementById('progress-section');
   const progressFill = document.getElementById('progress-fill');
@@ -26,7 +34,161 @@
     targetLufsSelect.disabled = !normalizeAudioCheckbox.checked;
   });
 
-  function setupDropzone(zone, input, kind) {
+  // --- Trim panel ---
+  const trimPanel = document.getElementById('trim-panel');
+  const trimStartHandle = document.getElementById('trim-start-handle');
+  const trimEndHandle = document.getElementById('trim-end-handle');
+  const trimRangeFill = document.getElementById('trim-range-fill');
+  const trimStartLabel = document.getElementById('trim-start-label');
+  const trimEndLabel = document.getElementById('trim-end-label');
+  const trimDurationLabel = document.getElementById('trim-duration-label');
+  const previewTrimBtn = document.getElementById('preview-trim-btn');
+  const detectSermonBtn = document.getElementById('detect-sermon-btn');
+  const resetTrimBtn = document.getElementById('reset-trim-btn');
+  const detectProgress = document.getElementById('detect-progress');
+  const detectProgressFill = document.getElementById('detect-progress-fill');
+  const detectProgressLabel = document.getElementById('detect-progress-label');
+  const candidateList = document.getElementById('candidate-list');
+  const candidateChips = document.getElementById('candidate-chips');
+  const detectError = document.getElementById('detect-error');
+  const videoPreview = document.getElementById('video-preview');
+
+  function formatTime(seconds) {
+    seconds = Math.max(0, Math.round(seconds));
+    const h = Math.floor(seconds / 3600);
+    const m = Math.floor((seconds % 3600) / 60);
+    const s = seconds % 60;
+    if (h > 0) return `${h}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+    return `${m}:${String(s).padStart(2, '0')}`;
+  }
+
+  function updateTrimUI() {
+    const start = parseFloat(trimStartHandle.value);
+    const end = parseFloat(trimEndHandle.value);
+    const max = state.videoDuration || 1;
+    trimRangeFill.style.left = `${(start / max) * 100}%`;
+    trimRangeFill.style.width = `${((end - start) / max) * 100}%`;
+    trimStartLabel.textContent = formatTime(start);
+    trimEndLabel.textContent = formatTime(end);
+    trimDurationLabel.textContent = formatTime(end - start);
+  }
+
+  function setTrimRange(start, end) {
+    trimStartHandle.value = start;
+    trimEndHandle.value = end;
+    updateTrimUI();
+  }
+
+  const MIN_TRIM_GAP = 1;
+  trimStartHandle.addEventListener('input', () => {
+    if (parseFloat(trimStartHandle.value) > parseFloat(trimEndHandle.value) - MIN_TRIM_GAP) {
+      trimStartHandle.value = Math.max(0, parseFloat(trimEndHandle.value) - MIN_TRIM_GAP);
+    }
+    updateTrimUI();
+  });
+  trimEndHandle.addEventListener('input', () => {
+    if (parseFloat(trimEndHandle.value) < parseFloat(trimStartHandle.value) + MIN_TRIM_GAP) {
+      trimEndHandle.value = Math.min(state.videoDuration, parseFloat(trimStartHandle.value) + MIN_TRIM_GAP);
+    }
+    updateTrimUI();
+  });
+
+  resetTrimBtn.addEventListener('click', () => setTrimRange(0, state.videoDuration));
+
+  previewTrimBtn.addEventListener('click', () => {
+    if (!videoPreview.src) return;
+    const end = parseFloat(trimEndHandle.value);
+    videoPreview.currentTime = parseFloat(trimStartHandle.value);
+    videoPreview.play();
+    const onTick = () => {
+      if (videoPreview.currentTime >= end) {
+        videoPreview.pause();
+        videoPreview.removeEventListener('timeupdate', onTick);
+      }
+    };
+    videoPreview.addEventListener('timeupdate', onTick);
+  });
+
+  function renderCandidateChips() {
+    candidateChips.innerHTML = '';
+    state.candidates.forEach((c, i) => {
+      const chip = document.createElement('button');
+      chip.type = 'button';
+      chip.className = 'candidate-chip' + (i === 0 ? ' selected' : '');
+      chip.textContent = `${formatTime(c.start)}–${formatTime(c.end)} (${formatTime(c.durationSec)})`;
+      chip.addEventListener('click', () => {
+        setTrimRange(c.start, c.end);
+        candidateChips.querySelectorAll('.candidate-chip').forEach((el) => el.classList.remove('selected'));
+        chip.classList.add('selected');
+      });
+      candidateChips.appendChild(chip);
+    });
+    candidateList.hidden = state.candidates.length === 0;
+  }
+
+  detectSermonBtn.addEventListener('click', async () => {
+    if (!state.videoJobId) return;
+    detectSermonBtn.disabled = true;
+    detectError.hidden = true;
+    candidateList.hidden = true;
+    detectProgress.hidden = false;
+    detectProgressFill.style.width = '0%';
+    detectProgressLabel.textContent = 'Analyzing… this can take a while for long files.';
+
+    try {
+      const res = await fetch(`/api/analyze/${state.videoJobId}`, { method: 'POST' });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Could not start analysis.');
+    } catch (err) {
+      detectProgress.hidden = true;
+      detectError.hidden = false;
+      detectError.textContent = err.message;
+      detectSermonBtn.disabled = false;
+      return;
+    }
+
+    const source = new EventSource(`/api/progress/${state.videoJobId}`);
+    source.onmessage = (evt) => {
+      const data = JSON.parse(evt.data);
+      if (data.status === 'error') {
+        source.close();
+        detectProgress.hidden = true;
+        detectError.hidden = false;
+        detectError.textContent = data.error || 'Analysis failed.';
+        detectSermonBtn.disabled = false;
+        return;
+      }
+      const pct = Math.round((data.progress || 0) * 100);
+      detectProgressFill.style.width = pct + '%';
+      detectProgressLabel.textContent = `Analyzing… ${pct}%`;
+
+      if (data.status === 'analyzed') {
+        source.close();
+        detectProgress.hidden = true;
+        detectSermonBtn.disabled = false;
+        state.candidates = data.candidates || [];
+        if (state.candidates.length) {
+          setTrimRange(state.candidates[0].start, state.candidates[0].end);
+          renderCandidateChips();
+        } else {
+          detectError.hidden = false;
+          detectError.textContent = 'Could not confidently detect a sermon segment - trim manually using the slider above.';
+        }
+      }
+    };
+    source.onerror = () => {
+      source.close();
+      if (detectProgress.hidden === false) {
+        detectProgress.hidden = true;
+        detectError.hidden = false;
+        detectError.textContent = 'Lost connection to the server during analysis.';
+        detectSermonBtn.disabled = false;
+      }
+    };
+  });
+
+  // --- Dropzones ---
+  function setupDropzone(zone, input, onFile) {
     zone.addEventListener('click', (e) => {
       if (e.target.closest('.dz-clear')) return;
       input.click();
@@ -46,54 +208,122 @@
     );
     zone.addEventListener('drop', (e) => {
       const file = e.dataTransfer.files && e.dataTransfer.files[0];
-      if (file) selectFile(kind, file);
+      if (file) onFile(file);
     });
 
     input.addEventListener('change', () => {
-      if (input.files[0]) selectFile(kind, input.files[0]);
+      if (input.files[0]) onFile(input.files[0]);
     });
 
-    zone.querySelector('.dz-clear').addEventListener('click', (e) => {
-      e.stopPropagation();
-      clearFile(kind);
-    });
-  }
-
-  function selectFile(kind, file) {
-    state[kind] = file;
-    const zone = kind === 'png' ? dzPng : dzVideo;
-    zone.querySelector('.dz-empty').hidden = true;
-    zone.querySelector('.dz-filled').hidden = false;
-
-    const url = URL.createObjectURL(file);
-    if (kind === 'png') {
-      document.getElementById('png-preview').src = url;
-      document.getElementById('png-filename').textContent = file.name;
-    } else {
-      document.getElementById('video-preview').src = url;
-      document.getElementById('video-filename').textContent = file.name;
+    const clearBtn = zone.querySelector('.dz-clear');
+    if (clearBtn) {
+      clearBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        clearBtn.dispatchEvent(new CustomEvent('dz-clear-click', { bubbles: false }));
+      });
     }
-    updateRenderButton();
   }
 
-  function clearFile(kind) {
-    state[kind] = null;
-    const zone = kind === 'png' ? dzPng : dzVideo;
-    zone.querySelector('.dz-empty').hidden = false;
-    zone.querySelector('.dz-filled').hidden = true;
-    (kind === 'png' ? inputPng : inputVideo).value = '';
-    updateRenderButton();
+  function showDzState(zone, stateName) {
+    ['dz-empty', 'dz-uploading', 'dz-filled'].forEach((cls) => {
+      const el = zone.querySelector(`.${cls}`);
+      if (el) el.hidden = cls !== stateName;
+    });
   }
+
+  // PNG dropzone (client-side only, uploaded together with the render request)
+  setupDropzone(dzPng, inputPng, (file) => {
+    state.png = file;
+    showDzState(dzPng, 'dz-filled');
+    document.getElementById('png-preview').src = URL.createObjectURL(file);
+    document.getElementById('png-filename').textContent = file.name;
+    updateRenderButton();
+  });
+  dzPng.querySelector('.dz-clear').addEventListener('dz-clear-click', () => {
+    state.png = null;
+    showDzState(dzPng, 'dz-empty');
+    inputPng.value = '';
+    updateRenderButton();
+  });
+
+  // Video dropzone: uploads immediately so it can be analyzed/trimmed before rendering.
+  function uploadVideo(file) {
+    showDzState(dzVideo, 'dz-uploading');
+    videoUploadFill.style.width = '0%';
+    videoUploadPct.textContent = '0%';
+    errorSection.hidden = true;
+
+    const formData = new FormData();
+    formData.append('video', file);
+
+    const xhr = new XMLHttpRequest();
+    xhr.open('POST', '/api/upload-video');
+    xhr.upload.onprogress = (e) => {
+      if (!e.lengthComputable) return;
+      const pct = Math.round((e.loaded / e.total) * 100);
+      videoUploadFill.style.width = pct + '%';
+      videoUploadPct.textContent = pct + '%';
+    };
+    xhr.onload = () => {
+      let data;
+      try {
+        data = JSON.parse(xhr.responseText);
+      } catch {
+        data = {};
+      }
+      if (xhr.status < 200 || xhr.status >= 300) {
+        showDzState(dzVideo, 'dz-empty');
+        errorSection.hidden = false;
+        errorMessage.textContent = data.error || 'Video upload failed.';
+        return;
+      }
+
+      state.videoJobId = data.jobId;
+      state.videoDuration = data.duration;
+      state.candidates = [];
+
+      showDzState(dzVideo, 'dz-filled');
+      videoPreview.src = URL.createObjectURL(file);
+      document.getElementById('video-filename').textContent = `${file.name} (${formatTime(data.duration)})`;
+
+      trimStartHandle.min = 0;
+      trimStartHandle.max = data.duration;
+      trimStartHandle.step = 0.1;
+      trimEndHandle.min = 0;
+      trimEndHandle.max = data.duration;
+      trimEndHandle.step = 0.1;
+      setTrimRange(0, data.duration);
+      trimPanel.hidden = false;
+      candidateList.hidden = true;
+      detectError.hidden = true;
+
+      updateRenderButton();
+    };
+    xhr.onerror = () => {
+      showDzState(dzVideo, 'dz-empty');
+      errorSection.hidden = false;
+      errorMessage.textContent = 'Video upload failed - check the server is running.';
+    };
+    xhr.send(formData);
+  }
+
+  setupDropzone(dzVideo, inputVideo, uploadVideo);
+  dzVideo.querySelector('.dz-clear').addEventListener('dz-clear-click', () => {
+    state.videoJobId = null;
+    state.videoDuration = 0;
+    state.candidates = [];
+    showDzState(dzVideo, 'dz-empty');
+    inputVideo.value = '';
+    trimPanel.hidden = true;
+    updateRenderButton();
+  });
 
   function updateRenderButton() {
     const nameFilled = document.getElementById('outputName').value.trim().length > 0;
-    renderBtn.disabled = !(state.png && state.video && nameFilled);
+    renderBtn.disabled = !(state.videoJobId && state.png && nameFilled);
   }
 
   document.getElementById('outputName').addEventListener('input', updateRenderButton);
-
-  setupDropzone(dzPng, inputPng, 'png');
-  setupDropzone(dzVideo, inputVideo, 'video');
 
   function showError(message) {
     errorSection.hidden = false;
@@ -114,7 +344,7 @@
 
   form.addEventListener('submit', async (e) => {
     e.preventDefault();
-    if (!state.png || !state.video) return;
+    if (!state.videoJobId || !state.png) return;
 
     resetPanels();
     renderBtn.disabled = true;
@@ -122,7 +352,6 @@
 
     const formData = new FormData();
     formData.append('png', state.png);
-    formData.append('video', state.video);
     formData.append('startDuration', document.getElementById('startDuration').value);
     formData.append('endDuration', document.getElementById('endDuration').value);
     formData.append('transition', document.getElementById('transition').value);
@@ -132,10 +361,12 @@
     formData.append('normalizeAudio', normalizeAudioCheckbox.checked);
     formData.append('targetLufs', targetLufsSelect.value);
     formData.append('exportMp3', document.getElementById('exportMp3').checked);
+    formData.append('trimStart', trimStartHandle.value);
+    formData.append('trimEnd', trimEndHandle.value);
 
     let jobId;
     try {
-      const res = await fetch('/api/render', { method: 'POST', body: formData });
+      const res = await fetch(`/api/render/${state.videoJobId}`, { method: 'POST', body: formData });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Render request failed.');
       jobId = data.jobId;
@@ -175,8 +406,16 @@
           downloadMp3Link.hidden = true;
         }
 
-        renderBtn.disabled = false;
         renderBtn.textContent = 'Render Video';
+        // The server deletes the uploaded video after a successful render, so
+        // reset the dropzone/trim panel - a fresh render needs a fresh upload.
+        state.videoJobId = null;
+        state.videoDuration = 0;
+        state.candidates = [];
+        showDzState(dzVideo, 'dz-empty');
+        inputVideo.value = '';
+        trimPanel.hidden = true;
+        updateRenderButton();
       }
     };
     source.onerror = () => {

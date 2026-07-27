@@ -6,13 +6,14 @@ The rendered output is: **PNG** (held for N seconds) → **crossfade** → **you
 
 ## How it works
 
-- **Frontend**: a single static page (`public/`) with drag-and-drop zones for the video and PNG, number inputs for both bookend durations, the crossfade length, the final fade-to-black length, and the output file name. No build step, no framework.
-- **Backend**: an Express server (`server/`) that accepts the upload, probes the video with `ffprobe` (resolution, frame rate, duration, whether it has audio), builds an `ffmpeg` filter graph (`xfade` for video, `acrossfade` for audio, running in parallel so the crossfades stay in sync with silence under the bookend segments), and renders the final MP4. Progress streams back to the browser over Server-Sent Events.
+- **Frontend**: a single static page (`public/`) with a drag-and-drop zone for the video (uploads immediately, then offers a trim scrubber), a drag-and-drop zone for the PNG, number inputs for both bookend durations, the crossfade length, the final fade-to-black length, and the output file name. No build step, no framework.
+- **Backend**: an Express server (`server/`) that probes the video with `ffprobe` (resolution, frame rate, duration, whether it has audio), optionally transcribes it locally (`@huggingface/transformers` running Whisper, entirely in Node - no Python, no external API calls once the model is cached) to suggest a sermon start/end, then builds an `ffmpeg` filter graph (`xfade` for video, `acrossfade` for audio, running in parallel so the crossfades stay in sync with silence under the bookend segments) and renders the final MP4. Progress streams back to the browser over Server-Sent Events.
 
 ## Prerequisites
 
 - Node.js 18+
 - `ffmpeg` and `ffprobe` on your `PATH` (e.g. `sudo apt install ffmpeg` / `brew install ffmpeg`)
+- Internet access on first use of **Auto-detect sermon** only, to download the speech-recognition model (~40MB, cached locally afterward under your OS's standard cache directory). Rendering itself never needs the network.
 
 ## Run it
 
@@ -23,12 +24,25 @@ npm start
 
 Then open http://localhost:3000.
 
-1. Drag your bookend PNG into the left dropzone, and your sermon video into the right one.
-2. Set the start PNG duration, end PNG duration, crossfade duration, fade-to-black duration, and the output file name.
-3. Optionally check **Normalize audio** and pick a target loudness (-20 to -10 LUFS, defaults to -14) and/or **Also render an MP3**.
-4. Click **Render Video**. A progress bar tracks the ffmpeg render; when it finishes you get an in-browser preview and download buttons (MP4, plus MP3 if requested).
+1. Drop your video (a trimmed clip, or a full multi-hour service recording) into the video dropzone. It uploads right away.
+2. If it's a full service file, use the **Trim to just the sermon** panel: click **Auto-detect sermon** to have it scan the whole file and suggest a start/end, or drag the two handles yourself. Click **Preview selection** to scrub the selected range before committing to it, and pick a different **detected candidate** chip if the top guess looks wrong (see [Auto-detect sermon](#auto-detect-sermon) below for how this works and its limits).
+3. Drag your bookend PNG into its dropzone.
+4. Set the start PNG duration, end PNG duration, crossfade duration, fade-to-black duration, and the output file name.
+5. Optionally check **Normalize audio** and pick a target loudness (-20 to -10 LUFS, defaults to -14) and/or **Also render an MP3**.
+6. Click **Render Video**. A progress bar tracks the ffmpeg render; when it finishes you get an in-browser preview and download buttons (MP4, plus MP3 if requested).
 
-Uploaded source files are deleted as soon as a render finishes (or fails). Rendered outputs are cleaned up automatically after 2 hours.
+The uploaded video is kept on the server until a render actually succeeds (so a render error - e.g. a crossfade duration that's too long - doesn't force you to re-upload a multi-GB file, just fix the setting and retry). Everything is cleaned up automatically after 2 hours regardless.
+
+## Auto-detect sermon
+
+Full-service files (worship set → announcements/talking heads → sermon → worship → announcements) can be dropped in as-is. **Auto-detect sermon**:
+
+1. Transcribes the whole file locally in 30-second windows using Whisper (`Xenova/whisper-tiny.en`).
+2. Scores each window by words-per-minute to tell sustained speech apart from music/singing (low word density) or silence.
+3. Merges consecutive speech windows into candidate blocks (tolerating a couple of quiet windows mid-block, so a pause for prayer or a hushed moment doesn't split it), and ranks candidates by how close they are to a typical ~25-minute sermon length.
+4. Suggests the top-ranked block and lists the runner-ups as clickable alternatives.
+
+This is a heuristic, not a transcript-perfect analysis - it can't literally identify "the same person talking," so a long single-speaker Q&A or a lengthy testimony could occasionally outrank the sermon. That's exactly why the result is a **suggestion you review and adjust**, not a blind auto-trim: always check the suggested range (the **Preview selection** button scrubs it instantly, no server round-trip) before rendering. Processing time scales with file length - expect several minutes for a full 1.5-2 hour service on a typical laptop CPU.
 
 ## Options
 
@@ -41,3 +55,4 @@ Uploaded source files are deleted as soon as a render finishes (or fails). Rende
 - The crossfade duration must be shorter than both PNG durations and the video's own length.
 - The PNG is letterboxed (scaled + padded with black) to match the video's resolution, so any aspect ratio works.
 - Video is re-encoded with `libx264`/`aac` (CRF 18) regardless of the source codec, since a filter graph like this requires decoding and re-encoding anyway.
+- `@huggingface/transformers` currently pulls in two transitive dependencies (`onnxruntime-node`'s bundled `adm-zip`, and `sharp`) with known advisories that have no upstream fix yet. Neither is reachable through this app's own code paths (we never extract untrusted zips or process arbitrary images through them), but `npm audit` will flag them - worth knowing if you audit this repo.

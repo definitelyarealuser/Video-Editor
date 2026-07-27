@@ -33,8 +33,13 @@
           <input type="file" id="input-video" accept="video/*" hidden />
           <div class="dz-empty">
             <div class="dz-icon">🎬</div>
-            <div class="dz-label">Drop sermon video here</div>
+            <div class="dz-label">Drop full service or sermon video here</div>
             <div class="dz-sub">or click to browse</div>
+          </div>
+          <div class="dz-uploading" hidden>
+            <div class="dz-icon">⏳</div>
+            <div class="dz-label">Uploading… <span id="video-upload-pct">0%</span></div>
+            <div class="progress-track"><div class="progress-fill" id="video-upload-fill"></div></div>
           </div>
           <div class="dz-filled" hidden>
             <video id="video-preview" muted></video>
@@ -43,6 +48,39 @@
           </div>
         </div>
       </div>
+
+      <section class="trim-panel" id="trim-panel" hidden>
+        <h3>Trim to just the sermon <span class="trim-panel-hint">(optional — leave as-is to use the whole file)</span></h3>
+
+        <div class="trim-slider" id="trim-slider">
+          <div class="trim-track"></div>
+          <div class="trim-range-fill" id="trim-range-fill"></div>
+          <input type="range" id="trim-start-handle" min="0" max="0" step="0.1" value="0" />
+          <input type="range" id="trim-end-handle" min="0" max="0" step="0.1" value="0" />
+        </div>
+        <div class="trim-readout">
+          <span id="trim-start-label">0:00</span> – <span id="trim-end-label">0:00</span>
+          <span class="trim-duration">(<span id="trim-duration-label">0:00</span> selected)</span>
+        </div>
+
+        <div class="trim-actions">
+          <button type="button" id="preview-trim-btn" class="secondary-btn">▶ Preview selection</button>
+          <button type="button" id="detect-sermon-btn" class="secondary-btn">✨ Auto-detect sermon</button>
+          <button type="button" id="reset-trim-btn" class="secondary-btn">Reset to full video</button>
+        </div>
+
+        <div id="detect-progress" class="detect-progress" hidden>
+          <div class="progress-track"><div class="progress-fill" id="detect-progress-fill"></div></div>
+          <div class="progress-label" id="detect-progress-label">Analyzing…</div>
+        </div>
+
+        <div id="candidate-list" class="candidate-list" hidden>
+          <div class="candidate-list-label">Detected candidates (pick one if the top choice looks wrong):</div>
+          <div class="candidate-chips" id="candidate-chips"></div>
+        </div>
+
+        <div id="detect-error" class="error-box detect-error" hidden></div>
+      </section>
 
       <div class="settings">
         <div class="field">
