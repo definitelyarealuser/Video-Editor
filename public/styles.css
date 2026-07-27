@@ -207,6 +207,17 @@ header h1 {
   color: var(--muted);
 }
 
+.core-text-preview {
+  margin-top: 8px;
+  padding: 10px 12px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--muted);
+  font-size: 0.9rem;
+  overflow-wrap: anywhere;
+}
+
 .field textarea {
   width: 100%;
   background: var(--panel);

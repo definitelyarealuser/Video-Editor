@@ -557,6 +557,12 @@
     document.getElementById(id).addEventListener('input', updateRenderButton);
   });
 
+  const coreTextInput = document.getElementById('coreText');
+  const coreTextPreview = document.getElementById('coreTextPreview');
+  coreTextInput.addEventListener('input', () => {
+    coreTextPreview.textContent = `Core text: ${coreTextInput.value.trim()}`;
+  });
+
   document.getElementById('use-today-btn').addEventListener('click', () => {
     const today = new Date();
     const mm = String(today.getMonth() + 1).padStart(2, '0');
