@@ -42,7 +42,7 @@
   const trimStartLabel = document.getElementById('trim-start-label');
   const trimEndLabel = document.getElementById('trim-end-label');
   const trimDurationLabel = document.getElementById('trim-duration-label');
-  const previewTrimBtn = document.getElementById('preview-trim-btn');
+  const previewStartBtn = document.getElementById('preview-start-btn');
   const previewEndBtn = document.getElementById('preview-end-btn');
   const jumpStartBtn = document.getElementById('jump-start-btn');
   const jumpEndBtn = document.getElementById('jump-end-btn');
@@ -90,6 +90,7 @@
   // handle (or nudging it with arrow keys) then plays a short unmuted snippet at that point -
   // the last/first ~1.5s next to the cut - so you can hear it too, without a separate click.
   const SNIPPET_SECONDS = 1.5;
+  const PREVIEW_END_SECONDS = 4.5; // deliberate "Preview end" click gets a longer listen than a quick drag-release snippet
   let activeTickHandler = null;
 
   function stopActivePlayback() {
@@ -164,14 +165,16 @@
 
   resetTrimBtn.addEventListener('click', () => setTrimRange(0, state.videoDuration));
 
-  previewTrimBtn.addEventListener('click', () => {
-    playRange(parseFloat(trimStartHandle.value), parseFloat(trimEndHandle.value));
+  previewStartBtn.addEventListener('click', () => {
+    const start = parseFloat(trimStartHandle.value);
+    const end = parseFloat(trimEndHandle.value);
+    playRange(start, Math.min(start + SNIPPET_SECONDS, end));
   });
 
   previewEndBtn.addEventListener('click', () => {
     const start = parseFloat(trimStartHandle.value);
     const end = parseFloat(trimEndHandle.value);
-    playRange(Math.max(start, end - SNIPPET_SECONDS), end);
+    playRange(Math.max(start, end - PREVIEW_END_SECONDS), end);
   });
 
   function jumpTo(time) {
@@ -199,7 +202,9 @@
       videoPreview.muted = false;
       videoPreview.play().catch(() => {});
     } else {
+      stopActivePlayback();
       videoPreview.pause();
+      videoPreview.currentTime = parseFloat(trimStartHandle.value);
     }
   });
 
