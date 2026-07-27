@@ -400,16 +400,20 @@ app.get('/api/progress/:jobId', (req, res) => {
   req.on('close', () => jobs.removeListener(`update:${jobId}`, onUpdate));
 });
 
+// Served inline (no Content-Disposition: attachment) so the <video>/<audio> preview elements
+// can play it in place - some browsers (notably Safari) refuse to play media loaded from a
+// URL the server marked as an attachment. The download buttons still save with the right
+// file name via the anchor tag's own `download` attribute, entirely client-side.
 app.get('/api/download/:jobId', (req, res) => {
   const job = jobs.get(req.params.jobId);
   if (!job || job.status !== 'done') return res.status(404).end();
-  res.download(job.outputPath, job.outputName);
+  res.sendFile(job.outputPath);
 });
 
 app.get('/api/download/:jobId/mp3', (req, res) => {
   const job = jobs.get(req.params.jobId);
   if (!job || job.status !== 'done' || !job.mp3OutputPath) return res.status(404).end();
-  res.download(job.mp3OutputPath, job.mp3OutputName);
+  res.sendFile(job.mp3OutputPath);
 });
 
 // Last-used render settings (fade durations, crossfade, normalization, etc.), so the form can
