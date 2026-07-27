@@ -46,7 +46,16 @@ Full-service files (worship set → announcements/talking heads → sermon → w
 
 This is a heuristic, not a transcript-perfect analysis - it can't literally identify "the same person talking," so a long single-speaker Q&A or a lengthy testimony could occasionally outrank the sermon. That's exactly why the result is a **suggestion you review and adjust**, not a blind auto-trim: always check the suggested range (**Preview Start**/**Preview End** scrub it instantly, no server round-trip) before rendering. Processing time scales with file length - expect several minutes for a full 1.5-2 hour service on a typical laptop CPU.
 
-The scoring constants (target length, opening/closing phrase patterns, word-density threshold, repetition/flatness discounts) live at the top of `server/sermonDetect.js` and are tuned from a handful of known patterns, not a large dataset - if Auto-Detect picks the wrong block on a real file (or falls back to a looser pass, or finds nothing), the terminal running `npm start` logs a summary for that analysis (chunk counts, which fallback tier it landed on). That log line, plus the actual sermon start/end for that file versus what it suggested, is the most useful thing to report back so the constants can be adjusted against real cases instead of guesses.
+The scoring constants (target length, opening/closing phrase patterns, word-density threshold, repetition/flatness discounts) live at the top of `server/sermonDetect.js` and ship as reasonable starting guesses, not values tuned on a large dataset - if Auto-Detect picks the wrong block on a real file (or falls back to a looser pass, or finds nothing), the terminal running `npm start` logs a summary for that analysis (chunk counts, which fallback tier it landed on). That log line, plus the actual sermon start/end for that file versus what it suggested, is the most useful thing to report back so the constants can be adjusted against real cases instead of guesses.
+
+## Learning from your own renders
+
+Every render also feeds a small local history (`data/history.json`, gitignored - nothing leaves your machine) that two things read back from:
+
+- **Detection self-tunes over time.** Once there are at least 3 renders with a real confirmed trim, the target sermon length (currently a fixed ~35 min guess) gets replaced by the actual mean/spread of *your* past confirmed sermon durations. Once there are at least 3 renders where Auto-Detect actually ran for that file, the speech-vs-music thresholds (word pace, repetition ratio, spectral flatness) get recalibrated the same way, using the real transcribed/flatness data from inside vs. outside your confirmed trim as ground truth instead of the synthetic tone/noise signals they ship calibrated against. Fewer than 3 examples and it just uses the defaults - not enough data to safely override a hand-picked value.
+- **Render settings are remembered.** The bookend durations, crossfade length, fade-to-black, audio-crossfade/normalization/MP3 choices from your most recent render pre-fill the form on your next visit, instead of the fixed HTML defaults - so once you've dialed in how you like fades to happen, you don't re-enter it every time.
+
+A fully manual trim (no Auto-Detect run) still contributes its duration to the target-length calibration, since you're still confirming a real sermon length either way - it just can't contribute to the speech/music threshold calibration, since that needs the per-window transcript/flatness data Auto-Detect produces.
 
 ## Options
 

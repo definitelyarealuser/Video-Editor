@@ -8,6 +8,7 @@ const jobs = require('./jobs');
 const { probe, render, checkFfmpegAvailable } = require('./ffmpeg');
 const { extractPcmFloat32, transcribeInChunks, computeSpectralFlatness, CHUNK_SECONDS } = require('./transcribe');
 const { findSermonCandidates } = require('./sermonDetect');
+const { recordRender, getCalibratedDetectionOptions, getLastRenderSettings } = require('./history');
 
 const PORT = process.env.PORT || 3000;
 const ROOT = path.join(__dirname, '..');
@@ -153,27 +154,43 @@ app.post('/api/analyze/:jobId', useJobIdFromParams, async (req, res) => {
     });
 
     const withText = chunks.filter((c) => c.text).length;
+    const calibrated = getCalibratedDetectionOptions();
     console.log(
       `Analyze ${jobId}: ${chunks.length} chunks total, ${withText} with transcribed text, ` +
-        `${chunks.filter((c) => c.flatness != null).length} with a flatness reading.`
+        `${chunks.filter((c) => c.flatness != null).length} with a flatness reading. ` +
+        `Calibrated options from history: ${JSON.stringify(calibrated)}`
     );
 
     // Full scoring (with the repetition/flatness discounts) gives the best result, but a
     // real recording can come out quieter/noisier/more repetitive than the synthetic signals
     // this was calibrated against - so if it finds nothing, fall back to progressively looser
     // passes rather than leaving the user with no suggestion at all.
-    let candidates = findSermonCandidates(chunks);
+    let candidates = findSermonCandidates(chunks, calibrated);
     if (!candidates.length) {
       console.log(`Analyze ${jobId}: no candidates with full scoring, retrying with repetition/flatness discounts disabled`);
-      candidates = findSermonCandidates(chunks, { skipPenalties: true });
+      candidates = findSermonCandidates(chunks, { ...calibrated, skipPenalties: true });
     }
     if (!candidates.length) {
       console.log(`Analyze ${jobId}: still nothing, retrying with a looser speech threshold`);
-      candidates = findSermonCandidates(chunks, { skipPenalties: true, minWordsPerMinute: 35, maxGapChunks: 4, minCandidateMinutes: 3 });
+      // Only carry over the calibrated duration target if it's actually present - explicitly
+      // spreading an `undefined` value would overwrite (not fall back to) the built-in default.
+      const durationCalibration =
+        calibrated.idealMinutes != null
+          ? { idealMinutes: calibrated.idealMinutes, scoreSigmaMinutes: calibrated.scoreSigmaMinutes }
+          : {};
+      candidates = findSermonCandidates(chunks, {
+        ...durationCalibration,
+        skipPenalties: true,
+        minWordsPerMinute: 35,
+        maxGapChunks: 4,
+        minCandidateMinutes: 3,
+      });
     }
     console.log(`Analyze ${jobId}: ${candidates.length} candidate(s) found.`);
 
-    jobs.update(jobId, { status: 'analyzed', progress: 1, candidates });
+    // Kept on the job (not persisted to disk) so a later render for this same job can label
+    // real speech-bearing content inside vs. outside the confirmed trim for history.js.
+    jobs.update(jobId, { status: 'analyzed', progress: 1, candidates, chunks });
   })().catch((err) => {
     jobs.update(jobId, { status: 'error', error: err.message });
   });
@@ -248,6 +265,8 @@ app.post('/api/render/:jobId', useJobIdFromParams, upload.single('png'), async (
 
     res.json({ jobId });
 
+    const renderSettings = { startDuration, endDuration, transition, fadeOut, crossfadeAudio, normalize, targetLufs, exportMp3 };
+
     render({
       pngPath: req.file.path,
       videoPath: job.videoPath,
@@ -269,6 +288,17 @@ app.post('/api/render/:jobId', useJobIdFromParams, upload.single('png'), async (
     })
       .then(() => {
         jobs.update(jobId, { status: 'done', progress: 1 });
+        // A deliberately trimmed range (not the whole file) with chunk data from an earlier
+        // analyze is real ground truth: label real speech-bearing content inside the confirmed
+        // trim as "sermon" and outside it as "not sermon". A render of the whole video doesn't
+        // tell us that - it might just be a full-service render with no isolated sermon - so
+        // only the render settings get recorded in that case.
+        recordRender({
+          trimStart: isTrimmed ? trimStart : null,
+          trimEnd: isTrimmed ? trimEnd : null,
+          chunks: isTrimmed ? job.chunks : null,
+          renderSettings,
+        });
         cleanupAll();
       })
       .catch((err) => {
@@ -340,6 +370,12 @@ app.get('/api/download/:jobId/mp3', (req, res) => {
   const job = jobs.get(req.params.jobId);
   if (!job || job.status !== 'done' || !job.mp3OutputPath) return res.status(404).end();
   res.download(job.mp3OutputPath, job.mp3OutputName);
+});
+
+// Last-used render settings (fade durations, crossfade, normalization, etc.), so the form can
+// pre-fill with whatever this install actually tends to use instead of fixed HTML defaults.
+app.get('/api/preferences', (req, res) => {
+  res.json({ renderSettings: getLastRenderSettings() });
 });
 
 app.listen(PORT, () => {

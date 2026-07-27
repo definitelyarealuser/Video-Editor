@@ -24,6 +24,8 @@ const DEFAULT_OPTIONS = {
   scoreSigmaMinutes: 12, // how forgiving the duration scoring is around idealMinutes
   minCandidateMinutes: 5, // ignore runs shorter than this outright
   skipPenalties: false, // ignore the repeated-phrase/spectral-flatness discounts - used as a fallback pass
+  repetitionRatioThreshold: 0.35, // below this unique-word ratio, a chunk reads as a repeated chorus rather than natural speech
+  flatnessMusicThreshold: 0.3, // below this spectral flatness, the audio itself reads as tonal/harmonic rather than speech
 };
 
 // Cheap content signal on top of the duration/density scoring: sermons here tend to open with
@@ -46,16 +48,15 @@ function textMatchesAny(text, patterns) {
 // words like "the"/"and" - reads well above this in practice. Chunks with too few words to
 // judge reliably are left alone (ratio isn't meaningful on a handful of words).
 const REPETITION_MIN_WORDS = 8;
-const REPETITION_RATIO_THRESHOLD = 0.35;
 const REPETITION_PENALTY = 0.3;
 
 // Below this spectral flatness, the audio itself is tonal/harmonic enough (sustained notes,
 // chords) to likely be singing/instruments rather than speech, regardless of transcribed word
-// count. Calibrated against synthetic tone (~0.004-0.05) vs. noise (~0.82-0.84); real speech
-// and music will fall somewhere in between, so this is a conservative estimate pending
-// real-world tuning. `flatness` is optional per chunk - chunks without it (or callers that
-// never computed it) are simply not penalized on this signal.
-const FLATNESS_MUSIC_THRESHOLD = 0.3;
+// count. `flatness` is optional per chunk - chunks without it (or callers that never computed
+// it) are simply not penalized on this signal. Both this and the repetition ratio threshold
+// above default to conservative estimates calibrated against synthetic tone/noise signals, but
+// are overridable via options - server/history.js recalibrates them from real confirmed
+// examples once enough render history has accumulated.
 const FLATNESS_PENALTY = 0.3;
 
 function wordCount(text) {
@@ -69,32 +70,33 @@ function uniqueWordRatio(text) {
 }
 
 // The count actually used for speech/music classification: raw word count, discounted when the
-// text looks like a repeated chorus and/or the audio itself measures as tonal. `skipPenalties`
+// text looks like a repeated chorus and/or the audio itself measures as tonal. `opts.skipPenalties`
 // disables both discounts - used as a fallback when the full scoring finds nothing at all,
 // since a lower-confidence suggestion beats no suggestion.
-function effectiveWordCount(chunk, skipPenalties = false) {
+function effectiveWordCount(chunk, opts) {
   let count = wordCount(chunk.text);
-  if (skipPenalties) return count;
-  if (count >= REPETITION_MIN_WORDS && uniqueWordRatio(chunk.text) < REPETITION_RATIO_THRESHOLD) {
+  if (opts.skipPenalties) return count;
+  if (count >= REPETITION_MIN_WORDS && uniqueWordRatio(chunk.text) < opts.repetitionRatioThreshold) {
     count *= REPETITION_PENALTY;
   }
-  if (typeof chunk.flatness === 'number' && chunk.flatness < FLATNESS_MUSIC_THRESHOLD) {
+  if (typeof chunk.flatness === 'number' && chunk.flatness < opts.flatnessMusicThreshold) {
     count *= FLATNESS_PENALTY;
   }
   return count;
 }
 
-function wordsPerMinute(chunk, skipPenalties = false) {
+function wordsPerMinute(chunk, options = {}) {
+  const opts = { ...DEFAULT_OPTIONS, ...options };
   const durationMin = (chunk.end - chunk.start) / 60;
   if (durationMin <= 0) return 0;
-  return effectiveWordCount(chunk, skipPenalties) / durationMin;
+  return effectiveWordCount(chunk, opts) / durationMin;
 }
 
 function findSermonCandidates(chunks, options = {}) {
   const opts = { ...DEFAULT_OPTIONS, ...options };
   if (!chunks.length) return [];
 
-  const flags = chunks.map((c) => wordsPerMinute(c, opts.skipPenalties) >= opts.minWordsPerMinute);
+  const flags = chunks.map((c) => wordsPerMinute(c, opts) >= opts.minWordsPerMinute);
 
   const runs = [];
   let runStart = null;
@@ -122,7 +124,7 @@ function findSermonCandidates(chunks, options = {}) {
     const start = run[0].start;
     const end = run[run.length - 1].end;
     const durationMin = (end - start) / 60;
-    const totalWords = run.reduce((sum, c) => sum + effectiveWordCount(c, opts.skipPenalties), 0);
+    const totalWords = run.reduce((sum, c) => sum + effectiveWordCount(c, opts), 0);
     const avgWpm = durationMin > 0 ? totalWords / durationMin : 0;
 
     const durationScore = Math.exp(-((durationMin - opts.idealMinutes) ** 2) / (2 * opts.scoreSigmaMinutes ** 2));
@@ -152,4 +154,4 @@ function findSermonCandidates(chunks, options = {}) {
     .sort((a, b) => b.score - a.score);
 }
 
-module.exports = { findSermonCandidates, wordsPerMinute };
+module.exports = { findSermonCandidates, wordsPerMinute, wordCount, uniqueWordRatio };

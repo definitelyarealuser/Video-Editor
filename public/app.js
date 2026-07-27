@@ -34,6 +34,33 @@
     targetLufsSelect.disabled = !normalizeAudioCheckbox.checked;
   });
 
+  // Pre-fill render settings with whatever was actually used last time, instead of the fixed
+  // HTML defaults - this install's own preferences, remembered locally (server/history.js).
+  (async function loadPreferences() {
+    try {
+      const res = await fetch('/api/preferences');
+      if (!res.ok) return;
+      const { renderSettings: s } = await res.json();
+      if (!s) return;
+
+      if (typeof s.startDuration === 'number') document.getElementById('startDuration').value = s.startDuration;
+      if (typeof s.endDuration === 'number') document.getElementById('endDuration').value = s.endDuration;
+      if (typeof s.transition === 'number') document.getElementById('transition').value = s.transition;
+      if (typeof s.fadeOut === 'number') document.getElementById('fadeOut').value = s.fadeOut;
+      if (typeof s.crossfadeAudio === 'boolean') document.getElementById('crossfadeAudio').checked = s.crossfadeAudio;
+      if (typeof s.normalize === 'boolean') {
+        normalizeAudioCheckbox.checked = s.normalize;
+        targetLufsSelect.disabled = !s.normalize;
+      }
+      if (typeof s.targetLufs === 'number' && document.querySelector(`#targetLufs option[value="${s.targetLufs}"]`)) {
+        targetLufsSelect.value = String(s.targetLufs);
+      }
+      if (typeof s.exportMp3 === 'boolean') document.getElementById('exportMp3').checked = s.exportMp3;
+    } catch {
+      // Non-critical - just leave the HTML defaults in place.
+    }
+  })();
+
   // --- Trim panel ---
   const trimPanel = document.getElementById('trim-panel');
   const trimStartHandle = document.getElementById('trim-start-handle');
