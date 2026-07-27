@@ -38,7 +38,6 @@
   const vimeoError = document.getElementById('vimeo-error');
 
   const vimeoConfirmOverlay = document.getElementById('vimeo-confirm-overlay');
-  const vimeoDescriptionInput = document.getElementById('vimeo-description');
   const vimeoShowcaseChecks = document.getElementById('vimeo-showcase-checks');
   const vimeoCancelBtn = document.getElementById('vimeo-cancel-btn');
   const renderOnlyBtn = document.getElementById('render-only-btn');
@@ -92,12 +91,8 @@
   // (no "remember this" option), per how this app is meant to be used.
   function confirmVimeoPublish() {
     return new Promise((resolve) => {
-      vimeoDescriptionInput.value = 'Core Text: TBD';
       renderVimeoShowcaseChecks();
       vimeoConfirmOverlay.hidden = false;
-      vimeoDescriptionInput.focus();
-      // Select just "TBD" so typing immediately replaces it, leaving "Core Text: " intact.
-      vimeoDescriptionInput.setSelectionRange(11, 14);
 
       const onCancel = () => {
         cleanup();
@@ -110,7 +105,7 @@
       const onRenderPublish = () => {
         const showcaseIds = Array.from(vimeoShowcaseChecks.querySelectorAll('input[type="checkbox"]:checked')).map((c) => c.value);
         cleanup();
-        resolve({ publish: true, description: vimeoDescriptionInput.value.trim(), showcaseIds });
+        resolve({ publish: true, description: document.getElementById('coreText').value.trim(), showcaseIds });
       };
       const onOverlayClick = (e) => {
         if (e.target === vimeoConfirmOverlay) onCancel();
@@ -535,12 +530,32 @@
     updateRenderButton();
   });
 
-  function updateRenderButton() {
-    const nameFilled = document.getElementById('outputName').value.trim().length > 0;
-    renderBtn.disabled = !(state.videoJobId && state.png && nameFilled);
+  // Series / Sermon Title / Speaker's Name / Sermon Date combine into a single string that
+  // doubles as the rendered file name and the title sent to Vimeo (and, manually, SoundCloud).
+  const nameFieldIds = ['seriesName', 'sermonTitle', 'speakerName', 'sermonDate'];
+  const outputNamePreview = document.getElementById('outputNamePreview');
+
+  function computeOutputName() {
+    const parts = nameFieldIds
+      .map((id) => document.getElementById(id).value.trim())
+      .filter(Boolean);
+    return parts.join(' - ');
   }
 
-  document.getElementById('outputName').addEventListener('input', updateRenderButton);
+  function updateOutputNamePreview() {
+    const name = computeOutputName();
+    outputNamePreview.textContent = name || 'sermon-final';
+  }
+
+  function updateRenderButton() {
+    const nameFilled = nameFieldIds.every((id) => document.getElementById(id).value.trim().length > 0);
+    renderBtn.disabled = !(state.videoJobId && state.png && nameFilled);
+    updateOutputNamePreview();
+  }
+
+  nameFieldIds.forEach((id) => {
+    document.getElementById(id).addEventListener('input', updateRenderButton);
+  });
 
   function showError(message) {
     errorSection.hidden = false;
@@ -600,7 +615,7 @@
     formData.append('endDuration', document.getElementById('endDuration').value);
     formData.append('transition', document.getElementById('transition').value);
     formData.append('fadeOut', document.getElementById('fadeOut').value);
-    formData.append('outputName', document.getElementById('outputName').value.trim());
+    formData.append('outputName', computeOutputName());
     formData.append('crossfadeAudio', document.getElementById('crossfadeAudio').checked);
     formData.append('normalizeAudio', normalizeAudioCheckbox.checked);
     formData.append('targetLufs', targetLufsSelect.value);
@@ -643,7 +658,7 @@
       if (data.status === 'done') {
         progressSection.hidden = true;
         resultSection.hidden = false;
-        const outputName = document.getElementById('outputName').value.trim();
+        const outputName = computeOutputName();
         const url = `/api/download/${jobId}`;
         resultPreview.src = url;
         downloadLink.href = url;

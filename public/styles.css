@@ -167,6 +167,31 @@ header h1 {
   flex: 1;
 }
 
+.filename-preview {
+  flex: 1;
+  padding: 10px 12px;
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+
+.field-optional {
+  font-weight: normal;
+  text-transform: none;
+  color: var(--muted);
+}
+
+.field textarea {
+  width: 100%;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  color: var(--text);
+  border-radius: 8px;
+  padding: 10px 12px;
+  font-size: 0.95rem;
+  font-family: inherit;
+  resize: vertical;
+}
+
 .filename-input span {
   padding: 0 12px;
   color: var(--muted);

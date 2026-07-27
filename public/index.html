@@ -126,12 +126,35 @@
           <label for="fadeOut">Final fade-to-black (seconds)</label>
           <input type="number" id="fadeOut" name="fadeOut" value="1.5" min="0.1" step="0.1" required />
         </div>
+      </div>
+
+      <div class="settings">
+        <div class="field">
+          <label for="seriesName">Series</label>
+          <input type="text" id="seriesName" name="seriesName" placeholder="Knowing Jesus Together" required />
+        </div>
+        <div class="field">
+          <label for="sermonTitle">Sermon Title</label>
+          <input type="text" id="sermonTitle" name="sermonTitle" placeholder="Fill in the blank" required />
+        </div>
+        <div class="field">
+          <label for="speakerName">Speaker's Name</label>
+          <input type="text" id="speakerName" name="speakerName" placeholder="Fill in the blank" required />
+        </div>
+        <div class="field">
+          <label for="sermonDate">Sermon Date (MM DD YY)</label>
+          <input type="text" id="sermonDate" name="sermonDate" placeholder="07 27 26" required />
+        </div>
         <div class="field field-wide">
-          <label for="outputName">Output file name</label>
+          <label>File name preview</label>
           <div class="filename-input">
-            <input type="text" id="outputName" name="outputName" value="sermon-final" required />
+            <span id="outputNamePreview" class="filename-preview">sermon-final</span>
             <span>.mp4</span>
           </div>
+        </div>
+        <div class="field field-wide">
+          <label for="coreText">Core Text <span class="field-optional">(description for Vimeo &amp; SoundCloud)</span></label>
+          <textarea id="coreText" name="coreText" rows="2" placeholder="What's being taught this morning…"></textarea>
         </div>
       </div>
 
@@ -202,8 +225,7 @@
     <div class="modal-dialog">
       <h3>Publish to Vimeo?</h3>
       <p class="modal-hint">This choice applies to this render only - you'll be asked again next time.</p>
-      <label for="vimeo-description">Sermon description (for Vimeo)</label>
-      <textarea id="vimeo-description" rows="4" placeholder="What's being taught this morning…"></textarea>
+      <p class="modal-hint">Title and description come from the form (file name and Core Text).</p>
 
       <label>Add to showcases</label>
       <div id="vimeo-showcase-checks" class="vimeo-showcase-checks"></div>
