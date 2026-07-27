@@ -43,6 +43,10 @@
   const trimEndLabel = document.getElementById('trim-end-label');
   const trimDurationLabel = document.getElementById('trim-duration-label');
   const previewTrimBtn = document.getElementById('preview-trim-btn');
+  const previewEndBtn = document.getElementById('preview-end-btn');
+  const jumpStartBtn = document.getElementById('jump-start-btn');
+  const jumpEndBtn = document.getElementById('jump-end-btn');
+  const playPauseBtn = document.getElementById('play-pause-btn');
   const detectSermonBtn = document.getElementById('detect-sermon-btn');
   const resetTrimBtn = document.getElementById('reset-trim-btn');
   const detectProgress = document.getElementById('detect-progress');
@@ -149,6 +153,41 @@
 
   previewTrimBtn.addEventListener('click', () => {
     playRange(parseFloat(trimStartHandle.value), parseFloat(trimEndHandle.value));
+  });
+
+  previewEndBtn.addEventListener('click', () => {
+    const start = parseFloat(trimStartHandle.value);
+    const end = parseFloat(trimEndHandle.value);
+    playRange(Math.max(start, end - SNIPPET_SECONDS), end);
+  });
+
+  function jumpTo(time) {
+    if (!videoPreview.src) return;
+    stopActivePlayback();
+    videoPreview.pause();
+    videoPreview.muted = false;
+    videoPreview.currentTime = Math.max(0, Math.min(time, state.videoDuration));
+  }
+
+  jumpStartBtn.addEventListener('click', () => jumpTo(parseFloat(trimStartHandle.value)));
+  jumpEndBtn.addEventListener('click', () => jumpTo(parseFloat(trimEndHandle.value)));
+
+  function updatePlayPauseLabel() {
+    playPauseBtn.textContent = videoPreview.paused ? '▶ Play' : '⏸ Pause';
+  }
+  videoPreview.addEventListener('play', updatePlayPauseLabel);
+  videoPreview.addEventListener('pause', updatePlayPauseLabel);
+  videoPreview.addEventListener('ended', updatePlayPauseLabel);
+
+  playPauseBtn.addEventListener('click', () => {
+    if (!videoPreview.src) return;
+    if (videoPreview.paused) {
+      stopActivePlayback(); // don't let a leftover snippet auto-stop handler fight manual playback
+      videoPreview.muted = false;
+      videoPreview.play().catch(() => {});
+    } else {
+      videoPreview.pause();
+    }
   });
 
   function renderCandidateChips() {
@@ -326,6 +365,7 @@
 
       showDzState(dzVideo, 'dz-filled');
       videoPreview.src = URL.createObjectURL(file);
+      updatePlayPauseLabel();
       document.getElementById('video-filename').textContent = `${file.name} (${formatTime(data.duration)})`;
 
       trimStartHandle.min = 0;
