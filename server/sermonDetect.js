@@ -11,10 +11,25 @@
 const DEFAULT_OPTIONS = {
   minWordsPerMinute: 60, // below this, a chunk is treated as non-speech (music/silence/crowd noise)
   maxGapChunks: 2, // tolerate up to this many consecutive weak chunks mid-run (a pause, a Scripture reading in a hushed voice, etc.) without splitting it
-  idealMinutes: 25, // typical sermon length to score candidates against
+  idealMinutes: 35, // typical sermon length to score candidates against (church reports 30-45min, ~35 average)
   scoreSigmaMinutes: 12, // how forgiving the duration scoring is around idealMinutes
   minCandidateMinutes: 5, // ignore runs shorter than this outright
 };
+
+// Cheap content signal on top of the duration/density scoring: sermons here tend to open with
+// a greeting/self-introduction and (often, not always) close with a prayer. These are soft
+// multiplicative boosts, not requirements, since neither is guaranteed every week.
+const OPENING_WINDOW_SEC = 60;
+const OPENING_PATTERNS = [/good\s+(morning|afternoon|evening)/i, /my name('s| is)?\s+\w/i];
+const OPENING_BOOST = 1.15;
+
+const CLOSING_WINDOW_SEC = 90;
+const CLOSING_PATTERNS = [/\bpray(er|ing)?\b/i, /\bamen\b/i, /in (jesus'?|his) name/i, /father god/i];
+const CLOSING_BOOST = 1.08;
+
+function textMatchesAny(text, patterns) {
+  return patterns.some((re) => re.test(text));
+}
 
 function wordsPerMinute(chunk) {
   const durationMin = (chunk.end - chunk.start) / 60;
@@ -60,9 +75,24 @@ function findSermonCandidates(chunks, options = {}) {
 
     const durationScore = Math.exp(-((durationMin - opts.idealMinutes) ** 2) / (2 * opts.scoreSigmaMinutes ** 2));
     const wpmScore = Math.min(avgWpm / 130, 1);
-    const score = durationScore * wpmScore;
 
-    return { start, end, durationSec: end - start, avgWpm: Math.round(avgWpm), score };
+    const openingText = run.filter((c) => c.start < start + OPENING_WINDOW_SEC).map((c) => c.text).join(' ');
+    const closingText = run.filter((c) => c.end > end - CLOSING_WINDOW_SEC).map((c) => c.text).join(' ');
+    const hasOpeningCue = textMatchesAny(openingText, OPENING_PATTERNS);
+    const hasClosingCue = textMatchesAny(closingText, CLOSING_PATTERNS);
+
+    const score =
+      durationScore * wpmScore * (hasOpeningCue ? OPENING_BOOST : 1) * (hasClosingCue ? CLOSING_BOOST : 1);
+
+    return {
+      start,
+      end,
+      durationSec: end - start,
+      avgWpm: Math.round(avgWpm),
+      score,
+      openingCue: hasOpeningCue,
+      closingCue: hasClosingCue,
+    };
   });
 
   return candidates

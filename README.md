@@ -39,10 +39,13 @@ Full-service files (worship set → announcements/talking heads → sermon → w
 
 1. Transcribes the whole file locally in 30-second windows using Whisper (`Xenova/whisper-tiny.en`).
 2. Scores each window by words-per-minute to tell sustained speech apart from music/singing (low word density) or silence.
-3. Merges consecutive speech windows into candidate blocks (tolerating a couple of quiet windows mid-block, so a pause for prayer or a hushed moment doesn't split it), and ranks candidates by how close they are to a typical ~25-minute sermon length.
-4. Suggests the top-ranked block and lists the runner-ups as clickable alternatives.
+3. Merges consecutive speech windows into candidate blocks (tolerating a couple of quiet windows mid-block, so a pause for prayer or a hushed moment doesn't split it), and ranks candidates by how close they are to a typical ~35-minute sermon length (30-45 min is treated as comfortably normal).
+4. Gives a candidate's score a boost if its opening seconds contain a greeting/self-introduction ("good morning", "my name is...") and a smaller boost if its closing seconds contain prayer language ("let us pray", "amen", "in Jesus' name") - soft signals, not requirements, since neither is guaranteed every week.
+5. Suggests the top-ranked block and lists the runner-ups as clickable alternatives.
 
-This is a heuristic, not a transcript-perfect analysis - it can't literally identify "the same person talking," so a long single-speaker Q&A or a lengthy testimony could occasionally outrank the sermon. That's exactly why the result is a **suggestion you review and adjust**, not a blind auto-trim: always check the suggested range (the **Preview selection** button scrubs it instantly, no server round-trip) before rendering. Processing time scales with file length - expect several minutes for a full 1.5-2 hour service on a typical laptop CPU.
+This is a heuristic, not a transcript-perfect analysis - it can't literally identify "the same person talking," so a long single-speaker Q&A or a lengthy testimony could occasionally outrank the sermon. That's exactly why the result is a **suggestion you review and adjust**, not a blind auto-trim: always check the suggested range (**Preview Start**/**Preview End** scrub it instantly, no server round-trip) before rendering. Processing time scales with file length - expect several minutes for a full 1.5-2 hour service on a typical laptop CPU.
+
+The scoring constants (target length, opening/closing phrase patterns, word-density threshold) live at the top of `server/sermonDetect.js` and are tuned from a handful of known patterns, not a large dataset - if Auto-Detect picks the wrong block on a real file, the most useful thing you can report back is the actual sermon start/end for that file versus what it suggested (or which runner-up candidate was actually right), so the constants can be adjusted against real cases instead of guesses.
 
 ## Options
 
