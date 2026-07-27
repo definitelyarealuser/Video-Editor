@@ -557,6 +557,16 @@
     document.getElementById(id).addEventListener('input', updateRenderButton);
   });
 
+  document.getElementById('use-today-btn').addEventListener('click', () => {
+    const today = new Date();
+    const mm = String(today.getMonth() + 1).padStart(2, '0');
+    const dd = String(today.getDate()).padStart(2, '0');
+    const yy = String(today.getFullYear()).slice(-2);
+    const sermonDateInput = document.getElementById('sermonDate');
+    sermonDateInput.value = `${mm} ${dd} ${yy}`;
+    updateRenderButton();
+  });
+
   function showError(message) {
     errorSection.hidden = false;
     errorMessage.textContent = message;

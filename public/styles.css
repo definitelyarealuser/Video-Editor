@@ -167,6 +167,32 @@ header h1 {
   flex: 1;
 }
 
+.date-input {
+  display: flex;
+  align-items: stretch;
+  gap: 8px;
+}
+
+.date-input input {
+  flex: 1;
+  min-width: 0;
+}
+
+.use-today-btn {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  color: var(--text);
+  border-radius: 8px;
+  padding: 0 14px;
+  font-size: 0.85rem;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.use-today-btn:hover {
+  border-color: var(--accent);
+}
+
 .filename-preview {
   flex: 1;
   padding: 10px 12px;

@@ -131,19 +131,22 @@
       <div class="settings">
         <div class="field">
           <label for="seriesName">Series</label>
-          <input type="text" id="seriesName" name="seriesName" placeholder="Knowing Jesus Together" required />
+          <input type="text" id="seriesName" name="seriesName" placeholder="Series" required />
         </div>
         <div class="field">
           <label for="sermonTitle">Sermon Title</label>
-          <input type="text" id="sermonTitle" name="sermonTitle" placeholder="Fill in the blank" required />
+          <input type="text" id="sermonTitle" name="sermonTitle" placeholder="Sermon Title" required />
         </div>
         <div class="field">
           <label for="speakerName">Speaker's Name</label>
-          <input type="text" id="speakerName" name="speakerName" placeholder="Fill in the blank" required />
+          <input type="text" id="speakerName" name="speakerName" placeholder="Speaker's Name" required />
         </div>
         <div class="field">
           <label for="sermonDate">Sermon Date (MM DD YY)</label>
-          <input type="text" id="sermonDate" name="sermonDate" placeholder="07 27 26" required />
+          <div class="date-input">
+            <input type="text" id="sermonDate" name="sermonDate" placeholder="Sermon Date (MM DD YY)" required />
+            <button type="button" id="use-today-btn" class="use-today-btn">Today</button>
+          </div>
         </div>
         <div class="field field-wide">
           <label>File name preview</label>
@@ -154,7 +157,7 @@
         </div>
         <div class="field field-wide">
           <label for="coreText">Core Text <span class="field-optional">(description for Vimeo &amp; SoundCloud)</span></label>
-          <textarea id="coreText" name="coreText" rows="2" placeholder="What's being taught this morning…"></textarea>
+          <textarea id="coreText" name="coreText" rows="2" placeholder="Core Text: enter the scripture passage"></textarea>
         </div>
       </div>
 
