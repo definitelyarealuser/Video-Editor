@@ -77,6 +77,45 @@
     trimStartHandle.value = start;
     trimEndHandle.value = end;
     updateTrimUI();
+    scrubTo(start);
+  }
+
+  // --- Live preview while trimming ---
+  // Dragging a handle seeks the (muted) preview to that exact frame in real time, so you can
+  // see immediately whether you've cut into or before the right moment. Letting go of the
+  // handle (or nudging it with arrow keys) then plays a short unmuted snippet at that point -
+  // the last/first ~1.5s next to the cut - so you can hear it too, without a separate click.
+  const SNIPPET_SECONDS = 1.5;
+  let activeTickHandler = null;
+
+  function stopActivePlayback() {
+    if (activeTickHandler) {
+      videoPreview.removeEventListener('timeupdate', activeTickHandler);
+      activeTickHandler = null;
+    }
+  }
+
+  function playRange(from, to) {
+    if (!videoPreview.src) return;
+    stopActivePlayback();
+    videoPreview.muted = false;
+    videoPreview.currentTime = from;
+    videoPreview.play().catch(() => {});
+    activeTickHandler = () => {
+      if (videoPreview.currentTime >= to) {
+        videoPreview.pause();
+        stopActivePlayback();
+      }
+    };
+    videoPreview.addEventListener('timeupdate', activeTickHandler);
+  }
+
+  function scrubTo(time) {
+    if (!videoPreview.src) return;
+    stopActivePlayback();
+    videoPreview.pause();
+    videoPreview.muted = true;
+    videoPreview.currentTime = Math.max(0, Math.min(time, state.videoDuration));
   }
 
   const MIN_TRIM_GAP = 1;
@@ -85,28 +124,31 @@
       trimStartHandle.value = Math.max(0, parseFloat(trimEndHandle.value) - MIN_TRIM_GAP);
     }
     updateTrimUI();
+    scrubTo(parseFloat(trimStartHandle.value));
   });
+  trimStartHandle.addEventListener('change', () => {
+    const start = parseFloat(trimStartHandle.value);
+    const end = parseFloat(trimEndHandle.value);
+    playRange(start, Math.min(start + SNIPPET_SECONDS, end));
+  });
+
   trimEndHandle.addEventListener('input', () => {
     if (parseFloat(trimEndHandle.value) < parseFloat(trimStartHandle.value) + MIN_TRIM_GAP) {
       trimEndHandle.value = Math.min(state.videoDuration, parseFloat(trimStartHandle.value) + MIN_TRIM_GAP);
     }
     updateTrimUI();
+    scrubTo(parseFloat(trimEndHandle.value));
+  });
+  trimEndHandle.addEventListener('change', () => {
+    const start = parseFloat(trimStartHandle.value);
+    const end = parseFloat(trimEndHandle.value);
+    playRange(Math.max(start, end - SNIPPET_SECONDS), end);
   });
 
   resetTrimBtn.addEventListener('click', () => setTrimRange(0, state.videoDuration));
 
   previewTrimBtn.addEventListener('click', () => {
-    if (!videoPreview.src) return;
-    const end = parseFloat(trimEndHandle.value);
-    videoPreview.currentTime = parseFloat(trimStartHandle.value);
-    videoPreview.play();
-    const onTick = () => {
-      if (videoPreview.currentTime >= end) {
-        videoPreview.pause();
-        videoPreview.removeEventListener('timeupdate', onTick);
-      }
-    };
-    videoPreview.addEventListener('timeupdate', onTick);
+    playRange(parseFloat(trimStartHandle.value), parseFloat(trimEndHandle.value));
   });
 
   function renderCandidateChips() {

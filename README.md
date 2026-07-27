@@ -25,7 +25,7 @@ npm start
 Then open http://localhost:3000.
 
 1. Drop your video (a trimmed clip, or a full multi-hour service recording) into the video dropzone. It uploads right away.
-2. If it's a full service file, use the **Trim to just the sermon** panel: click **Auto-detect sermon** to have it scan the whole file and suggest a start/end, or drag the two handles yourself. Click **Preview selection** to scrub the selected range before committing to it, and pick a different **detected candidate** chip if the top guess looks wrong (see [Auto-detect sermon](#auto-detect-sermon) below for how this works and its limits).
+2. If it's a full service file, use the **Trim to just the sermon** panel: click **Auto-detect sermon** to have it scan the whole file and suggest a start/end, or drag the two handles yourself - dragging seeks the preview to that exact frame live (muted), and letting go plays a short unmuted snippet right at the cut point, so you can confirm both picture and audio without a separate step. Click **Preview selection** any time to play the whole selected range, and pick a different **detected candidate** chip if the top guess looks wrong (see [Auto-detect sermon](#auto-detect-sermon) below for how this works and its limits).
 3. Drag your bookend PNG into its dropzone.
 4. Set the start PNG duration, end PNG duration, crossfade duration, fade-to-black duration, and the output file name.
 5. Optionally check **Normalize audio** and pick a target loudness (-20 to -10 LUFS, defaults to -14) and/or **Also render an MP3**.
