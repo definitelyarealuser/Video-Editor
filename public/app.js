@@ -533,6 +533,12 @@
   // Series / Sermon Title / Speaker's Name / Sermon Date combine into a single string that
   // doubles as the rendered file name and the title sent to Vimeo (and, manually, SoundCloud).
   const nameFieldIds = ['seriesName', 'sermonTitle', 'speakerName', 'sermonDate'];
+  const nameFieldPreviewLabels = {
+    seriesName: 'Series',
+    sermonTitle: 'Sermon Title',
+    speakerName: "Speaker's Name",
+    sermonDate: 'Sermon Date',
+  };
   const outputNamePreview = document.getElementById('outputNamePreview');
 
   function computeOutputName() {
@@ -542,9 +548,14 @@
     return parts.join(' - ');
   }
 
+  // Unlike computeOutputName(), this never comes up empty - blank fields fall back to their
+  // own label so the preview always reads as a filled-in example of the final file name.
   function updateOutputNamePreview() {
-    const name = computeOutputName();
-    outputNamePreview.textContent = name || 'sermon-final';
+    const parts = nameFieldIds.map((id) => {
+      const value = document.getElementById(id).value.trim();
+      return value || nameFieldPreviewLabels[id];
+    });
+    outputNamePreview.textContent = `${parts.join(' - ')}.mp4`;
   }
 
   function updateRenderButton() {

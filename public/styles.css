@@ -153,21 +153,6 @@ header h1 {
   font-size: 0.95rem;
 }
 
-.filename-input {
-  display: flex;
-  align-items: center;
-  min-height: 40px;
-  background: var(--panel);
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  overflow: hidden;
-}
-
-.filename-input input {
-  border: none !important;
-  flex: 1;
-}
-
 .date-input {
   display: flex;
   align-items: stretch;
@@ -195,13 +180,6 @@ header h1 {
   border-color: var(--accent);
 }
 
-.filename-preview {
-  flex: 1;
-  padding: 10px 12px;
-  color: var(--text);
-  overflow-wrap: anywhere;
-}
-
 .field-optional {
   font-weight: normal;
   text-transform: none;
@@ -225,16 +203,13 @@ label.core-text-label {
   color: var(--muted);
 }
 
-.core-text-preview {
+.preview-text {
   margin-top: 4px;
+  min-height: 40px;
   display: flex;
   align-items: center;
-  min-height: 40px;
-  padding: 10px 12px;
-  background: var(--panel);
-  border: 1px solid var(--border);
-  border-radius: 8px;
   color: var(--muted);
+  font-style: italic;
   font-size: 0.9rem;
   overflow-wrap: anywhere;
 }
@@ -249,11 +224,6 @@ label.core-text-label {
   font-size: 0.95rem;
   font-family: inherit;
   resize: vertical;
-}
-
-.filename-input span {
-  padding: 0 12px;
-  color: var(--muted);
 }
 
 .inline-check {
