@@ -207,6 +207,17 @@ header h1 {
   color: var(--muted);
 }
 
+label.core-text-label {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.core-text-label-title {
+  font-size: 1.05rem;
+  color: var(--text);
+}
+
 .core-text-preview {
   margin-top: 8px;
   padding: 10px 12px;
