@@ -291,10 +291,11 @@ header h1 {
 
 .trim-slider input[type="range"] {
   position: absolute;
-  top: 0;
+  top: 50%;
   left: 0;
   width: 100%;
-  height: 28px;
+  height: 16px;
+  transform: translateY(-50%);
   margin: 0;
   background: transparent;
   pointer-events: none;
@@ -311,7 +312,7 @@ header h1 {
   background: var(--accent);
   border: 2px solid white;
   cursor: pointer;
-  margin-top: 8px;
+  margin-top: 0;
 }
 
 .trim-slider input[type="range"]::-moz-range-thumb {
@@ -324,10 +325,16 @@ header h1 {
   cursor: pointer;
 }
 
-.trim-slider input[type="range"]::-webkit-slider-runnable-track,
+.trim-slider input[type="range"]::-webkit-slider-runnable-track {
+  background: transparent;
+  border: none;
+  height: 16px;
+}
+
 .trim-slider input[type="range"]::-moz-range-track {
   background: transparent;
   border: none;
+  height: 16px;
 }
 
 .trim-readout {
