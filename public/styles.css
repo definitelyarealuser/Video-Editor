@@ -773,6 +773,18 @@ label.core-text-label {
   margin-bottom: 18px;
 }
 
+.modal-dialog select {
+  width: 100%;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  color: var(--text);
+  border-radius: 8px;
+  padding: 10px 12px;
+  font-family: inherit;
+  font-size: 0.9rem;
+  margin-bottom: 18px;
+}
+
 .vimeo-showcase-checks {
   display: flex;
   flex-direction: column;

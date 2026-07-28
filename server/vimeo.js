@@ -43,19 +43,22 @@ async function getShowcaseDetails() {
   return results;
 }
 
+const VALID_PRIVACY_VIEWS = ['anybody', 'unlisted', 'nobody'];
+
 /**
- * Uploads `filePath` to Vimeo with the given title/description, then adds it to `showcaseIds`
- * (defaults to every ID in VIMEO_SHOWCASE_IDS if not given - e.g. a caller that never offered a
- * choice). A failure adding to one showcase doesn't abort the others - the result reports
- * per-showcase success/failure so the caller can surface exactly what happened.
+ * Uploads `filePath` to Vimeo with the given title/description/privacy, then adds it to
+ * `showcaseIds` (defaults to every ID in VIMEO_SHOWCASE_IDS if not given - e.g. a caller that
+ * never offered a choice). A failure adding to one showcase doesn't abort the others - the
+ * result reports per-showcase success/failure so the caller can surface exactly what happened.
  */
-async function uploadAndPublish({ filePath, name, description, showcaseIds, onProgress }) {
+async function uploadAndPublish({ filePath, name, description, showcaseIds, privacy, onProgress }) {
   const client = getClient();
+  const privacyView = VALID_PRIVACY_VIEWS.includes(privacy) ? privacy : 'nobody';
 
   const videoUri = await new Promise((resolve, reject) => {
     client.upload(
       filePath,
-      { name, description },
+      { name, description, privacy: { view: privacyView } },
       (uri) => resolve(uri),
       (bytesUploaded, bytesTotal) => {
         if (onProgress && bytesTotal > 0) onProgress(bytesUploaded / bytesTotal);

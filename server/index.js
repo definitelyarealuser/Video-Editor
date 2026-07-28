@@ -267,6 +267,7 @@ app.post('/api/render/:jobId', useJobIdFromParams, upload.single('png'), async (
     const vimeoShowcaseIds = req.body.vimeoShowcaseIds !== undefined
       ? String(req.body.vimeoShowcaseIds).split(',').map((s) => s.trim()).filter(Boolean)
       : undefined;
+    const vimeoPrivacy = String(req.body.vimeoPrivacy || 'nobody');
 
     if (transition >= startDuration || transition >= endDuration || transition >= effectiveDuration) {
       await cleanupPng();
@@ -343,6 +344,7 @@ app.post('/api/render/:jobId', useJobIdFromParams, upload.single('png'), async (
               name: outputName,
               description: vimeoDescription,
               showcaseIds: vimeoShowcaseIds,
+              privacy: vimeoPrivacy,
               onProgress: (fraction) => jobs.update(jobId, { progress: fraction }),
             })
             .then(({ videoUrl, showcaseResults }) => {

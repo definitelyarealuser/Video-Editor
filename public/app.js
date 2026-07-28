@@ -105,8 +105,9 @@
       };
       const onRenderPublish = () => {
         const showcaseIds = Array.from(vimeoShowcaseChecks.querySelectorAll('input[type="checkbox"]:checked')).map((c) => c.value);
+        const privacy = document.getElementById('vimeo-privacy').value;
         cleanup();
-        resolve({ publish: true, description: document.getElementById('coreText').value.trim(), showcaseIds });
+        resolve({ publish: true, description: document.getElementById('coreText').value.trim(), showcaseIds, privacy });
       };
       const onOverlayClick = (e) => {
         if (e.target === vimeoConfirmOverlay) onCancel();
@@ -820,7 +821,7 @@
       : { publish: false, description: '', showcaseIds: [] };
     if (vimeoChoice.cancelled) return; // back out entirely - no render, nothing changes
 
-    const { publish: publishToVimeo, description: vimeoDescription, showcaseIds: vimeoShowcaseIds } = vimeoChoice;
+    const { publish: publishToVimeo, description: vimeoDescription, showcaseIds: vimeoShowcaseIds, privacy: vimeoPrivacy } = vimeoChoice;
 
     resetPanels();
     renderBtn.disabled = true;
@@ -846,6 +847,7 @@
     formData.append('publishToVimeo', publishToVimeo);
     formData.append('vimeoDescription', vimeoDescription);
     formData.append('vimeoShowcaseIds', vimeoShowcaseIds.join(','));
+    formData.append('vimeoPrivacy', vimeoPrivacy || 'nobody');
 
     let jobId;
     try {
