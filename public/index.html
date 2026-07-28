@@ -49,7 +49,6 @@
             <div class="progress-track"><div class="progress-fill" id="video-upload-fill"></div></div>
           </div>
           <div class="dz-filled" hidden>
-            <video id="video-preview" muted></video>
             <div class="dz-filename" id="video-filename"></div>
             <button type="button" class="dz-clear" data-target="video">Remove</button>
           </div>
@@ -58,6 +57,8 @@
 
       <section class="trim-panel" id="trim-panel" hidden>
         <h3>Trim to just the sermon <span class="trim-panel-hint">(optional — leave as-is to use the whole file)</span></h3>
+
+        <video id="video-preview" muted></video>
 
         <button type="button" id="detect-sermon-btn" class="detect-btn">✨ Auto-Detect Sermon</button>
 

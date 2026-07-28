@@ -87,13 +87,12 @@ header h1 {
   background: repeating-conic-gradient(#33363f 0% 25%, #26282f 0% 50%) 50% / 16px 16px;
 }
 
-.dz-filled video {
-  max-width: 100%;
-  max-height: 420px;
+#video-preview {
   width: 100%;
+  max-height: 560px;
   border-radius: 8px;
   display: block;
-  margin: 0 auto 10px;
+  margin-bottom: 16px;
   background: black;
 }
 
