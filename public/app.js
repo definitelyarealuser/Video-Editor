@@ -904,9 +904,52 @@
     document.removeEventListener('keydown', onFolderBrowserKeydown);
   }
 
+  // Prefer the OS's own folder picker when this platform supports it (Windows/Mac) - the in-app
+  // browser above only kicks in as a fallback, either on an unsupported platform or if the
+  // native dialog fails to launch for some reason (e.g. PowerShell/osascript unavailable).
+  let nativeFolderPickerSupported = false;
+  fetch('/api/browse-folders/supported')
+    .then((res) => (res.ok ? res.json() : null))
+    .then((data) => {
+      nativeFolderPickerSupported = !!(data && data.supported);
+    })
+    .catch(() => {
+      nativeFolderPickerSupported = false;
+    });
+
+  async function tryNativeFolderPicker(btn, targetInput) {
+    const originalLabel = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = 'Waiting…';
+    try {
+      const url = targetInput.value.trim()
+        ? `/api/browse-folders/native?path=${encodeURIComponent(targetInput.value.trim())}`
+        : '/api/browse-folders/native';
+      const res = await fetch(url);
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Could not open the native folder picker.');
+      if (data.path) {
+        targetInput.value = data.path;
+        saveSavePaths();
+      }
+      // data.path === null just means the user clicked Cancel in the native dialog - not an
+      // error, nothing to do.
+    } catch {
+      openFolderBrowser(targetInput);
+    } finally {
+      btn.disabled = false;
+      btn.textContent = originalLabel;
+    }
+  }
+
   document.querySelectorAll('.browse-btn').forEach((btn) => {
     btn.addEventListener('click', () => {
-      openFolderBrowser(document.getElementById(btn.dataset.target));
+      const targetInput = document.getElementById(btn.dataset.target);
+      if (nativeFolderPickerSupported) {
+        tryNativeFolderPicker(btn, targetInput);
+      } else {
+        openFolderBrowser(targetInput);
+      }
     });
   });
   folderBrowserCancelBtn.addEventListener('click', closeFolderBrowser);

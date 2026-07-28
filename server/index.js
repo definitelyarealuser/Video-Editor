@@ -16,6 +16,7 @@ const vimeo = require('./vimeo');
 const soundcloud = require('./soundcloud');
 const bookendImages = require('./bookendImages');
 const savePaths = require('./savePaths');
+const nativeFolderPicker = require('./nativeFolderPicker');
 
 const PORT = process.env.PORT || 3000;
 const ROOT = path.join(__dirname, '..');
@@ -584,6 +585,26 @@ app.get('/api/browse-folders', async (req, res) => {
     res.json({ path: targetPath, parent: parent !== targetPath ? parent : null, folders });
   } catch (err) {
     res.status(400).json({ error: err.message || 'Could not read that folder.' });
+  }
+});
+
+// Whether this OS supports popping the real native folder picker (Windows/Mac) - the frontend
+// uses this to decide whether to try that first, falling back to the in-app browser above.
+app.get('/api/browse-folders/supported', (req, res) => {
+  res.json({ supported: nativeFolderPicker.isSupported() });
+});
+
+// Opens the OS's own folder picker dialog and waits for the user to choose or cancel - this
+// request just blocks until that happens, which is expected (it's a modal dialog).
+app.get('/api/browse-folders/native', async (req, res) => {
+  if (!nativeFolderPicker.isSupported()) {
+    return res.status(501).json({ error: 'Native folder picker is not supported on this platform.' });
+  }
+  try {
+    const selectedPath = await nativeFolderPicker.pickFolder(req.query.path ? String(req.query.path) : undefined);
+    res.json({ path: selectedPath }); // null means the user cancelled the dialog
+  } catch (err) {
+    res.status(500).json({ error: err.message || 'Could not open the folder picker.' });
   }
 });
 
