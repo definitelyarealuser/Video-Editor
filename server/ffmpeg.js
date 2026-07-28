@@ -251,9 +251,15 @@ function render({
     '-preset', 'medium',
     '-crf', String(videoCrf),
     '-pix_fmt', 'yuv420p',
+    // Tags the output as Rec.709 rather than leaving color metadata unspecified - doesn't
+    // convert the actual pixel values (most footage is already effectively Rec.709 anyway),
+    // just removes the guesswork for Vimeo's transcoder on ingest.
+    '-colorspace', 'bt709',
+    '-color_primaries', 'bt709',
+    '-color_trc', 'bt709',
     ...(videoCodecName === 'libx265' ? ['-tag:v', 'hvc1'] : []), // hvc1 tag = correct QuickTime/Apple/Vimeo playback of HEVC-in-MP4
     '-c:a', 'aac',
-    '-b:a', '192k',
+    '-b:a', '320k', // matches Vimeo's recommended source-upload audio bitrate
     '-movflags', '+faststart',
     '-progress', 'pipe:1',
     '-nostats',
