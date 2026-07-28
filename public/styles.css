@@ -111,6 +111,18 @@ header h1 {
   margin-bottom: 8px;
 }
 
+.dz-current-file-label {
+  font-size: 0.8rem;
+  color: var(--muted);
+  margin-bottom: 4px;
+}
+
+.dz-filename-current {
+  font-size: 1.05rem;
+  font-weight: 600;
+  color: var(--text);
+}
+
 .dz-clear {
   background: none;
   border: 1px solid var(--border);
