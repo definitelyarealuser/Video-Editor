@@ -482,6 +482,40 @@ label.core-text-label {
   font-size: 0.82rem;
 }
 
+.quality-panel {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 18px 18px 20px;
+  margin-bottom: 36px;
+}
+
+.quality-panel h3 {
+  margin: 0 0 14px;
+  font-size: 1rem;
+}
+
+.quality-controls {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.quality-controls select {
+  width: 100%;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  color: var(--text);
+  border-radius: 8px;
+  padding: 10px 12px;
+  font-size: 0.9rem;
+}
+
+@media (max-width: 640px) {
+  .quality-controls { grid-template-columns: 1fr; }
+}
+
 .detect-btn {
   display: block;
   width: 100%;

@@ -8,7 +8,7 @@ const express = require('express');
 const multer = require('multer');
 
 const jobs = require('./jobs');
-const { probe, render, checkFfmpegAvailable } = require('./ffmpeg');
+const { probe, render, checkFfmpegAvailable, estimateFileSizes, VIDEO_QUALITY_PRESETS, MP3_BITRATE_PRESETS } = require('./ffmpeg');
 const { extractPcmFloat32, transcribeInChunks, computeSpectralFlatness, CHUNK_SECONDS } = require('./transcribe');
 const { findSermonCandidates } = require('./sermonDetect');
 const { recordRender, getCalibratedDetectionOptions, getLastRenderSettings } = require('./history');
@@ -282,6 +282,12 @@ app.post('/api/render/:jobId', useJobIdFromParams, upload.single('png'), async (
     const normalize = toBool(req.body.normalizeAudio, false);
     const targetLufs = toLufs(req.body.targetLufs, -14);
     const exportMp3 = toBool(req.body.exportMp3, false);
+    const videoCodec = req.body.videoCodec === 'h265' ? 'h265' : 'h264';
+    const videoQuality = Object.prototype.hasOwnProperty.call(VIDEO_QUALITY_PRESETS.h264, req.body.videoQuality)
+      ? req.body.videoQuality
+      : 'high';
+    const videoCrf = VIDEO_QUALITY_PRESETS[videoCodec][videoQuality];
+    const mp3Bitrate = MP3_BITRATE_PRESETS.includes(Number(req.body.mp3Bitrate)) ? Number(req.body.mp3Bitrate) : 192;
     const publishToVimeo = toBool(req.body.publishToVimeo, false) && vimeo.isConfigured();
     const vimeoDescription = String(req.body.vimeoDescription || '').slice(0, 5000);
     // Which configured showcases to actually add it to for this render - defaults to "all of
@@ -345,10 +351,16 @@ app.post('/api/render/:jobId', useJobIdFromParams, upload.single('png'), async (
       renderMp4,
       videoSavePath,
       audioSavePath,
+      videoCodec,
+      videoQuality,
+      mp3Bitrate,
     };
 
     render({
       pngPath,
+      videoCodec,
+      videoCrf,
+      mp3Bitrate,
       videoPath: job.videoPath,
       outputPath,
       mp3OutputPath,
@@ -446,6 +458,40 @@ app.post('/api/render/:jobId', useJobIdFromParams, upload.single('png'), async (
     if (!res.headersSent) {
       res.status(500).json({ error: err.message || 'Unexpected server error.' });
     }
+  }
+});
+
+// Estimates output file sizes for every video quality/codec combo and MP3 bitrate, by actually
+// encoding a short sample from the middle of the (possibly trimmed) selection and extrapolating -
+// CRF encoding has no fixed bitrate, so a real sample is the only way this means anything for
+// the specific file being rendered. Can take a while (up to 6 short encodes); that's expected.
+app.post('/api/estimate-size/:jobId', useJobIdFromParams, async (req, res) => {
+  const job = jobs.get(req.jobId);
+  if (!job || !job.videoPath) {
+    return res.status(404).json({ error: 'Upload a video first (this session may have expired - try re-uploading).' });
+  }
+  if (!(await checkFfmpegAvailable())) {
+    return res.status(500).json({ error: 'ffmpeg/ffprobe is not installed on the server. Install ffmpeg and restart the app.' });
+  }
+
+  const fullDuration = job.videoInfo.duration;
+  const trimStart = toNonNegativeFloat(req.body.trimStart, 0);
+  const trimEnd = toPositiveFloat(req.body.trimEnd, fullDuration);
+  const mainDurationSeconds = Math.max(trimEnd - trimStart, 1);
+
+  try {
+    const sizes = await estimateFileSizes({
+      videoPath: job.videoPath,
+      trimStart,
+      trimEnd,
+      width: job.videoInfo.width,
+      height: job.videoInfo.height,
+      fps: job.videoInfo.fps,
+      mainDurationSeconds,
+    });
+    res.json(sizes);
+  } catch (err) {
+    res.status(500).json({ error: err.message || 'Could not estimate file sizes.' });
   }
 });
 

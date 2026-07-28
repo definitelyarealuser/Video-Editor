@@ -93,6 +93,15 @@ A fully manual trim (no Auto-Detect run) still contributes its duration to the t
 - **Normalize audio**: runs the combined audio (video + bookend silence) through `loudnorm` (EBU R128) targeting the chosen integrated loudness before the final fade-out. Single-pass, so expect the result to land within roughly half a LU of the target.
 - **Also render an MP3**: exports a second file alongside the MP4 containing just the main clip's audio — the PNG-hold silence at the start and end is excluded, but the clip still fades up from silence and back down over the crossfade duration, so it sounds like a clean standalone edit rather than an abrupt cut. This applies regardless of the "apply crossfade to audio too" setting above (which only affects the audio inside the full MP4).
 
+## Output quality (codec/CRF presets, file size estimates)
+
+Once a video's uploaded, an **Output quality** panel appears above the render settings:
+
+- **Video codec**: H.264 (default - the most universally compatible) or H.265/HEVC (noticeably smaller files at the same visual quality, but 2-4x slower to encode in software). Since Vimeo re-transcodes everything you upload anyway, this choice mostly trades your own render/upload time for file size - it doesn't change what viewers ultimately see on Vimeo either way.
+- **Video quality**: High Quality / Balanced / Smaller File - maps to a CRF value per codec (H.265 uses higher CRF numbers than H.264 for comparable perceived quality, since it needs less data to represent the same detail).
+- **MP3 bitrate**: 128 / 192 (default) / 320 kbps. Spoken-word sermon audio holds up fine at 128-192kbps; 320kbps is mostly only worth it if there's music you want to preserve at higher fidelity.
+- **Estimate File Sizes**: actually encodes a short sample from the middle of your current trim selection at each preset (six short test encodes for video, instant math for MP3, since CBR MP3 size is just bitrate × duration) and shows the extrapolated full-length size right in each dropdown option, e.g. "Balanced (~650 MB)". This is a real measurement against your specific footage, not a generic guess - CRF encoding has no fixed bitrate, so how well a clip compresses depends entirely on its content. Takes anywhere from several seconds to a minute or so depending on resolution/codec. Changing the trim range afterward clears the estimates (they're no longer valid for a different-length clip) - just click the button again.
+
 ## Notes / tuning
 
 - The crossfade duration must be shorter than both PNG durations and the video's own length.

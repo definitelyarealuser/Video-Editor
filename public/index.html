@@ -114,6 +114,42 @@
         <div id="detect-error" class="error-box detect-error" hidden></div>
       </section>
 
+      <section class="quality-panel" id="quality-panel" hidden>
+        <h3>Output quality <span class="trim-panel-hint">(affects file size and render time - Vimeo/SoundCloud re-encode whatever you upload anyway, so this mostly trades render/upload time for file size, not final viewer quality)</span></h3>
+
+        <div class="quality-controls">
+          <div class="field">
+            <label for="videoCodec">Video codec</label>
+            <select id="videoCodec">
+              <option value="h264" selected>H.264 (widely compatible)</option>
+              <option value="h265">H.265 / HEVC (smaller, slower to encode)</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="videoQuality">Video quality</label>
+            <select id="videoQuality">
+              <option value="high" selected>High Quality</option>
+              <option value="balanced">Balanced</option>
+              <option value="smaller">Smaller File</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="mp3Bitrate">MP3 bitrate</label>
+            <select id="mp3Bitrate">
+              <option value="128">128 kbps</option>
+              <option value="192" selected>192 kbps</option>
+              <option value="320">320 kbps</option>
+            </select>
+          </div>
+        </div>
+
+        <button type="button" id="estimate-size-btn" class="detect-btn">📐 Estimate File Sizes</button>
+        <div id="estimate-size-status" class="detect-progress" hidden>
+          <div class="progress-label" id="estimate-size-label">Estimating… running a few short test encodes, this can take a minute</div>
+        </div>
+        <div id="estimate-size-error" class="error-box" hidden></div>
+      </section>
+
       <div class="settings">
         <div class="field">
           <label for="startDuration">Start PNG duration (seconds)</label>

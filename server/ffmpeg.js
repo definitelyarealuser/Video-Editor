@@ -1,10 +1,25 @@
 const { spawn } = require('child_process');
+const fs = require('fs');
+const os = require('os');
+const path = require('path');
+const crypto = require('crypto');
 
 /**
  * Thin wrappers around the ffmpeg/ffprobe binaries. No fluent-ffmpeg dependency;
  * the filter graph below is intricate enough that building the argv by hand is
  * easier to reason about than a builder API.
  */
+
+// Vimeo re-transcodes everything you upload anyway, so the codec/CRF choice here mostly
+// trades render time for file size (and therefore upload time), not final viewer quality.
+// H.265 needs roughly +4 CRF over H.264 for comparable perceived quality at meaningfully
+// smaller file sizes, at the cost of much slower software encoding.
+const VIDEO_QUALITY_PRESETS = {
+  h264: { high: 18, balanced: 22, smaller: 27 },
+  h265: { high: 22, balanced: 26, smaller: 30 },
+};
+const MP3_BITRATE_PRESETS = [128, 192, 320];
+const VIDEO_CODEC_NAMES = { h264: 'libx264', h265: 'libx265' };
 
 function run(cmd, args) {
   return new Promise((resolve, reject) => {
@@ -197,8 +212,12 @@ function render({
   normalize,
   targetLufs,
   videoInfo,
+  videoCodec = 'h264',
+  videoCrf = VIDEO_QUALITY_PRESETS.h264.high,
+  mp3Bitrate = 192,
   onProgress,
 }) {
+  const videoCodecName = VIDEO_CODEC_NAMES[videoCodec] || VIDEO_CODEC_NAMES.h264;
   const { filterComplex, totalDuration, audioOutputLabels } = buildFilterGraph({
     width: videoInfo.width,
     height: videoInfo.height,
@@ -228,10 +247,11 @@ function render({
     '-filter_complex', filterComplex,
     '-map', '[vout]',
     '-map', `[${audioOutputLabels[0]}]`,
-    '-c:v', 'libx264',
+    '-c:v', videoCodecName,
     '-preset', 'medium',
-    '-crf', '18',
+    '-crf', String(videoCrf),
     '-pix_fmt', 'yuv420p',
+    ...(videoCodecName === 'libx265' ? ['-tag:v', 'hvc1'] : []), // hvc1 tag = correct QuickTime/Apple/Vimeo playback of HEVC-in-MP4
     '-c:a', 'aac',
     '-b:a', '192k',
     '-movflags', '+faststart',
@@ -241,7 +261,7 @@ function render({
   ];
 
   if (mp3OutputPath) {
-    args.push('-map', `[${audioOutputLabels[1]}]`, '-c:a', 'libmp3lame', '-b:a', '192k', mp3OutputPath);
+    args.push('-map', `[${audioOutputLabels[1]}]`, '-c:a', 'libmp3lame', '-b:a', `${mp3Bitrate}k`, mp3OutputPath);
   }
 
   return new Promise((resolve, reject) => {
@@ -280,4 +300,94 @@ function render({
   });
 }
 
-module.exports = { probe, render, checkFfmpegAvailable };
+/**
+ * Encodes a short sample from the middle of the trimmed range at the given codec/CRF and
+ * extrapolates a full-length size estimate from the sample's actual encoded size. CRF encoding
+ * has no fixed bitrate - how well a video compresses depends entirely on its content (a static
+ * talking-head shot vs. a busy, high-motion worship set), so a real sample is the only way to
+ * get an estimate that means anything for this specific file, as opposed to a generic guess.
+ */
+async function estimateVideoSampleSize({
+  videoPath,
+  sampleStart,
+  sampleSeconds,
+  totalSeconds,
+  width,
+  height,
+  fps,
+  videoCodec,
+  videoCrf,
+}) {
+  const videoCodecName = VIDEO_CODEC_NAMES[videoCodec] || VIDEO_CODEC_NAMES.h264;
+  const tmpPath = path.join(os.tmpdir(), `size-estimate-${crypto.randomUUID()}.mp4`);
+  const args = [
+    '-y',
+    '-ss', String(sampleStart), '-t', String(sampleSeconds), '-i', videoPath,
+    '-vf', `scale=${width}:${height}:force_original_aspect_ratio=decrease,pad=${width}:${height}:(ow-iw)/2:(oh-ih)/2:color=black,setsar=1,fps=${fps},format=yuv420p`,
+    '-c:v', videoCodecName,
+    '-preset', 'medium',
+    '-crf', String(videoCrf),
+    '-pix_fmt', 'yuv420p',
+    ...(videoCodecName === 'libx265' ? ['-tag:v', 'hvc1'] : []),
+    '-an',
+    tmpPath,
+  ];
+  try {
+    await run('ffmpeg', args);
+    const stat = await fs.promises.stat(tmpPath);
+    const bytesPerSecond = stat.size / sampleSeconds;
+    return Math.round(bytesPerSecond * totalSeconds);
+  } finally {
+    fs.promises.rm(tmpPath, { force: true }).catch(() => {});
+  }
+}
+
+/**
+ * Runs estimateVideoSampleSize for every quality preset of both codecs (6 short encodes total),
+ * plus exact arithmetic estimates for each MP3 bitrate preset (no sample needed - CBR MP3 size
+ * is just bitrate × duration, unlike CRF video). `mainDurationSeconds` is the trimmed clip length
+ * (bookend PNG holds are brief and compress trivially, so they're left out of the estimate).
+ */
+async function estimateFileSizes({ videoPath, trimStart, trimEnd, width, height, fps, mainDurationSeconds }) {
+  const sampleSeconds = Math.min(12, Math.max(4, mainDurationSeconds / 4));
+  const rangeStart = trimStart != null ? trimStart : 0;
+  const rangeEnd = trimEnd != null ? trimEnd : mainDurationSeconds;
+  const midpoint = rangeStart + (rangeEnd - rangeStart) / 2;
+  const sampleStart = Math.max(rangeStart, Math.min(midpoint - sampleSeconds / 2, rangeEnd - sampleSeconds));
+
+  const video = {};
+  for (const codec of Object.keys(VIDEO_QUALITY_PRESETS)) {
+    video[codec] = {};
+    for (const [quality, crf] of Object.entries(VIDEO_QUALITY_PRESETS[codec])) {
+      // Sequential, not parallel - concurrent ffmpeg encodes would just compete for the same
+      // CPU cores and slow each other down with no net time savings.
+      video[codec][quality] = await estimateVideoSampleSize({
+        videoPath,
+        sampleStart,
+        sampleSeconds,
+        totalSeconds: mainDurationSeconds,
+        width,
+        height,
+        fps,
+        videoCodec: codec,
+        videoCrf: crf,
+      });
+    }
+  }
+
+  const audio = {};
+  for (const bitrate of MP3_BITRATE_PRESETS) {
+    audio[bitrate] = Math.round(((bitrate * 1000) / 8) * mainDurationSeconds);
+  }
+
+  return { video, audio };
+}
+
+module.exports = {
+  probe,
+  render,
+  checkFfmpegAvailable,
+  estimateFileSizes,
+  VIDEO_QUALITY_PRESETS,
+  MP3_BITRATE_PRESETS,
+};

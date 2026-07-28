@@ -367,6 +367,15 @@
       }
       if (typeof s.exportMp3 === 'boolean') exportMp3Checkbox.checked = s.exportMp3;
       if (typeof s.renderMp4 === 'boolean') renderMp4Checkbox.checked = s.renderMp4;
+      if (typeof s.videoCodec === 'string' && document.querySelector(`#videoCodec option[value="${s.videoCodec}"]`)) {
+        videoCodecSelect.value = s.videoCodec;
+      }
+      if (typeof s.videoQuality === 'string' && document.querySelector(`#videoQuality option[value="${s.videoQuality}"]`)) {
+        videoQualitySelect.value = s.videoQuality;
+      }
+      if (typeof s.mp3Bitrate === 'number' && document.querySelector(`#mp3Bitrate option[value="${s.mp3Bitrate}"]`)) {
+        mp3BitrateSelect.value = String(s.mp3Bitrate);
+      }
       updateSavePathVisibility();
       refreshIdleRenderLabel();
     } catch {
@@ -376,6 +385,7 @@
 
   // --- Trim panel ---
   const trimPanel = document.getElementById('trim-panel');
+  const qualityPanel = document.getElementById('quality-panel');
   const trimStartHandle = document.getElementById('trim-start-handle');
   const trimEndHandle = document.getElementById('trim-end-handle');
   const trimRangeFill = document.getElementById('trim-range-fill');
@@ -412,7 +422,86 @@
     trimStartLabel.textContent = formatTime(start);
     trimEndLabel.textContent = formatTime(end);
     trimDurationLabel.textContent = formatTime(end - start);
+    // Any trim change invalidates a previous size estimate - it was measured against a
+    // different clip length, so showing it now would just be misleading.
+    state.sizeEstimates = null;
+    resetQualityOptionLabels();
   }
+
+  // --- Output quality: codec/CRF preset + MP3 bitrate, with real size estimates ---
+  const videoCodecSelect = document.getElementById('videoCodec');
+  const videoQualitySelect = document.getElementById('videoQuality');
+  const mp3BitrateSelect = document.getElementById('mp3Bitrate');
+  const estimateSizeBtn = document.getElementById('estimate-size-btn');
+  const estimateSizeStatus = document.getElementById('estimate-size-status');
+  const estimateSizeError = document.getElementById('estimate-size-error');
+
+  const VIDEO_QUALITY_LABELS = { high: 'High Quality', balanced: 'Balanced', smaller: 'Smaller File' };
+  const MP3_BITRATE_LABELS = { 128: '128 kbps', 192: '192 kbps', 320: '320 kbps' };
+
+  state.sizeEstimates = null;
+
+  function formatBytes(bytes) {
+    if (!bytes || bytes <= 0) return '';
+    const mb = bytes / (1024 * 1024);
+    if (mb >= 1024) return `${(mb / 1024).toFixed(1)} GB`;
+    if (mb >= 1) return `${Math.round(mb)} MB`;
+    return `${Math.max(1, Math.round(bytes / 1024))} KB`;
+  }
+
+  function resetQualityOptionLabels() {
+    Array.from(videoQualitySelect.options).forEach((opt) => {
+      opt.textContent = VIDEO_QUALITY_LABELS[opt.value] || opt.value;
+    });
+    Array.from(mp3BitrateSelect.options).forEach((opt) => {
+      opt.textContent = MP3_BITRATE_LABELS[opt.value] || `${opt.value} kbps`;
+    });
+  }
+
+  function updateQualityOptionLabels() {
+    if (!state.sizeEstimates) {
+      resetQualityOptionLabels();
+      return;
+    }
+    const videoSizes = state.sizeEstimates.video[videoCodecSelect.value] || {};
+    Array.from(videoQualitySelect.options).forEach((opt) => {
+      const baseLabel = VIDEO_QUALITY_LABELS[opt.value] || opt.value;
+      const size = videoSizes[opt.value];
+      opt.textContent = size ? `${baseLabel} (~${formatBytes(size)})` : baseLabel;
+    });
+    const audioSizes = state.sizeEstimates.audio || {};
+    Array.from(mp3BitrateSelect.options).forEach((opt) => {
+      const baseLabel = MP3_BITRATE_LABELS[opt.value] || `${opt.value} kbps`;
+      const size = audioSizes[opt.value];
+      opt.textContent = size ? `${baseLabel} (~${formatBytes(size)})` : baseLabel;
+    });
+  }
+
+  videoCodecSelect.addEventListener('change', updateQualityOptionLabels);
+
+  estimateSizeBtn.addEventListener('click', async () => {
+    if (!state.videoJobId) return;
+    estimateSizeBtn.disabled = true;
+    estimateSizeError.hidden = true;
+    estimateSizeStatus.hidden = false;
+    try {
+      const res = await fetch(`/api/estimate-size/${state.videoJobId}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ trimStart: trimStartHandle.value, trimEnd: trimEndHandle.value }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Could not estimate file sizes.');
+      state.sizeEstimates = data;
+      updateQualityOptionLabels();
+    } catch (err) {
+      estimateSizeError.hidden = false;
+      estimateSizeError.textContent = err.message;
+    } finally {
+      estimateSizeStatus.hidden = true;
+      estimateSizeBtn.disabled = false;
+    }
+  });
 
   function setTrimRange(start, end) {
     trimStartHandle.value = start;
@@ -1013,6 +1102,7 @@
       trimEndHandle.step = 0.1;
       setTrimRange(0, data.duration);
       trimPanel.hidden = false;
+      qualityPanel.hidden = false;
       candidateList.hidden = true;
       detectError.hidden = true;
 
@@ -1034,6 +1124,7 @@
     showDzState(dzVideo, 'dz-empty');
     inputVideo.value = '';
     trimPanel.hidden = true;
+    qualityPanel.hidden = true;
     updateRenderButton();
   });
 
@@ -1129,6 +1220,7 @@
     showDzState(dzVideo, 'dz-empty');
     inputVideo.value = '';
     trimPanel.hidden = true;
+    qualityPanel.hidden = true;
     updateRenderButton();
   }
 
@@ -1190,6 +1282,9 @@
     formData.append('videoSavePath', document.getElementById('videoSavePath').value.trim());
     formData.append('audioSavePath', document.getElementById('audioSavePath').value.trim());
     formData.append('renderMp4', renderMp4Checkbox.checked);
+    formData.append('videoCodec', videoCodecSelect.value);
+    formData.append('videoQuality', videoQualitySelect.value);
+    formData.append('mp3Bitrate', mp3BitrateSelect.value);
 
     let jobId;
     try {
