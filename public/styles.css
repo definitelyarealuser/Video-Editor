@@ -366,6 +366,10 @@ label.core-text-label {
   cursor: pointer;
 }
 
+.save-path-block {
+  margin-top: 10px;
+}
+
 .toggles {
   display: flex;
   flex-direction: column;

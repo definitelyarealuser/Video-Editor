@@ -302,6 +302,20 @@
   exportMp3Checkbox.addEventListener('change', refreshIdleRenderLabel);
   refreshIdleRenderLabel();
 
+  // The MP4 always renders regardless of this checkbox (it's needed for the preview, download,
+  // and Vimeo publish either way) - "Render MP4" here just means "show me the save-to-folder
+  // field for it," matching how "Render MP3" already gates the MP3 one via exportMp3.
+  const renderMp4Checkbox = document.getElementById('renderMp4');
+  const videoSavePathBlock = document.getElementById('videoSavePathBlock');
+  const audioSavePathBlock = document.getElementById('audioSavePathBlock');
+  function updateSavePathVisibility() {
+    videoSavePathBlock.hidden = !renderMp4Checkbox.checked;
+    audioSavePathBlock.hidden = !exportMp3Checkbox.checked;
+  }
+  renderMp4Checkbox.addEventListener('change', updateSavePathVisibility);
+  exportMp3Checkbox.addEventListener('change', updateSavePathVisibility);
+  updateSavePathVisibility();
+
   // Pre-fill render settings with whatever was actually used last time, instead of the fixed
   // HTML defaults - this install's own preferences, remembered locally (server/history.js).
   (async function loadPreferences() {
@@ -324,8 +338,10 @@
         targetLufsSelect.value = String(s.targetLufs);
       }
       if (typeof s.exportMp3 === 'boolean') exportMp3Checkbox.checked = s.exportMp3;
+      if (typeof s.renderMp4 === 'boolean') renderMp4Checkbox.checked = s.renderMp4;
       if (typeof s.videoSavePath === 'string') document.getElementById('videoSavePath').value = s.videoSavePath;
       if (typeof s.audioSavePath === 'string') document.getElementById('audioSavePath').value = s.audioSavePath;
+      updateSavePathVisibility();
       refreshIdleRenderLabel();
     } catch {
       // Non-critical - just leave the HTML defaults in place.
@@ -1103,6 +1119,7 @@
     formData.append('soundcloudPrivacy', soundcloudPrivacy || 'private');
     formData.append('videoSavePath', document.getElementById('videoSavePath').value.trim());
     formData.append('audioSavePath', document.getElementById('audioSavePath').value.trim());
+    formData.append('renderMp4', renderMp4Checkbox.checked);
 
     let jobId;
     try {

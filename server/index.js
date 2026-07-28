@@ -297,6 +297,9 @@ app.post('/api/render/:jobId', useJobIdFromParams, upload.single('png'), async (
     // to also copy the finished files into, on top of the in-browser download buttons.
     const videoSavePath = String(req.body.videoSavePath || '').trim();
     const audioSavePath = String(req.body.audioSavePath || '').trim();
+    // Purely a UI preference (whether to show the video save-path field) - the MP4 itself
+    // always renders regardless, so this has no effect on the render pipeline below.
+    const renderMp4 = toBool(req.body.renderMp4, true);
 
     if (transition >= startDuration || transition >= endDuration || transition >= effectiveDuration) {
       await cleanupPng();
@@ -336,6 +339,7 @@ app.post('/api/render/:jobId', useJobIdFromParams, upload.single('png'), async (
       normalize,
       targetLufs,
       exportMp3,
+      renderMp4,
       videoSavePath,
       audioSavePath,
     };
