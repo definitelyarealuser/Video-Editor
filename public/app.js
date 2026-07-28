@@ -316,6 +316,34 @@
   exportMp3Checkbox.addEventListener('change', updateSavePathVisibility);
   updateSavePathVisibility();
 
+  // The video/audio save-folder paths are remembered the moment either is set - via Browse or
+  // typed by hand - not only after a completed render, so picking a folder sticks for next
+  // time even if this session never actually renders anything.
+  const videoSavePathInput = document.getElementById('videoSavePath');
+  const audioSavePathInput = document.getElementById('audioSavePath');
+  function saveSavePaths() {
+    fetch('/api/save-paths', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ videoSavePath: videoSavePathInput.value.trim(), audioSavePath: audioSavePathInput.value.trim() }),
+    }).catch(() => {
+      // Non-critical - it just won't be remembered next time; nothing else depends on this.
+    });
+  }
+  videoSavePathInput.addEventListener('change', saveSavePaths);
+  audioSavePathInput.addEventListener('change', saveSavePaths);
+
+  fetch('/api/save-paths')
+    .then((res) => (res.ok ? res.json() : null))
+    .then((data) => {
+      if (!data) return;
+      if (data.videoSavePath) videoSavePathInput.value = data.videoSavePath;
+      if (data.audioSavePath) audioSavePathInput.value = data.audioSavePath;
+    })
+    .catch(() => {
+      // Non-critical - the fields just stay empty.
+    });
+
   // Pre-fill render settings with whatever was actually used last time, instead of the fixed
   // HTML defaults - this install's own preferences, remembered locally (server/history.js).
   (async function loadPreferences() {
@@ -339,8 +367,6 @@
       }
       if (typeof s.exportMp3 === 'boolean') exportMp3Checkbox.checked = s.exportMp3;
       if (typeof s.renderMp4 === 'boolean') renderMp4Checkbox.checked = s.renderMp4;
-      if (typeof s.videoSavePath === 'string') document.getElementById('videoSavePath').value = s.videoSavePath;
-      if (typeof s.audioSavePath === 'string') document.getElementById('audioSavePath').value = s.audioSavePath;
       updateSavePathVisibility();
       refreshIdleRenderLabel();
     } catch {
@@ -890,6 +916,7 @@
   folderBrowserSelectBtn.addEventListener('click', () => {
     if (folderBrowserTargetInput && folderBrowserCurrentDir) {
       folderBrowserTargetInput.value = folderBrowserCurrentDir;
+      saveSavePaths();
     }
     closeFolderBrowser();
   });

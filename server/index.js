@@ -15,6 +15,7 @@ const { recordRender, getCalibratedDetectionOptions, getLastRenderSettings } = r
 const vimeo = require('./vimeo');
 const soundcloud = require('./soundcloud');
 const bookendImages = require('./bookendImages');
+const savePaths = require('./savePaths');
 
 const PORT = process.env.PORT || 3000;
 const ROOT = path.join(__dirname, '..');
@@ -29,6 +30,7 @@ for (const dir of [UPLOAD_DIR, OUTPUT_DIR]) {
 const app = express();
 app.use(express.static(path.join(ROOT, 'public')));
 app.use('/bookend-images', express.static(bookendImages.IMAGES_DIR));
+app.use(express.json());
 
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
@@ -589,6 +591,16 @@ app.get('/api/browse-folders', async (req, res) => {
 // pre-fill with whatever this install actually tends to use instead of fixed HTML defaults.
 app.get('/api/preferences', (req, res) => {
   res.json({ renderSettings: getLastRenderSettings() });
+});
+
+// The video/audio save-folder paths, remembered the moment either is chosen or typed - not
+// tied to actually completing a render, unlike the render-settings recall above.
+app.get('/api/save-paths', (req, res) => {
+  res.json(savePaths.getSavePaths());
+});
+
+app.post('/api/save-paths', (req, res) => {
+  res.json(savePaths.setSavePaths(req.body || {}));
 });
 
 // Whether Vimeo publishing is set up at all - the frontend only offers the option when this
