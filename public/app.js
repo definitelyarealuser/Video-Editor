@@ -801,6 +801,83 @@
     document.addEventListener('keydown', onKeydown);
   }
 
+  // Folder browser for the video/audio save-path fields - meaningful only because this app
+  // always runs on the same machine as the browser using it, so a server-side directory listing
+  // doubles as a native-feeling folder picker without needing a browser extension or the (very
+  // limited, handle-only, no-real-path) File System Access API.
+  const folderBrowserOverlay = document.getElementById('folder-browser-overlay');
+  const folderBrowserCurrentPath = document.getElementById('folder-browser-current-path');
+  const folderBrowserList = document.getElementById('folder-browser-list');
+  const folderBrowserError = document.getElementById('folder-browser-error');
+  const folderBrowserCancelBtn = document.getElementById('folder-browser-cancel-btn');
+  const folderBrowserSelectBtn = document.getElementById('folder-browser-select-btn');
+
+  let folderBrowserTargetInput = null;
+  let folderBrowserCurrentDir = null;
+
+  async function loadFolderBrowser(dirPath) {
+    folderBrowserError.hidden = true;
+    try {
+      const url = dirPath ? `/api/browse-folders?path=${encodeURIComponent(dirPath)}` : '/api/browse-folders';
+      const res = await fetch(url);
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Could not read that folder.');
+
+      folderBrowserCurrentDir = data.path;
+      folderBrowserCurrentPath.textContent = data.path;
+      folderBrowserList.innerHTML = '';
+
+      if (data.parent) {
+        const upRow = document.createElement('div');
+        upRow.className = 'folder-browser-item folder-browser-up';
+        upRow.textContent = '.. (up one level)';
+        upRow.addEventListener('click', () => loadFolderBrowser(data.parent));
+        folderBrowserList.appendChild(upRow);
+      }
+      data.folders.forEach((f) => {
+        const row = document.createElement('div');
+        row.className = 'folder-browser-item';
+        row.textContent = f.name;
+        row.addEventListener('click', () => loadFolderBrowser(f.path));
+        folderBrowserList.appendChild(row);
+      });
+    } catch (err) {
+      folderBrowserError.hidden = false;
+      folderBrowserError.textContent = err.message;
+    }
+  }
+
+  function onFolderBrowserKeydown(e) {
+    if (e.key === 'Escape') closeFolderBrowser();
+  }
+  function openFolderBrowser(targetInput) {
+    folderBrowserTargetInput = targetInput;
+    folderBrowserOverlay.hidden = false;
+    document.addEventListener('keydown', onFolderBrowserKeydown);
+    loadFolderBrowser(targetInput.value.trim() || null);
+  }
+  function closeFolderBrowser() {
+    folderBrowserOverlay.hidden = true;
+    folderBrowserTargetInput = null;
+    document.removeEventListener('keydown', onFolderBrowserKeydown);
+  }
+
+  document.querySelectorAll('.browse-btn').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      openFolderBrowser(document.getElementById(btn.dataset.target));
+    });
+  });
+  folderBrowserCancelBtn.addEventListener('click', closeFolderBrowser);
+  folderBrowserOverlay.addEventListener('click', (e) => {
+    if (e.target === folderBrowserOverlay) closeFolderBrowser();
+  });
+  folderBrowserSelectBtn.addEventListener('click', () => {
+    if (folderBrowserTargetInput && folderBrowserCurrentDir) {
+      folderBrowserTargetInput.value = folderBrowserCurrentDir;
+    }
+    closeFolderBrowser();
+  });
+
   // Video dropzone: uploads immediately so it can be analyzed/trimmed before rendering.
   function uploadVideo(file) {
     showDzState(dzVideo, 'dz-uploading');

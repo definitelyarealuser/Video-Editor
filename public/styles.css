@@ -236,6 +236,72 @@ header h1 {
   border-color: var(--accent);
 }
 
+.path-input {
+  display: flex;
+  align-items: stretch;
+  gap: 8px;
+}
+
+.path-input input {
+  flex: 1;
+  min-width: 0;
+}
+
+.browse-btn {
+  background: color-mix(in srgb, var(--accent) 14%, var(--panel));
+  border: 1px solid color-mix(in srgb, var(--accent) 40%, var(--border));
+  color: var(--accent);
+  border-radius: 8px;
+  padding: 0 14px;
+  font-size: 0.85rem;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.browse-btn:hover {
+  background: color-mix(in srgb, var(--accent) 24%, var(--panel));
+  border-color: var(--accent);
+}
+
+.folder-browser-path {
+  font-size: 0.85rem;
+  color: var(--muted);
+  margin-bottom: 12px;
+  word-break: break-all;
+  padding: 8px 10px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.folder-browser-list {
+  max-height: 320px;
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  margin-bottom: 18px;
+}
+
+.folder-browser-item {
+  padding: 9px 12px;
+  font-size: 0.9rem;
+  cursor: pointer;
+  border-bottom: 1px solid var(--border);
+}
+
+.folder-browser-item:last-child {
+  border-bottom: none;
+}
+
+.folder-browser-item:hover {
+  background: var(--bg);
+  color: var(--accent);
+}
+
+.folder-browser-up {
+  color: var(--muted);
+}
+
 .field-optional {
   font-weight: normal;
   text-transform: none;

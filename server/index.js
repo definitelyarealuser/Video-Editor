@@ -2,6 +2,7 @@ require('dotenv').config();
 
 const path = require('path');
 const fs = require('fs');
+const os = require('os');
 const crypto = require('crypto');
 const express = require('express');
 const multer = require('multer');
@@ -559,6 +560,25 @@ app.delete('/api/bookend-images/:id', (req, res) => {
   const ok = bookendImages.deleteImage(req.params.id);
   if (!ok) return res.status(404).json({ error: 'Not found.' });
   res.json({ ok: true });
+});
+
+// Lists subfolders of a directory on this machine, for the "Browse…" folder pickers next to
+// the video/audio save-path fields. Only meaningful because this app always runs on the same
+// computer as the browser using it - same trust model as the save-path copy feature itself,
+// which already allows writing to any local path the user types in directly.
+app.get('/api/browse-folders', async (req, res) => {
+  const targetPath = path.resolve(req.query.path ? String(req.query.path) : os.homedir());
+  try {
+    const entries = await fs.promises.readdir(targetPath, { withFileTypes: true });
+    const folders = entries
+      .filter((e) => e.isDirectory())
+      .map((e) => ({ name: e.name, path: path.join(targetPath, e.name) }))
+      .sort((a, b) => a.name.localeCompare(b.name));
+    const parent = path.dirname(targetPath);
+    res.json({ path: targetPath, parent: parent !== targetPath ? parent : null, folders });
+  } catch (err) {
+    res.status(400).json({ error: err.message || 'Could not read that folder.' });
+  }
 });
 
 // Last-used render settings (fade durations, crossfade, normalization, etc.), so the form can

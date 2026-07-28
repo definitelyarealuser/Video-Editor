@@ -202,11 +202,17 @@
       <div class="settings">
         <div class="field field-wide">
           <label for="videoSavePath">Also save the MP4 to this folder on this computer <span class="field-optional">(optional)</span></label>
-          <input type="text" id="videoSavePath" name="videoSavePath" placeholder="e.g. C:\Users\andyw\Videos\Sermons or /Users/andy/Movies/Sermons" />
+          <div class="path-input">
+            <input type="text" id="videoSavePath" name="videoSavePath" placeholder="e.g. C:\Users\andyw\Videos\Sermons or /Users/andy/Movies/Sermons" />
+            <button type="button" class="browse-btn" data-target="videoSavePath">Browse…</button>
+          </div>
         </div>
         <div class="field field-wide">
           <label for="audioSavePath">Also save the MP3 to this folder on this computer <span class="field-optional">(optional)</span></label>
-          <input type="text" id="audioSavePath" name="audioSavePath" placeholder="e.g. C:\Users\andyw\Music\Sermons or /Users/andy/Music/Sermons" />
+          <div class="path-input">
+            <input type="text" id="audioSavePath" name="audioSavePath" placeholder="e.g. C:\Users\andyw\Music\Sermons or /Users/andy/Music/Sermons" />
+            <button type="button" class="browse-btn" data-target="audioSavePath">Browse…</button>
+          </div>
         </div>
       </div>
 
@@ -326,6 +332,19 @@
       <div class="modal-actions">
         <button type="button" id="library-delete-cancel-btn" class="modal-btn-secondary">Cancel</button>
         <button type="button" id="library-delete-confirm-btn" class="modal-btn-primary modal-btn-danger">Delete</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal-overlay" id="folder-browser-overlay" hidden>
+    <div class="modal-dialog">
+      <h3>Choose a folder</h3>
+      <div id="folder-browser-current-path" class="folder-browser-path"></div>
+      <div id="folder-browser-list" class="folder-browser-list"></div>
+      <div id="folder-browser-error" class="error-box" hidden></div>
+      <div class="modal-actions">
+        <button type="button" id="folder-browser-cancel-btn" class="modal-btn-ghost">Cancel</button>
+        <button type="button" id="folder-browser-select-btn" class="modal-btn-primary">Select This Folder</button>
       </div>
     </div>
   </div>
