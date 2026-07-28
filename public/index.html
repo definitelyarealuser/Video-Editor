@@ -199,6 +199,11 @@
         </div>
       </div>
 
+      <div id="soundcloud-connect-section" class="soundcloud-connect-section" hidden>
+        <span id="soundcloud-connect-status"></span>
+        <a id="soundcloud-connect-btn" href="/api/soundcloud/connect" class="soundcloud-connect-link" hidden>Connect SoundCloud</a>
+      </div>
+
       <button type="submit" id="render-btn" disabled>Render Video</button>
     </form>
 
@@ -228,6 +233,16 @@
       <div id="vimeo-error" class="error-box" hidden></div>
     </section>
 
+    <section id="soundcloud-status-section" class="vimeo-status-section" hidden>
+      <div class="progress-track"><div class="progress-fill" id="soundcloud-progress-fill"></div></div>
+      <div class="progress-label" id="soundcloud-status-label">Publishing to SoundCloud…</div>
+      <div id="soundcloud-result" class="vimeo-result" hidden>
+        <a id="soundcloud-result-link" href="#" target="_blank" rel="noopener"></a>
+        <ul id="soundcloud-playlist-list" class="vimeo-showcase-list"></ul>
+      </div>
+      <div id="soundcloud-error" class="error-box" hidden></div>
+    </section>
+
     <section id="error-section" hidden>
       <div class="error-box" id="error-message"></div>
     </section>
@@ -253,6 +268,29 @@
         <button type="button" id="vimeo-cancel-btn" class="modal-btn-ghost">Cancel</button>
         <button type="button" id="render-only-btn" class="modal-btn-secondary">Render Only</button>
         <button type="button" id="render-publish-btn" class="modal-btn-primary">Render &amp; Publish to Vimeo</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal-overlay" id="soundcloud-confirm-overlay" hidden>
+    <div class="modal-dialog">
+      <h3>Publish to SoundCloud?</h3>
+      <p class="modal-hint">This choice applies to this render only - you'll be asked again next time.</p>
+      <p class="modal-hint">Title and description come from the form (file name and Core Text).</p>
+
+      <label for="soundcloud-privacy">Privacy</label>
+      <select id="soundcloud-privacy">
+        <option value="private" selected>Private - only you (and anyone granted access)</option>
+        <option value="public">Public - anybody can listen</option>
+      </select>
+
+      <label>Add to playlists</label>
+      <div id="soundcloud-playlist-checks" class="vimeo-showcase-checks"></div>
+
+      <div class="modal-actions">
+        <button type="button" id="soundcloud-cancel-btn" class="modal-btn-ghost">Cancel</button>
+        <button type="button" id="soundcloud-render-only-btn" class="modal-btn-secondary">Render Only</button>
+        <button type="button" id="soundcloud-render-publish-btn" class="modal-btn-primary">Render &amp; Publish to SoundCloud</button>
       </div>
     </div>
   </div>

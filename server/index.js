@@ -12,6 +12,7 @@ const { extractPcmFloat32, transcribeInChunks, computeSpectralFlatness, CHUNK_SE
 const { findSermonCandidates } = require('./sermonDetect');
 const { recordRender, getCalibratedDetectionOptions, getLastRenderSettings } = require('./history');
 const vimeo = require('./vimeo');
+const soundcloud = require('./soundcloud');
 const bookendImages = require('./bookendImages');
 
 const PORT = process.env.PORT || 3000;
@@ -268,6 +269,12 @@ app.post('/api/render/:jobId', useJobIdFromParams, upload.single('png'), async (
       ? String(req.body.vimeoShowcaseIds).split(',').map((s) => s.trim()).filter(Boolean)
       : undefined;
     const vimeoPrivacy = String(req.body.vimeoPrivacy || 'nobody');
+    const publishToSoundCloud =
+      toBool(req.body.publishToSoundCloud, false) && exportMp3 && soundcloud.isConfigured() && soundcloud.isConnected();
+    const soundcloudPlaylistIds = req.body.soundcloudPlaylistIds !== undefined
+      ? String(req.body.soundcloudPlaylistIds).split(',').map((s) => s.trim()).filter(Boolean)
+      : undefined;
+    const soundcloudPrivacy = String(req.body.soundcloudPrivacy || 'private');
 
     if (transition >= startDuration || transition >= endDuration || transition >= effectiveDuration) {
       await cleanupPng();
@@ -293,6 +300,7 @@ app.post('/api/render/:jobId', useJobIdFromParams, upload.single('png'), async (
       mp3OutputPath,
       mp3OutputName: mp3OutputPath ? `${outputName}.mp3` : null,
       willPublishToVimeo: publishToVimeo,
+      willPublishToSoundcloud: publishToSoundCloud,
     });
 
     res.json({ jobId });
@@ -354,6 +362,29 @@ app.post('/api/render/:jobId', useJobIdFromParams, upload.single('png'), async (
               jobs.update(jobId, { status: 'publish-error', error: err.message });
             });
         }
+
+        // Runs independently of (and in parallel with) the Vimeo publish above - the two
+        // platforms don't depend on each other, so a SoundCloud failure shouldn't block or be
+        // blocked by Vimeo's, and vice versa. Tracked under separate sc*-prefixed job fields
+        // rather than overloading `status`, which stays Vimeo's alone.
+        if (publishToSoundCloud) {
+          jobs.update(jobId, { scStatus: 'publishing', scProgress: 0, scError: null });
+          soundcloud
+            .uploadAndPublish({
+              filePath: mp3OutputPath,
+              title: outputName,
+              description: vimeoDescription, // same Core Text, sent to both platforms
+              privacy: soundcloudPrivacy,
+              playlistIds: soundcloudPlaylistIds,
+              onProgress: (fraction) => jobs.update(jobId, { scProgress: fraction }),
+            })
+            .then(({ trackUrl, playlistResults }) => {
+              jobs.update(jobId, { scStatus: 'published', scProgress: 1, scUrl: trackUrl, scPlaylistResults: playlistResults });
+            })
+            .catch((err) => {
+              jobs.update(jobId, { scStatus: 'error', scError: err.message });
+            });
+        }
       })
       .catch((err) => {
         jobs.update(jobId, { status: 'error', error: err.message });
@@ -395,16 +426,25 @@ app.get('/api/progress/:jobId', (req, res) => {
         candidates: j.candidates || undefined,
         vimeoUrl: j.vimeoUrl || undefined,
         vimeoShowcaseResults: j.vimeoShowcaseResults || undefined,
+        scStatus: j.scStatus || undefined,
+        scProgress: j.scProgress,
+        scError: j.scError || undefined,
+        scUrl: j.scUrl || undefined,
+        scPlaylistResults: j.scPlaylistResults || undefined,
       })}\n\n`
     );
   send(job);
 
-  // 'done' isn't terminal when a Vimeo publish was confirmed for this render - the same stream
-  // keeps going through 'publishing' to 'published'/'publish-error', which are terminal.
+  // 'done' isn't terminal when a Vimeo and/or SoundCloud publish was confirmed for this render -
+  // the stream keeps going until whichever of those were requested each reach their own terminal
+  // state (Vimeo via `status`, SoundCloud via the separate `scStatus` since they run in parallel
+  // and independently of each other).
+  const vimeoSettled = (j) => !j.willPublishToVimeo || j.status === 'published' || j.status === 'publish-error';
+  const soundcloudSettled = (j) => !j.willPublishToSoundcloud || j.scStatus === 'published' || j.scStatus === 'error';
   const terminal = (j) => {
-    if (['error', 'analyzed', 'published', 'publish-error'].includes(j.status)) return true;
-    if (j.status === 'done') return !j.willPublishToVimeo;
-    return false;
+    if (j.status === 'error' || j.status === 'analyzed') return true;
+    if (!['done', 'publishing', 'published', 'publish-error'].includes(j.status)) return false;
+    return vimeoSettled(j) && soundcloudSettled(j);
   };
   if (terminal(job)) {
     return res.end();
@@ -494,6 +534,47 @@ app.get('/api/vimeo-showcases', async (req, res) => {
     res.json({ showcases: await vimeo.getShowcaseDetails() });
   } catch (err) {
     res.status(500).json({ error: err.message || 'Could not fetch Vimeo showcases.' });
+  }
+});
+
+// Whether SoundCloud publishing is set up (env vars present) and connected (OAuth completed) -
+// these are separate because being configured doesn't mean the one-time login has happened yet.
+app.get('/api/soundcloud-status', (req, res) => {
+  res.json({
+    configured: soundcloud.isConfigured(),
+    connected: soundcloud.isConnected(),
+    playlistCount: soundcloud.getPlaylistIds().length,
+  });
+});
+
+// Real playlist names for the configured IDs, so the publish dialog can offer a friendly
+// checkbox list instead of raw numbers - mirrors /api/vimeo-showcases.
+app.get('/api/soundcloud-playlists', async (req, res) => {
+  if (!soundcloud.isConfigured() || !soundcloud.isConnected()) return res.json({ playlists: [] });
+  try {
+    res.json({ playlists: await soundcloud.getPlaylistDetails() });
+  } catch (err) {
+    res.status(500).json({ error: err.message || 'Could not fetch SoundCloud playlists.' });
+  }
+});
+
+// Full-page redirect (not fetched) - SoundCloud needs the browser itself to navigate there so
+// the FF account can log in and approve access, then it bounces back to oauth-callback below.
+app.get('/api/soundcloud/connect', (req, res) => {
+  if (!soundcloud.isConfigured()) {
+    return res.status(400).send('SoundCloud is not configured - set SOUNDCLOUD_CLIENT_ID/SOUNDCLOUD_CLIENT_SECRET in .env first.');
+  }
+  res.redirect(soundcloud.getAuthorizeUrl());
+});
+
+app.get('/api/soundcloud/oauth-callback', async (req, res) => {
+  try {
+    const { code, state, error, error_description: errorDescription } = req.query;
+    if (error) throw new Error(errorDescription || error);
+    await soundcloud.handleOAuthCallback(code, state);
+    res.redirect('/?soundcloud=connected');
+  } catch (err) {
+    res.redirect(`/?soundcloud=error&message=${encodeURIComponent(err.message || 'Connection failed.')}`);
   }
 });
 

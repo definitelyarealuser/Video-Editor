@@ -343,6 +343,32 @@ label.core-text-label {
   color: var(--muted);
 }
 
+.soundcloud-connect-section {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 16px;
+  font-size: 0.85rem;
+}
+
+#soundcloud-connect-status {
+  color: var(--muted);
+}
+
+#soundcloud-connect-status.connected {
+  color: var(--success);
+}
+
+.soundcloud-connect-link {
+  color: var(--accent);
+  text-decoration: none;
+  font-weight: 600;
+}
+
+.soundcloud-connect-link:hover {
+  text-decoration: underline;
+}
+
 .download-row {
   display: flex;
   justify-content: center;

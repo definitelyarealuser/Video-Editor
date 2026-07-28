@@ -43,6 +43,24 @@
   const renderOnlyBtn = document.getElementById('render-only-btn');
   const renderPublishBtn = document.getElementById('render-publish-btn');
 
+  const soundcloudStatusSection = document.getElementById('soundcloud-status-section');
+  const soundcloudProgressFill = document.getElementById('soundcloud-progress-fill');
+  const soundcloudStatusLabel = document.getElementById('soundcloud-status-label');
+  const soundcloudResult = document.getElementById('soundcloud-result');
+  const soundcloudResultLink = document.getElementById('soundcloud-result-link');
+  const soundcloudPlaylistList = document.getElementById('soundcloud-playlist-list');
+  const soundcloudError = document.getElementById('soundcloud-error');
+
+  const soundcloudConfirmOverlay = document.getElementById('soundcloud-confirm-overlay');
+  const soundcloudPlaylistChecks = document.getElementById('soundcloud-playlist-checks');
+  const soundcloudCancelBtn = document.getElementById('soundcloud-cancel-btn');
+  const soundcloudRenderOnlyBtn = document.getElementById('soundcloud-render-only-btn');
+  const soundcloudRenderPublishBtn = document.getElementById('soundcloud-render-publish-btn');
+
+  const soundcloudConnectSection = document.getElementById('soundcloud-connect-section');
+  const soundcloudConnectStatus = document.getElementById('soundcloud-connect-status');
+  const soundcloudConnectBtn = document.getElementById('soundcloud-connect-btn');
+
   fetch('/api/vimeo-status')
     .then((res) => res.json())
     .then((data) => {
@@ -51,6 +69,73 @@
     .catch(() => {
       state.vimeoConfigured = false;
     });
+
+  state.soundcloudConfigured = false;
+  state.soundcloudConnected = false;
+  function refreshSoundCloudConnectUI() {
+    soundcloudConnectSection.hidden = !state.soundcloudConfigured;
+    if (state.soundcloudConnected) {
+      soundcloudConnectStatus.textContent = 'SoundCloud: connected';
+      soundcloudConnectStatus.classList.add('connected');
+      soundcloudConnectBtn.hidden = true;
+    } else {
+      soundcloudConnectStatus.textContent = 'SoundCloud: not connected';
+      soundcloudConnectStatus.classList.remove('connected');
+      soundcloudConnectBtn.hidden = false;
+    }
+  }
+  function loadSoundCloudStatus() {
+    return fetch('/api/soundcloud-status')
+      .then((res) => res.json())
+      .then((data) => {
+        state.soundcloudConfigured = !!data.configured;
+        state.soundcloudConnected = !!data.connected;
+        refreshSoundCloudConnectUI();
+      })
+      .catch(() => {
+        state.soundcloudConfigured = false;
+        state.soundcloudConnected = false;
+      });
+  }
+  loadSoundCloudStatus();
+
+  // Fetched once, up front, same as Vimeo's showcases - only returns anything once actually
+  // connected (no access token to look playlists up with otherwise).
+  state.soundcloudPlaylists = [];
+  fetch('/api/soundcloud-playlists')
+    .then((res) => res.json())
+    .then((data) => {
+      state.soundcloudPlaylists = data.playlists || [];
+    })
+    .catch(() => {
+      state.soundcloudPlaylists = [];
+    });
+
+  // After the OAuth redirect bounces back from SoundCloud (see server's /oauth-callback), show
+  // a one-off confirmation/error, then scrub the query string so a page refresh doesn't repeat it.
+  (function handleSoundCloudOAuthReturn() {
+    const params = new URLSearchParams(window.location.search);
+    const scResult = params.get('soundcloud');
+    if (!scResult) return;
+    if (scResult === 'connected') {
+      loadSoundCloudStatus().then(() => {
+        fetch('/api/soundcloud-playlists')
+          .then((res) => res.json())
+          .then((data) => {
+            state.soundcloudPlaylists = data.playlists || [];
+          })
+          .catch(() => {});
+      });
+    } else if (scResult === 'error') {
+      const message = params.get('message') || 'Could not connect to SoundCloud.';
+      errorSection.hidden = false;
+      errorMessage.textContent = `SoundCloud: ${message}`;
+    }
+    params.delete('soundcloud');
+    params.delete('message');
+    const newQuery = params.toString();
+    window.history.replaceState({}, '', window.location.pathname + (newQuery ? `?${newQuery}` : ''));
+  })();
 
   // Fetched once, up front, so opening the dialog doesn't need a network round-trip - real
   // showcase names beat showing raw IDs to choose from.
@@ -102,13 +187,13 @@
       };
       const onRenderOnly = () => {
         cleanup();
-        resolve({ publish: false, description: '', showcaseIds: [] });
+        resolve({ publish: false, showcaseIds: [] });
       };
       const onRenderPublish = () => {
         const showcaseIds = Array.from(vimeoShowcaseChecks.querySelectorAll('input[type="checkbox"]:checked')).map((c) => c.value);
         const privacy = document.getElementById('vimeo-privacy').value;
         cleanup();
-        resolve({ publish: true, description: document.getElementById('coreText').value.trim(), showcaseIds, privacy });
+        resolve({ publish: true, showcaseIds, privacy });
       };
       const onOverlayClick = (e) => {
         if (e.target === vimeoConfirmOverlay) onCancel();
@@ -128,6 +213,71 @@
       renderOnlyBtn.addEventListener('click', onRenderOnly);
       renderPublishBtn.addEventListener('click', onRenderPublish);
       vimeoConfirmOverlay.addEventListener('click', onOverlayClick);
+      document.addEventListener('keydown', onKeydown);
+    });
+  }
+
+  function renderSoundCloudPlaylistChecks() {
+    soundcloudPlaylistChecks.innerHTML = '';
+    if (!state.soundcloudPlaylists.length) {
+      const note = document.createElement('div');
+      note.className = 'showcase-load-error';
+      note.textContent = 'No playlists configured (SOUNDCLOUD_PLAYLIST_IDS) - the track will just upload without being added to one.';
+      soundcloudPlaylistChecks.appendChild(note);
+      return;
+    }
+    state.soundcloudPlaylists.forEach((p) => {
+      const label = document.createElement('label');
+      const checkbox = document.createElement('input');
+      checkbox.type = 'checkbox';
+      checkbox.value = p.id;
+      checkbox.checked = true; // just the two configured sermon playlists - both fine on by default
+      label.appendChild(checkbox);
+      label.appendChild(document.createTextNode(p.name));
+      soundcloudPlaylistChecks.appendChild(label);
+    });
+  }
+
+  // Same shape/behavior as confirmVimeoPublish() - a separate, deliberate confirmation each
+  // time rather than combined into the Vimeo dialog, so a "no" on one doesn't quietly affect
+  // the other. Cancel here backs out of the whole render, same as Vimeo's Cancel does.
+  function confirmSoundCloudPublish() {
+    return new Promise((resolve) => {
+      renderSoundCloudPlaylistChecks();
+      soundcloudConfirmOverlay.hidden = false;
+
+      const onCancel = () => {
+        cleanup();
+        resolve({ cancelled: true });
+      };
+      const onRenderOnly = () => {
+        cleanup();
+        resolve({ publish: false, playlistIds: [] });
+      };
+      const onRenderPublish = () => {
+        const playlistIds = Array.from(soundcloudPlaylistChecks.querySelectorAll('input[type="checkbox"]:checked')).map((c) => c.value);
+        const privacy = document.getElementById('soundcloud-privacy').value;
+        cleanup();
+        resolve({ publish: true, playlistIds, privacy });
+      };
+      const onOverlayClick = (e) => {
+        if (e.target === soundcloudConfirmOverlay) onCancel();
+      };
+      const onKeydown = (e) => {
+        if (e.key === 'Escape') onCancel();
+      };
+      function cleanup() {
+        soundcloudConfirmOverlay.hidden = true;
+        soundcloudCancelBtn.removeEventListener('click', onCancel);
+        soundcloudRenderOnlyBtn.removeEventListener('click', onRenderOnly);
+        soundcloudRenderPublishBtn.removeEventListener('click', onRenderPublish);
+        soundcloudConfirmOverlay.removeEventListener('click', onOverlayClick);
+        document.removeEventListener('keydown', onKeydown);
+      }
+      soundcloudCancelBtn.addEventListener('click', onCancel);
+      soundcloudRenderOnlyBtn.addEventListener('click', onRenderOnly);
+      soundcloudRenderPublishBtn.addEventListener('click', onRenderPublish);
+      soundcloudConfirmOverlay.addEventListener('click', onOverlayClick);
       document.addEventListener('keydown', onKeydown);
     });
   }
@@ -791,6 +941,9 @@
     vimeoStatusSection.hidden = true;
     vimeoResult.hidden = true;
     vimeoError.hidden = true;
+    soundcloudStatusSection.hidden = true;
+    soundcloudResult.hidden = true;
+    soundcloudError.hidden = true;
     progressSection.hidden = false;
     progressFill.style.width = '0%';
     progressLabel.textContent = 'Uploading files…';
@@ -819,10 +972,23 @@
     // deliberate choice, never remembered from a previous render.
     const vimeoChoice = state.vimeoConfigured
       ? await confirmVimeoPublish()
-      : { publish: false, description: '', showcaseIds: [] };
+      : { publish: false, showcaseIds: [] };
     if (vimeoChoice.cancelled) return; // back out entirely - no render, nothing changes
 
-    const { publish: publishToVimeo, description: vimeoDescription, showcaseIds: vimeoShowcaseIds, privacy: vimeoPrivacy } = vimeoChoice;
+    // SoundCloud is audio-only, so it's only offered when there'll actually be an MP3 to send -
+    // asking about a platform that has nothing to upload to would just be noise.
+    const willExportMp3 = document.getElementById('exportMp3').checked;
+    const soundcloudChoice = (state.soundcloudConnected && willExportMp3)
+      ? await confirmSoundCloudPublish()
+      : { publish: false, playlistIds: [] };
+    if (soundcloudChoice.cancelled) return; // same as Vimeo's Cancel - back out entirely
+
+    const { publish: publishToVimeo, showcaseIds: vimeoShowcaseIds, privacy: vimeoPrivacy } = vimeoChoice;
+    const { publish: publishToSoundCloud, playlistIds: soundcloudPlaylistIds, privacy: soundcloudPrivacy } = soundcloudChoice;
+    // Read independently of either dialog - description is the same Core Text either way, and
+    // needs to be correct even when only one of the two platforms is actually being published to
+    // (e.g. Vimeo isn't configured at all, so vimeoChoice never touches this).
+    const coreTextDescription = document.getElementById('coreText').value.trim();
 
     resetPanels();
     renderBtn.disabled = true;
@@ -846,9 +1012,12 @@
     formData.append('trimStart', trimStartHandle.value);
     formData.append('trimEnd', trimEndHandle.value);
     formData.append('publishToVimeo', publishToVimeo);
-    formData.append('vimeoDescription', vimeoDescription);
+    formData.append('vimeoDescription', coreTextDescription);
     formData.append('vimeoShowcaseIds', vimeoShowcaseIds.join(','));
     formData.append('vimeoPrivacy', vimeoPrivacy || 'nobody');
+    formData.append('publishToSoundCloud', publishToSoundCloud);
+    formData.append('soundcloudPlaylistIds', soundcloudPlaylistIds.join(','));
+    formData.append('soundcloudPrivacy', soundcloudPrivacy || 'private');
 
     let jobId;
     try {
@@ -879,7 +1048,11 @@
         return;
       }
 
-      if (data.status === 'done') {
+      // Rendering itself has finished (status is 'done'/'publishing'/'published'/'publish-error').
+      // Show the result panel exactly once, then let Vimeo and SoundCloud update independently
+      // off whatever fields changed in each message - they run in parallel server-side and
+      // don't share a single terminal condition, unlike the render step above.
+      if (resultSection.hidden) {
         progressSection.hidden = true;
         resultSection.hidden = false;
         const outputName = computeOutputName();
@@ -900,22 +1073,21 @@
           vimeoStatusSection.hidden = false;
           vimeoProgressFill.style.width = '0%';
           vimeoStatusLabel.textContent = 'Publishing to Vimeo…';
-        } else {
-          source.close();
-          finishRenderCycle();
         }
-        return;
+        if (publishToSoundCloud) {
+          soundcloudStatusSection.hidden = false;
+          soundcloudProgressFill.style.width = '0%';
+          soundcloudStatusLabel.textContent = 'Publishing to SoundCloud…';
+        }
       }
 
       if (data.status === 'publishing') {
         const pct = Math.round((data.progress || 0) * 100);
         vimeoProgressFill.style.width = pct + '%';
         vimeoStatusLabel.textContent = `Publishing to Vimeo… ${pct}%`;
-        return;
       }
 
       if (data.status === 'published') {
-        source.close();
         vimeoProgressFill.style.width = '100%';
         vimeoStatusLabel.textContent = 'Published to Vimeo';
         vimeoResult.hidden = false;
@@ -930,17 +1102,50 @@
           li.textContent = r.ok ? `Added to showcase ${label}` : `Showcase ${label} failed: ${r.error}`;
           vimeoShowcaseList.appendChild(li);
         });
-        finishRenderCycle();
-        return;
       }
 
       if (data.status === 'publish-error') {
-        source.close();
         vimeoStatusLabel.textContent = 'Vimeo publish failed';
         vimeoError.hidden = false;
         vimeoError.textContent = data.error || 'Unknown error publishing to Vimeo.';
+      }
+
+      if (data.scStatus === 'publishing') {
+        const pct = Math.round((data.scProgress || 0) * 100);
+        soundcloudProgressFill.style.width = pct + '%';
+        soundcloudStatusLabel.textContent = `Publishing to SoundCloud… ${pct}%`;
+      }
+
+      if (data.scStatus === 'published') {
+        soundcloudProgressFill.style.width = '100%';
+        soundcloudStatusLabel.textContent = 'Published to SoundCloud';
+        soundcloudResult.hidden = false;
+        soundcloudResultLink.href = data.scUrl;
+        soundcloudResultLink.textContent = data.scUrl;
+        soundcloudPlaylistList.innerHTML = '';
+        (data.scPlaylistResults || []).forEach((r) => {
+          const playlist = state.soundcloudPlaylists.find((p) => String(p.id) === String(r.playlistId));
+          const label = playlist ? playlist.name : r.playlistId;
+          const li = document.createElement('li');
+          li.className = r.ok ? 'showcase-ok' : 'showcase-failed';
+          li.textContent = r.ok ? `Added to playlist ${label}` : `Playlist ${label} failed: ${r.error}`;
+          soundcloudPlaylistList.appendChild(li);
+        });
+      }
+
+      if (data.scStatus === 'error') {
+        soundcloudStatusLabel.textContent = 'SoundCloud publish failed';
+        soundcloudError.hidden = false;
+        soundcloudError.textContent = data.scError || 'Unknown error publishing to SoundCloud.';
+      }
+
+      // Mirrors the server's terminal() gating - only close the stream and reset the form once
+      // every platform actually confirmed for this render has reached its own end state.
+      const vimeoSettled = !publishToVimeo || data.status === 'published' || data.status === 'publish-error';
+      const soundcloudSettled = !publishToSoundCloud || data.scStatus === 'published' || data.scStatus === 'error';
+      if (vimeoSettled && soundcloudSettled) {
+        source.close();
         finishRenderCycle();
-        return;
       }
     };
     source.onerror = () => {
