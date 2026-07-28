@@ -88,6 +88,23 @@ function toBool(value, fallback) {
   return value === 'true' || value === '1' || value === 'on';
 }
 
+// Copies a rendered file into a user-specified local folder (this app only ever runs on the
+// same machine as the browser using it, so a plain filesystem path from the form is meaningful
+// here - not a remote/multi-tenant path). Creates the folder if it doesn't exist yet. Never
+// throws - a failure here shouldn't take down an otherwise-successful render, it just gets
+// reported back to the browser alongside the normal download links.
+async function copyToFolder(sourcePath, folderPath, filename) {
+  if (!folderPath) return {};
+  try {
+    await fs.promises.mkdir(folderPath, { recursive: true });
+    const destPath = path.join(folderPath, filename);
+    await fs.promises.copyFile(sourcePath, destPath);
+    return { savedTo: destPath };
+  } catch (err) {
+    return { error: err.message || String(err) };
+  }
+}
+
 const MIN_LUFS = -20;
 const MAX_LUFS = -10;
 
@@ -275,6 +292,10 @@ app.post('/api/render/:jobId', useJobIdFromParams, upload.single('png'), async (
       ? String(req.body.soundcloudPlaylistIds).split(',').map((s) => s.trim()).filter(Boolean)
       : undefined;
     const soundcloudPrivacy = String(req.body.soundcloudPrivacy || 'private');
+    // Optional local folders (on this same machine, since the server runs on your own computer)
+    // to also copy the finished files into, on top of the in-browser download buttons.
+    const videoSavePath = String(req.body.videoSavePath || '').trim();
+    const audioSavePath = String(req.body.audioSavePath || '').trim();
 
     if (transition >= startDuration || transition >= endDuration || transition >= effectiveDuration) {
       await cleanupPng();
@@ -305,7 +326,18 @@ app.post('/api/render/:jobId', useJobIdFromParams, upload.single('png'), async (
 
     res.json({ jobId });
 
-    const renderSettings = { startDuration, endDuration, transition, fadeOut, crossfadeAudio, normalize, targetLufs, exportMp3 };
+    const renderSettings = {
+      startDuration,
+      endDuration,
+      transition,
+      fadeOut,
+      crossfadeAudio,
+      normalize,
+      targetLufs,
+      exportMp3,
+      videoSavePath,
+      audioSavePath,
+    };
 
     render({
       pngPath,
@@ -326,8 +358,19 @@ app.post('/api/render/:jobId', useJobIdFromParams, upload.single('png'), async (
         jobs.update(jobId, { progress: fraction });
       },
     })
-      .then(() => {
-        jobs.update(jobId, { status: 'done', progress: 1 });
+      .then(async () => {
+        const videoSaveResult = await copyToFolder(outputPath, videoSavePath, `${outputName}.mp4`);
+        const audioSaveResult = mp3OutputPath
+          ? await copyToFolder(mp3OutputPath, audioSavePath, `${outputName}.mp3`)
+          : {};
+        jobs.update(jobId, {
+          status: 'done',
+          progress: 1,
+          videoSavedTo: videoSaveResult.savedTo || null,
+          videoSaveError: videoSaveResult.error || null,
+          audioSavedTo: audioSaveResult.savedTo || null,
+          audioSaveError: audioSaveResult.error || null,
+        });
         // A deliberately trimmed range (not the whole file) with chunk data from an earlier
         // analyze is real ground truth: label real speech-bearing content inside the confirmed
         // trim as "sermon" and outside it as "not sermon". A render of the whole video doesn't
@@ -431,6 +474,10 @@ app.get('/api/progress/:jobId', (req, res) => {
         scError: j.scError || undefined,
         scUrl: j.scUrl || undefined,
         scPlaylistResults: j.scPlaylistResults || undefined,
+        videoSavedTo: j.videoSavedTo || undefined,
+        videoSaveError: j.videoSaveError || undefined,
+        audioSavedTo: j.audioSavedTo || undefined,
+        audioSaveError: j.audioSaveError || undefined,
       })}\n\n`
     );
   send(job);

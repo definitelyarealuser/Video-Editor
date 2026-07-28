@@ -199,6 +199,17 @@
         </div>
       </div>
 
+      <div class="settings">
+        <div class="field field-wide">
+          <label for="videoSavePath">Also save the MP4 to this folder on this computer <span class="field-optional">(optional)</span></label>
+          <input type="text" id="videoSavePath" name="videoSavePath" placeholder="e.g. C:\Users\andyw\Videos\Sermons or /Users/andy/Movies/Sermons" />
+        </div>
+        <div class="field field-wide">
+          <label for="audioSavePath">Also save the MP3 to this folder on this computer <span class="field-optional">(optional)</span></label>
+          <input type="text" id="audioSavePath" name="audioSavePath" placeholder="e.g. C:\Users\andyw\Music\Sermons or /Users/andy/Music/Sermons" />
+        </div>
+      </div>
+
       <div id="soundcloud-connect-section" class="soundcloud-connect-section" hidden>
         <span id="soundcloud-connect-status"></span>
         <a id="soundcloud-connect-btn" href="/api/soundcloud/connect" class="soundcloud-connect-link" hidden>Connect SoundCloud</a>
@@ -221,6 +232,8 @@
         <a id="download-link" class="download-btn" download>Download MP4</a>
         <a id="download-mp3-link" class="download-btn download-btn-secondary" download hidden>Download MP3</a>
       </div>
+      <div id="video-save-status" class="save-status" hidden></div>
+      <div id="audio-save-status" class="save-status" hidden></div>
     </section>
 
     <section id="vimeo-status-section" class="vimeo-status-section" hidden>

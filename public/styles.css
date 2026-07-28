@@ -708,6 +708,20 @@ label.core-text-label {
   font-weight: 600;
 }
 
+.save-status {
+  margin-top: 10px;
+  font-size: 0.85rem;
+  word-break: break-all;
+}
+
+.save-status.save-ok {
+  color: var(--success);
+}
+
+.save-status.save-failed {
+  color: var(--error);
+}
+
 .error-box {
   background: rgba(229, 86, 107, 0.1);
   border: 1px solid var(--error);

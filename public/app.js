@@ -25,6 +25,8 @@
   const resultPreview = document.getElementById('result-preview');
   const downloadLink = document.getElementById('download-link');
   const downloadMp3Link = document.getElementById('download-mp3-link');
+  const videoSaveStatus = document.getElementById('video-save-status');
+  const audioSaveStatus = document.getElementById('audio-save-status');
 
   const errorSection = document.getElementById('error-section');
   const errorMessage = document.getElementById('error-message');
@@ -322,6 +324,8 @@
         targetLufsSelect.value = String(s.targetLufs);
       }
       if (typeof s.exportMp3 === 'boolean') exportMp3Checkbox.checked = s.exportMp3;
+      if (typeof s.videoSavePath === 'string') document.getElementById('videoSavePath').value = s.videoSavePath;
+      if (typeof s.audioSavePath === 'string') document.getElementById('audioSavePath').value = s.audioSavePath;
       refreshIdleRenderLabel();
     } catch {
       // Non-critical - just leave the HTML defaults in place.
@@ -944,6 +948,8 @@
     soundcloudStatusSection.hidden = true;
     soundcloudResult.hidden = true;
     soundcloudError.hidden = true;
+    videoSaveStatus.hidden = true;
+    audioSaveStatus.hidden = true;
     progressSection.hidden = false;
     progressFill.style.width = '0%';
     progressLabel.textContent = 'Uploading files…';
@@ -1018,6 +1024,8 @@
     formData.append('publishToSoundCloud', publishToSoundCloud);
     formData.append('soundcloudPlaylistIds', soundcloudPlaylistIds.join(','));
     formData.append('soundcloudPrivacy', soundcloudPrivacy || 'private');
+    formData.append('videoSavePath', document.getElementById('videoSavePath').value.trim());
+    formData.append('audioSavePath', document.getElementById('audioSavePath').value.trim());
 
     let jobId;
     try {
@@ -1067,6 +1075,25 @@
           downloadMp3Link.hidden = false;
         } else {
           downloadMp3Link.hidden = true;
+        }
+
+        if (data.videoSavedTo) {
+          videoSaveStatus.hidden = false;
+          videoSaveStatus.className = 'save-status save-ok';
+          videoSaveStatus.textContent = `Video also saved to ${data.videoSavedTo}`;
+        } else if (data.videoSaveError) {
+          videoSaveStatus.hidden = false;
+          videoSaveStatus.className = 'save-status save-failed';
+          videoSaveStatus.textContent = `Could not save video to that folder: ${data.videoSaveError}`;
+        }
+        if (data.audioSavedTo) {
+          audioSaveStatus.hidden = false;
+          audioSaveStatus.className = 'save-status save-ok';
+          audioSaveStatus.textContent = `Audio also saved to ${data.audioSavedTo}`;
+        } else if (data.audioSaveError) {
+          audioSaveStatus.hidden = false;
+          audioSaveStatus.className = 'save-status save-failed';
+          audioSaveStatus.textContent = `Could not save audio to that folder: ${data.audioSaveError}`;
         }
 
         if (publishToVimeo) {
