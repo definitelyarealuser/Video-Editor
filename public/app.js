@@ -22,6 +22,7 @@
   const progressLabel = document.getElementById('progress-label');
 
   const resultSection = document.getElementById('result-section');
+  const resultPreview = document.getElementById('result-preview');
   const downloadLink = document.getElementById('download-link');
   const downloadMp3Link = document.getElementById('download-mp3-link');
 
@@ -883,6 +884,7 @@
         resultSection.hidden = false;
         const outputName = computeOutputName();
         const url = `/api/download/${jobId}`;
+        resultPreview.src = url;
         downloadLink.href = url;
         downloadLink.download = outputName + '.mp4';
 
