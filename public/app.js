@@ -77,7 +77,9 @@
       const checkbox = document.createElement('input');
       checkbox.type = 'checkbox';
       checkbox.value = s.id;
-      checkbox.checked = true; // all showcases selected by default, matching the original always-add-to-all behavior
+      // Only "Fullerton Free Sermons" is on by default - the year/series showcases change
+      // often enough that defaulting them on risks silently adding a video to the wrong one.
+      checkbox.checked = /fullerton free sermons/i.test(s.name);
       label.appendChild(checkbox);
       label.appendChild(document.createTextNode(s.name));
       vimeoShowcaseChecks.appendChild(label);
