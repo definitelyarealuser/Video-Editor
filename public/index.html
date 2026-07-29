@@ -124,16 +124,9 @@
       </section>
 
       <section class="quality-panel" id="quality-panel" hidden>
-        <h3>Output quality <span class="trim-panel-hint">(affects file size and render time - Vimeo/SoundCloud re-encode whatever you upload anyway, so this mostly trades render/upload time for file size, not final viewer quality)</span></h3>
+        <h3>Output quality <span class="trim-panel-hint">(estimated file sizes update automatically - Vimeo/SoundCloud re-encode whatever you upload anyway, so this mostly trades render time for file size, not final viewer quality)</span></h3>
 
         <div class="quality-controls">
-          <div class="field">
-            <label for="videoCodec">Video codec</label>
-            <select id="videoCodec">
-              <option value="h264" selected>H.264 (widely compatible)</option>
-              <option value="h265">H.265 / HEVC (smaller, slower to encode)</option>
-            </select>
-          </div>
           <div class="field">
             <label for="videoQuality">Video quality</label>
             <select id="videoQuality">
@@ -142,10 +135,18 @@
               <option value="smaller">Smaller File</option>
             </select>
           </div>
+          <div class="field">
+            <label for="mp3Bitrate">MP3 bitrate</label>
+            <select id="mp3Bitrate">
+              <option value="128">128 kbps</option>
+              <option value="192" selected>192 kbps</option>
+              <option value="320">320 kbps</option>
+            </select>
+          </div>
         </div>
 
         <div id="estimate-size-status" class="detect-progress" hidden>
-          <div class="progress-label" id="estimate-size-label">Estimating file sizes… running a few short test encodes, this can take a minute. Sizes shown on the dropdowns below update automatically.</div>
+          <div class="progress-label" id="estimate-size-label">Estimating file sizes… running a few short test encodes, this can take a minute. Sizes shown on the dropdowns above update automatically.</div>
         </div>
         <div id="estimate-size-error" class="error-box" hidden></div>
 
@@ -155,11 +156,6 @@
               <input type="checkbox" id="exportMp3" checked />
               Render MP3
             </label>
-            <select id="mp3Bitrate">
-              <option value="128">128 kbps</option>
-              <option value="192" selected>192 kbps</option>
-              <option value="320">320 kbps</option>
-            </select>
           </div>
           <div class="toggle-row">
             <label class="inline-check">

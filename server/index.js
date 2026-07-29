@@ -212,11 +212,10 @@ app.post('/api/render/:jobId', useJobIdFromParams, upload.single('png'), async (
     const normalize = toBool(req.body.normalizeAudio, false);
     const targetLufs = toLufs(req.body.targetLufs, -14);
     const exportMp3 = toBool(req.body.exportMp3, false);
-    const videoCodec = req.body.videoCodec === 'h265' ? 'h265' : 'h264';
-    const videoQuality = Object.prototype.hasOwnProperty.call(VIDEO_QUALITY_PRESETS.h264, req.body.videoQuality)
+    const videoQuality = Object.prototype.hasOwnProperty.call(VIDEO_QUALITY_PRESETS, req.body.videoQuality)
       ? req.body.videoQuality
       : 'high';
-    const videoCrf = VIDEO_QUALITY_PRESETS[videoCodec][videoQuality];
+    const videoCrf = VIDEO_QUALITY_PRESETS[videoQuality];
     const mp3Bitrate = MP3_BITRATE_PRESETS.includes(Number(req.body.mp3Bitrate)) ? Number(req.body.mp3Bitrate) : 192;
     const publishToVimeo = toBool(req.body.publishToVimeo, false) && vimeo.isConfigured();
     const vimeoDescription = String(req.body.vimeoDescription || '').slice(0, 5000);
@@ -287,14 +286,12 @@ app.post('/api/render/:jobId', useJobIdFromParams, upload.single('png'), async (
       exportMp3,
       videoSavePath,
       audioSavePath,
-      videoCodec,
       videoQuality,
       mp3Bitrate,
     };
 
     render({
       pngPath,
-      videoCodec,
       videoCrf,
       mp3Bitrate,
       videoPath: job.videoPath,
@@ -404,10 +401,6 @@ app.post('/api/estimate-size/:jobId', useJobIdFromParams, async (req, res) => {
   const trimStart = toNonNegativeFloat(req.body.trimStart, 0);
   const trimEnd = toPositiveFloat(req.body.trimEnd, fullDuration);
   const mainDurationSeconds = Math.max(trimEnd - trimStart, 1);
-  // Only sample whichever codec the UI currently has selected - the other one is sampled
-  // lazily later if the user actually switches to it (see the client's videoCodec change
-  // handler), instead of always paying for both up front.
-  const codec = req.body.videoCodec === 'h265' ? 'h265' : req.body.videoCodec === 'h264' ? 'h264' : undefined;
 
   try {
     const sizes = await estimateFileSizes({
@@ -418,7 +411,6 @@ app.post('/api/estimate-size/:jobId', useJobIdFromParams, async (req, res) => {
       height: job.videoInfo.height,
       fps: job.videoInfo.fps,
       mainDurationSeconds,
-      codec,
     });
     res.json(sizes);
   } catch (err) {

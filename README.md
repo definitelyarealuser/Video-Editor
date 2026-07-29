@@ -72,14 +72,13 @@ Every render feeds a small local history (`data/history.json`, gitignored - noth
 - **Normalize audio**: runs the combined audio (video + bookend silence) through `loudnorm` (EBU R128) targeting the chosen integrated loudness before the final fade-out. Single-pass, so expect the result to land within roughly half a LU of the target.
 - **Also render an MP3**: exports a second file alongside the MP4 containing just the main clip's audio — the PNG-hold silence at the start and end is excluded, but the clip still fades up from silence and back down over the crossfade duration, so it sounds like a clean standalone edit rather than an abrupt cut. This applies regardless of the "apply crossfade to audio too" setting above (which only affects the audio inside the full MP4).
 
-## Output quality (codec/CRF presets, file size estimates)
+## Output quality (CRF presets, file size estimates)
 
-Once a video's uploaded, an **Output quality** panel appears above the render settings:
+Once a video's uploaded, an **Output quality** panel appears above the render settings, with the video quality and MP3 bitrate dropdowns side by side:
 
-- **Video codec**: H.264 (default - the most universally compatible) or H.265/HEVC (noticeably smaller files at the same visual quality, but 2-4x slower to encode in software). Since Vimeo re-transcodes everything you upload anyway, this choice mostly trades your own render/upload time for file size - it doesn't change what viewers ultimately see on Vimeo either way.
-- **Video quality**: High Quality / Balanced / Smaller File - maps to a CRF value per codec (H.265 uses higher CRF numbers than H.264 for comparable perceived quality, since it needs less data to represent the same detail).
+- **Video quality**: High Quality / Balanced / Smaller File - maps to a CRF value for H.264 (the app always encodes with `libx264`; since Vimeo re-transcodes everything you upload anyway, this choice mostly trades your own render time for file size, not what viewers ultimately see).
 - **MP3 bitrate**: 128 / 192 (default) / 320 kbps. Spoken-word sermon audio holds up fine at 128-192kbps; 320kbps is mostly only worth it if there's music you want to preserve at higher fidelity.
-- **File size estimates**: happen automatically, no button to click. As soon as a video's uploaded, and again whenever the trim range changes, the app encodes a short sample from the middle of your current selection at each quality preset for the currently-selected codec (instant math for MP3, since CBR MP3 size is just bitrate × duration) and shows the extrapolated full-length size right in each dropdown option, e.g. "Balanced (~650 MB)". This is a real measurement against your specific footage, not a generic guess - CRF encoding has no fixed bitrate, so how well a clip compresses depends entirely on its content. Switching the video codec dropdown samples that codec's presets too, the first time you pick it.
+- **File size estimates**: happen automatically, no button to click. As soon as a video's uploaded, and again whenever the trim range changes, the app encodes a short sample from the middle of your current selection at each video quality preset (instant math for MP3, since CBR MP3 size is just bitrate × duration) and shows the extrapolated full-length size right in each dropdown option, e.g. "Balanced (~650 MB)". This is a real measurement against your specific footage, not a generic guess - CRF encoding has no fixed bitrate, so how well a clip compresses depends entirely on its content.
 
 ## Notes / tuning
 

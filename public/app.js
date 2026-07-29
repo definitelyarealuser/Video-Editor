@@ -398,9 +398,6 @@
         targetLufsSelect.value = String(s.targetLufs);
       }
       if (typeof s.exportMp3 === 'boolean') exportMp3Checkbox.checked = s.exportMp3;
-      if (typeof s.videoCodec === 'string' && document.querySelector(`#videoCodec option[value="${s.videoCodec}"]`)) {
-        videoCodecSelect.value = s.videoCodec;
-      }
       if (typeof s.videoQuality === 'string' && document.querySelector(`#videoQuality option[value="${s.videoQuality}"]`)) {
         videoQualitySelect.value = s.videoQuality;
       }
@@ -452,8 +449,7 @@
     resetQualityOptionLabels();
   }
 
-  // --- Output quality: codec/CRF preset + MP3 bitrate, with real size estimates ---
-  const videoCodecSelect = document.getElementById('videoCodec');
+  // --- Output quality: CRF preset + MP3 bitrate, with real size estimates ---
   const videoQualitySelect = document.getElementById('videoQuality');
   const mp3BitrateSelect = document.getElementById('mp3Bitrate');
   const estimateSizeStatus = document.getElementById('estimate-size-status');
@@ -486,7 +482,7 @@
       resetQualityOptionLabels();
       return;
     }
-    const videoSizes = state.sizeEstimates.video[videoCodecSelect.value] || {};
+    const videoSizes = state.sizeEstimates.video || {};
     Array.from(videoQualitySelect.options).forEach((opt) => {
       const baseLabel = VIDEO_QUALITY_LABELS[opt.value] || opt.value;
       const size = videoSizes[opt.value];
@@ -500,16 +496,9 @@
     });
   }
 
-  videoCodecSelect.addEventListener('change', updateQualityOptionLabels);
-
   // Estimates run automatically now - as soon as a video's uploaded, and again whenever the
   // trim range changes - so there's no manual button to gate this behind; every caller just
   // asks for one and the debounce/in-flight guards below keep that cheap.
-  //
-  // Only the currently-selected codec's 3 quality presets get sampled per request (not both
-  // codecs' 6) - halves the ffmpeg work in the common case where the codec dropdown is never
-  // touched. Switching codecs later lazily fetches just that codec's numbers (see the
-  // videoCodec change handler below), merged into whatever's already cached.
   let estimateInFlight = false;
   let estimatePending = false;
   let sizeEstimateDebounceTimer = null;
@@ -539,11 +528,7 @@
       const res = await fetch(`/api/estimate-size/${state.videoJobId}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          trimStart: trimStartHandle.value,
-          trimEnd: trimEndHandle.value,
-          videoCodec: videoCodecSelect.value,
-        }),
+        body: JSON.stringify({ trimStart: trimStartHandle.value, trimEnd: trimEndHandle.value }),
       });
       const data = await res.json();
       if (!res.ok) {
@@ -551,9 +536,7 @@
         err.detail = data.errorDetail;
         throw err;
       }
-      state.sizeEstimates = state.sizeEstimates || { video: {}, audio: {} };
-      state.sizeEstimates.video = { ...state.sizeEstimates.video, ...data.video };
-      state.sizeEstimates.audio = data.audio;
+      state.sizeEstimates = data;
       updateQualityOptionLabels();
     } catch (err) {
       setErrorWithDetail(estimateSizeError, err.message, err.detail);
@@ -566,14 +549,6 @@
       }
     }
   }
-
-  // A codec switch is a single deliberate click, not a rapid-fire nudge - estimate it right
-  // away rather than waiting out the debounce, but only if this codec hasn't been sampled yet.
-  videoCodecSelect.addEventListener('change', () => {
-    if (state.videoJobId && !(state.sizeEstimates && state.sizeEstimates.video[videoCodecSelect.value])) {
-      runSizeEstimate();
-    }
-  });
 
   function setTrimRange(start, end) {
     trimStartHandle.value = start;
@@ -1298,7 +1273,6 @@
     formData.append('soundcloudPrivacy', soundcloudPrivacy || 'private');
     formData.append('videoSavePath', document.getElementById('videoSavePath').value.trim());
     formData.append('audioSavePath', document.getElementById('audioSavePath').value.trim());
-    formData.append('videoCodec', videoCodecSelect.value);
     formData.append('videoQuality', videoQualitySelect.value);
     formData.append('mp3Bitrate', mp3BitrateSelect.value);
 
