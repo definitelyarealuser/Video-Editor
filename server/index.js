@@ -9,9 +9,7 @@ const multer = require('multer');
 
 const jobs = require('./jobs');
 const { probe, render, checkFfmpegAvailable, estimateFileSizes, VIDEO_QUALITY_PRESETS, MP3_BITRATE_PRESETS } = require('./ffmpeg');
-const { extractPcmFloat32, transcribeInChunks, computeSpectralFlatness, CHUNK_SECONDS } = require('./transcribe');
-const { findSermonCandidates } = require('./sermonDetect');
-const { recordRender, getCalibratedDetectionOptions, getLastRenderSettings } = require('./history');
+const { recordRender, getLastRenderSettings } = require('./history');
 const vimeo = require('./vimeo');
 const soundcloud = require('./soundcloud');
 const bookendImages = require('./bookendImages');
@@ -155,75 +153,7 @@ app.post('/api/upload-video', assignJobId, upload.single('video'), async (req, r
   }
 });
 
-// --- Step 2 (optional): analyze the uploaded video to suggest a sermon start/end ---
-app.post('/api/analyze/:jobId', useJobIdFromParams, async (req, res) => {
-  const jobId = req.jobId;
-  const job = jobs.get(jobId);
-  if (!job || !job.videoPath) {
-    return res.status(404).json({ error: 'Upload a video first.' });
-  }
-
-  jobs.update(jobId, { status: 'analyzing', progress: 0, error: null, candidates: null });
-  res.json({ jobId });
-
-  (async () => {
-    const samples = await extractPcmFloat32(job.videoPath);
-    // Spectral flatness runs as its own ffmpeg pass over the same audio - independent of
-    // transcription, so it runs in parallel rather than adding to the wait.
-    const [{ chunks }, flatnessByChunk] = await Promise.all([
-      transcribeInChunks(samples, {
-        onProgress: (fraction) => jobs.update(jobId, { progress: fraction }),
-      }),
-      computeSpectralFlatness(job.videoPath, CHUNK_SECONDS).catch(() => []), // non-essential signal; don't fail analysis if it errors
-    ]);
-    chunks.forEach((chunk, i) => {
-      if (flatnessByChunk[i] != null) chunk.flatness = flatnessByChunk[i];
-    });
-
-    const withText = chunks.filter((c) => c.text).length;
-    const calibrated = getCalibratedDetectionOptions();
-    console.log(
-      `Analyze ${jobId}: ${chunks.length} chunks total, ${withText} with transcribed text, ` +
-        `${chunks.filter((c) => c.flatness != null).length} with a flatness reading. ` +
-        `Calibrated options from history: ${JSON.stringify(calibrated)}`
-    );
-
-    // Full scoring (with the repetition/flatness discounts) gives the best result, but a
-    // real recording can come out quieter/noisier/more repetitive than the synthetic signals
-    // this was calibrated against - so if it finds nothing, fall back to progressively looser
-    // passes rather than leaving the user with no suggestion at all.
-    let candidates = findSermonCandidates(chunks, calibrated);
-    if (!candidates.length) {
-      console.log(`Analyze ${jobId}: no candidates with full scoring, retrying with repetition/flatness discounts disabled`);
-      candidates = findSermonCandidates(chunks, { ...calibrated, skipPenalties: true });
-    }
-    if (!candidates.length) {
-      console.log(`Analyze ${jobId}: still nothing, retrying with a looser speech threshold`);
-      // Only carry over the calibrated duration target if it's actually present - explicitly
-      // spreading an `undefined` value would overwrite (not fall back to) the built-in default.
-      const durationCalibration =
-        calibrated.idealMinutes != null
-          ? { idealMinutes: calibrated.idealMinutes, scoreSigmaMinutes: calibrated.scoreSigmaMinutes }
-          : {};
-      candidates = findSermonCandidates(chunks, {
-        ...durationCalibration,
-        skipPenalties: true,
-        minWordsPerMinute: 35,
-        maxGapChunks: 4,
-        minCandidateMinutes: 3,
-      });
-    }
-    console.log(`Analyze ${jobId}: ${candidates.length} candidate(s) found.`);
-
-    // Kept on the job (not persisted to disk) so a later render for this same job can label
-    // real speech-bearing content inside vs. outside the confirmed trim for history.js.
-    jobs.update(jobId, { status: 'analyzed', progress: 1, candidates, chunks });
-  })().catch((err) => {
-    jobs.update(jobId, { status: 'error', error: err.message, errorDetail: err.detail || null });
-  });
-});
-
-// --- Step 3: render, using the already-uploaded (and optionally trimmed) video ---
+// --- Step 2: render, using the already-uploaded (and optionally trimmed) video ---
 app.post('/api/render/:jobId', useJobIdFromParams, upload.single('png'), async (req, res) => {
   const jobId = req.jobId;
   const job = jobs.get(jobId);
@@ -397,17 +327,7 @@ app.post('/api/render/:jobId', useJobIdFromParams, upload.single('png'), async (
           audioSavedTo: audioSaveResult.savedTo || null,
           audioSaveError: audioSaveResult.error || null,
         });
-        // A deliberately trimmed range (not the whole file) with chunk data from an earlier
-        // analyze is real ground truth: label real speech-bearing content inside the confirmed
-        // trim as "sermon" and outside it as "not sermon". A render of the whole video doesn't
-        // tell us that - it might just be a full-service render with no isolated sermon - so
-        // only the render settings get recorded in that case.
-        recordRender({
-          trimStart: isTrimmed ? trimStart : null,
-          trimEnd: isTrimmed ? trimEnd : null,
-          chunks: isTrimmed ? job.chunks : null,
-          renderSettings,
-        });
+        recordRender({ renderSettings });
         cleanupAll();
 
         // Publishing was confirmed up front (at the "Render" click), so it runs automatically
@@ -532,7 +452,6 @@ app.get('/api/progress/:jobId', (req, res) => {
         error: j.error,
         errorDetail: j.errorDetail || undefined,
         hasMp3: !!j.mp3OutputPath,
-        candidates: j.candidates || undefined,
         vimeoUrl: j.vimeoUrl || undefined,
         vimeoShowcaseResults: j.vimeoShowcaseResults || undefined,
         scStatus: j.scStatus || undefined,
@@ -555,7 +474,7 @@ app.get('/api/progress/:jobId', (req, res) => {
   const vimeoSettled = (j) => !j.willPublishToVimeo || j.status === 'published' || j.status === 'publish-error';
   const soundcloudSettled = (j) => !j.willPublishToSoundcloud || j.scStatus === 'published' || j.scStatus === 'error';
   const terminal = (j) => {
-    if (j.status === 'error' || j.status === 'analyzed') return true;
+    if (j.status === 'error') return true;
     if (!['done', 'publishing', 'published', 'publish-error'].includes(j.status)) return false;
     return vimeoSettled(j) && soundcloudSettled(j);
   };

@@ -3,7 +3,6 @@
     png: null,
     videoJobId: null,
     videoDuration: 0,
-    candidates: [],
     vimeoConfigured: false,
   };
 
@@ -427,13 +426,6 @@
   const previewStartBtn = document.getElementById('preview-start-btn');
   const previewEndBtn = document.getElementById('preview-end-btn');
   const playPauseBtn = document.getElementById('play-pause-btn');
-  const detectSermonBtn = document.getElementById('detect-sermon-btn');
-  const detectProgress = document.getElementById('detect-progress');
-  const detectProgressFill = document.getElementById('detect-progress-fill');
-  const detectProgressLabel = document.getElementById('detect-progress-label');
-  const candidateList = document.getElementById('candidate-list');
-  const candidateChips = document.getElementById('candidate-chips');
-  const detectError = document.getElementById('detect-error');
   const videoPreview = document.getElementById('video-preview');
 
   function formatTime(seconds) {
@@ -702,86 +694,6 @@
       videoPreview.pause();
       videoPreview.currentTime = parseFloat(trimStartHandle.value);
     }
-  });
-
-  function renderCandidateChips() {
-    candidateChips.innerHTML = '';
-    state.candidates.forEach((c, i) => {
-      const chip = document.createElement('button');
-      chip.type = 'button';
-      chip.className = 'candidate-chip' + (i === 0 ? ' selected' : '');
-      chip.textContent = `${formatTime(c.start)}–${formatTime(c.end)} (${formatTime(c.durationSec)})`;
-      chip.addEventListener('click', () => {
-        setTrimRange(c.start, c.end);
-        candidateChips.querySelectorAll('.candidate-chip').forEach((el) => el.classList.remove('selected'));
-        chip.classList.add('selected');
-      });
-      candidateChips.appendChild(chip);
-    });
-    candidateList.hidden = state.candidates.length === 0;
-  }
-
-  detectSermonBtn.addEventListener('click', async () => {
-    if (!state.videoJobId) return;
-    detectSermonBtn.disabled = true;
-    detectError.hidden = true;
-    candidateList.hidden = true;
-    detectProgress.hidden = false;
-    detectProgressFill.style.width = '0%';
-    detectProgressLabel.textContent = 'Analyzing… this can take a while for long files.';
-
-    try {
-      const res = await fetch(`/api/analyze/${state.videoJobId}`, { method: 'POST' });
-      const data = await res.json();
-      if (!res.ok) {
-        const err = new Error(data.error || 'Could not start analysis.');
-        err.detail = data.errorDetail;
-        throw err;
-      }
-    } catch (err) {
-      detectProgress.hidden = true;
-      setErrorWithDetail(detectError, err.message, err.detail);
-      detectSermonBtn.disabled = false;
-      return;
-    }
-
-    const source = new EventSource(`/api/progress/${state.videoJobId}`);
-    source.onmessage = (evt) => {
-      const data = JSON.parse(evt.data);
-      if (data.status === 'error') {
-        source.close();
-        detectProgress.hidden = true;
-        setErrorWithDetail(detectError, data.error || 'Analysis failed.', data.errorDetail);
-        detectSermonBtn.disabled = false;
-        return;
-      }
-      const pct = Math.round((data.progress || 0) * 100);
-      detectProgressFill.style.width = pct + '%';
-      detectProgressLabel.textContent = `Analyzing… ${pct}%`;
-
-      if (data.status === 'analyzed') {
-        source.close();
-        detectProgress.hidden = true;
-        detectSermonBtn.disabled = false;
-        state.candidates = data.candidates || [];
-        if (state.candidates.length) {
-          setTrimRange(state.candidates[0].start, state.candidates[0].end);
-          renderCandidateChips();
-        } else {
-          detectError.hidden = false;
-          detectError.textContent = 'Could not confidently detect a sermon segment - trim manually using the slider above.';
-        }
-      }
-    };
-    source.onerror = () => {
-      source.close();
-      if (detectProgress.hidden === false) {
-        detectProgress.hidden = true;
-        detectError.hidden = false;
-        detectError.textContent = 'Lost connection to the server during analysis.';
-        detectSermonBtn.disabled = false;
-      }
-    };
   });
 
   // --- Dropzones ---
@@ -1173,7 +1085,6 @@
 
       state.videoJobId = data.jobId;
       state.videoDuration = data.duration;
-      state.candidates = [];
 
       showDzState(dzVideo, 'dz-filled');
       videoPreview.src = URL.createObjectURL(file);
@@ -1189,8 +1100,6 @@
       setTrimRange(0, data.duration);
       trimPanel.hidden = false;
       qualityPanel.hidden = false;
-      candidateList.hidden = true;
-      detectError.hidden = true;
 
       updateRenderButton();
     };
@@ -1206,7 +1115,6 @@
   dzVideo.querySelector('.dz-clear').addEventListener('dz-clear-click', () => {
     state.videoJobId = null;
     state.videoDuration = 0;
-    state.candidates = [];
     showDzState(dzVideo, 'dz-empty');
     inputVideo.value = '';
     trimPanel.hidden = true;
@@ -1325,7 +1233,6 @@
     // reset the dropzone/trim panel - a fresh render needs a fresh upload.
     state.videoJobId = null;
     state.videoDuration = 0;
-    state.candidates = [];
     showDzState(dzVideo, 'dz-empty');
     inputVideo.value = '';
     trimPanel.hidden = true;

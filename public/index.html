@@ -61,8 +61,6 @@
 
         <video id="video-preview" muted></video>
 
-        <button type="button" id="detect-sermon-btn" class="detect-btn">✨ Auto-Detect Sermon</button>
-
         <div class="trim-slider" id="trim-slider">
           <div class="trim-track"></div>
           <div class="trim-range-fill" id="trim-range-fill"></div>
@@ -101,17 +99,28 @@
           <button type="button" id="preview-end-btn" class="playback-btn">Preview End</button>
         </div>
 
-        <div id="detect-progress" class="detect-progress" hidden>
-          <div class="progress-track"><div class="progress-fill" id="detect-progress-fill"></div></div>
-          <div class="progress-label" id="detect-progress-label">Analyzing…</div>
+        <div class="trim-panel-settings">
+          <div class="field">
+            <label for="startDuration">Start PNG duration (seconds)</label>
+            <input type="number" id="startDuration" name="startDuration" value="5" min="0.5" step="0.5" required />
+          </div>
+          <div class="field">
+            <label for="endDuration">End PNG duration (seconds)</label>
+            <input type="number" id="endDuration" name="endDuration" value="5" min="0.5" step="0.5" required />
+          </div>
+          <div class="field">
+            <label for="transition">Crossfade duration (seconds)</label>
+            <input type="number" id="transition" name="transition" value="1" min="0.1" step="0.1" required />
+            <label class="inline-check">
+              <input type="checkbox" id="crossfadeAudio" checked />
+              Apply crossfade to audio too
+            </label>
+          </div>
+          <div class="field">
+            <label for="fadeOut">Final fade-to-black (seconds)</label>
+            <input type="number" id="fadeOut" name="fadeOut" value="1.5" min="0.1" step="0.1" required />
+          </div>
         </div>
-
-        <div id="candidate-list" class="candidate-list" hidden>
-          <div class="candidate-list-label">Detected candidates (pick one if the top choice looks wrong):</div>
-          <div class="candidate-chips" id="candidate-chips"></div>
-        </div>
-
-        <div id="detect-error" class="error-box detect-error" hidden></div>
       </section>
 
       <section class="quality-panel" id="quality-panel" hidden>
@@ -174,29 +183,6 @@
           </div>
         </div>
       </section>
-
-      <div class="settings">
-        <div class="field">
-          <label for="startDuration">Start PNG duration (seconds)</label>
-          <input type="number" id="startDuration" name="startDuration" value="5" min="0.5" step="0.5" required />
-        </div>
-        <div class="field">
-          <label for="endDuration">End PNG duration (seconds)</label>
-          <input type="number" id="endDuration" name="endDuration" value="5" min="0.5" step="0.5" required />
-        </div>
-        <div class="field">
-          <label for="transition">Crossfade duration (seconds)</label>
-          <input type="number" id="transition" name="transition" value="1" min="0.1" step="0.1" required />
-          <label class="inline-check">
-            <input type="checkbox" id="crossfadeAudio" checked />
-            Apply crossfade to audio too
-          </label>
-        </div>
-        <div class="field">
-          <label for="fadeOut">Final fade-to-black (seconds)</label>
-          <input type="number" id="fadeOut" name="fadeOut" value="1.5" min="0.1" step="0.1" required />
-        </div>
-      </div>
 
       <div class="settings">
         <div class="field">

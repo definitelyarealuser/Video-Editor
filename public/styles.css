@@ -204,8 +204,17 @@ header h1 {
 
 .field-wide { grid-column: 1 / -1; }
 
+.trim-panel-settings {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 16px;
+  margin-top: 20px;
+  padding-top: 20px;
+  border-top: 1px solid var(--border);
+}
+
 @media (max-width: 640px) {
-  .settings { grid-template-columns: 1fr 1fr; }
+  .settings, .trim-panel-settings { grid-template-columns: 1fr 1fr; }
 }
 
 .field label {
@@ -525,29 +534,6 @@ label.core-text-label {
   .quality-controls { grid-template-columns: 1fr; }
 }
 
-.detect-btn {
-  display: block;
-  width: 100%;
-  background: var(--accent);
-  border: none;
-  color: white;
-  border-radius: 10px;
-  padding: 14px;
-  font-size: 1rem;
-  font-weight: 600;
-  cursor: pointer;
-  margin-bottom: 18px;
-}
-
-.detect-btn:hover {
-  background: var(--accent-hover);
-}
-
-.detect-btn:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-}
-
 .trim-slider {
   position: relative;
   height: 28px;
@@ -717,47 +703,6 @@ label.core-text-label {
 
 .detect-progress .progress-label {
   font-size: 0.82rem;
-}
-
-.candidate-list {
-  margin-top: 14px;
-}
-
-.candidate-list-label {
-  font-size: 0.82rem;
-  color: var(--muted);
-  margin-bottom: 8px;
-}
-
-.candidate-chips {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-
-.candidate-chip {
-  background: var(--bg);
-  border: 1px solid var(--border);
-  color: var(--text);
-  border-radius: 20px;
-  padding: 6px 14px;
-  font-size: 0.82rem;
-  cursor: pointer;
-}
-
-.candidate-chip:hover {
-  border-color: var(--accent);
-}
-
-.candidate-chip.selected {
-  border-color: var(--accent);
-  background: rgba(91, 141, 239, 0.15);
-  color: var(--accent);
-  font-weight: 600;
-}
-
-.detect-error {
-  margin-top: 14px;
 }
 
 .render-requirements {
