@@ -762,6 +762,12 @@ label.core-text-label {
   color: var(--muted);
 }
 
+.progress-time {
+  margin-top: 6px;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
 .progress-safe-note {
   margin-top: 10px;
   font-size: 0.8rem;

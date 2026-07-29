@@ -20,6 +20,7 @@
   const progressSection = document.getElementById('progress-section');
   const progressFill = document.getElementById('progress-fill');
   const progressLabel = document.getElementById('progress-label');
+  const progressTime = document.getElementById('progress-time');
 
   const resultSection = document.getElementById('result-section');
   const resultPreview = document.getElementById('result-preview');
@@ -398,12 +399,9 @@
         targetLufsSelect.value = String(s.targetLufs);
       }
       if (typeof s.exportMp3 === 'boolean') exportMp3Checkbox.checked = s.exportMp3;
-      if (typeof s.videoQuality === 'string' && document.querySelector(`#videoQuality option[value="${s.videoQuality}"]`)) {
-        videoQualitySelect.value = s.videoQuality;
-      }
-      if (typeof s.mp3Bitrate === 'number' && document.querySelector(`#mp3Bitrate option[value="${s.mp3Bitrate}"]`)) {
-        mp3BitrateSelect.value = String(s.mp3Bitrate);
-      }
+      // Video quality and MP3 bitrate deliberately always start at their defaults (High
+      // Quality / 192 kbps) rather than recalling the last-used value like the other
+      // settings here - those are the values labeled "(default)" in their dropdowns.
       updateSavePathVisibility();
       refreshIdleRenderLabel();
     } catch {
@@ -434,6 +432,21 @@
     return `${m}:${String(s).padStart(2, '0')}`;
   }
 
+  // Elapsed is just wall-clock time since rendering started; remaining is a simple linear
+  // extrapolation from the fraction complete so far (ffmpeg's own progress reporting, not a
+  // separate estimate) - reliable once a little progress has actually happened, meaningless
+  // before that, so it reads as "estimating" for the first couple of percent.
+  let renderStartTime = null;
+  function formatElapsedRemaining(fraction) {
+    const elapsedSec = (Date.now() - renderStartTime) / 1000;
+    const elapsedText = `Elapsed ${formatTime(elapsedSec)}`;
+    if (fraction >= 0.03) {
+      const remainingSec = Math.max(0, elapsedSec / fraction - elapsedSec);
+      return `${elapsedText} · About ${formatTime(remainingSec)} remaining`;
+    }
+    return `${elapsedText} · Estimating time remaining…`;
+  }
+
   function updateTrimUI() {
     const start = parseFloat(trimStartHandle.value);
     const end = parseFloat(trimEndHandle.value);
@@ -455,8 +468,8 @@
   const estimateSizeStatus = document.getElementById('estimate-size-status');
   const estimateSizeError = document.getElementById('estimate-size-error');
 
-  const VIDEO_QUALITY_LABELS = { high: 'High Quality', balanced: 'Balanced', smaller: 'Smaller File' };
-  const MP3_BITRATE_LABELS = { 128: '128 kbps', 192: '192 kbps', 320: '320 kbps' };
+  const VIDEO_QUALITY_LABELS = { high: 'High Quality (default)', balanced: 'Balanced', smaller: 'Smaller File' };
+  const MP3_BITRATE_LABELS = { 128: '128 kbps', 192: '192 kbps (default)', 320: '320 kbps' };
 
   state.sizeEstimates = null;
 
@@ -1199,6 +1212,7 @@
     progressSection.hidden = false;
     progressFill.style.width = '0%';
     progressLabel.textContent = 'Uploading files…';
+    progressTime.hidden = true;
   }
 
   function finishRenderCycle() {
@@ -1292,6 +1306,7 @@
     }
 
     progressLabel.textContent = 'Rendering…';
+    renderStartTime = Date.now();
     const source = new EventSource(`/api/progress/${jobId}`);
     source.onmessage = (evt) => {
       const data = JSON.parse(evt.data);
@@ -1303,9 +1318,12 @@
       }
 
       if (data.status === 'rendering') {
-        const pct = Math.round((data.progress || 0) * 100);
+        const fraction = data.progress || 0;
+        const pct = Math.round(fraction * 100);
         progressFill.style.width = pct + '%';
         progressLabel.textContent = `Rendering… ${pct}%`;
+        progressTime.hidden = false;
+        progressTime.textContent = formatElapsedRemaining(fraction);
         return;
       }
 

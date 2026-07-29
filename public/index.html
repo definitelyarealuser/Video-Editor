@@ -130,7 +130,7 @@
           <div class="field">
             <label for="videoQuality">Video quality</label>
             <select id="videoQuality">
-              <option value="high" selected>High Quality</option>
+              <option value="high" selected>High Quality (default)</option>
               <option value="balanced">Balanced</option>
               <option value="smaller">Smaller File</option>
             </select>
@@ -139,7 +139,7 @@
             <label for="mp3Bitrate">MP3 bitrate</label>
             <select id="mp3Bitrate">
               <option value="128">128 kbps</option>
-              <option value="192" selected>192 kbps</option>
+              <option value="192" selected>192 kbps (default)</option>
               <option value="320">320 kbps</option>
             </select>
           </div>
@@ -246,6 +246,7 @@
         <div class="progress-fill" id="progress-fill"></div>
       </div>
       <div class="progress-label" id="progress-label">Starting…</div>
+      <div class="progress-time" id="progress-time" hidden></div>
       <div class="progress-safe-note">Safe to close this tab if you need to - rendering continues on this computer, and the finished file(s) will land in your chosen folder(s) either way. You just won't see this progress bar if you come back.</div>
     </section>
 
