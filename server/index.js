@@ -302,13 +302,20 @@ app.post('/api/render/:jobId', useJobIdFromParams, upload.single('png'), async (
       ? String(req.body.soundcloudPlaylistIds).split(',').map((s) => s.trim()).filter(Boolean)
       : undefined;
     const soundcloudPrivacy = String(req.body.soundcloudPrivacy || 'private');
-    // Optional local folders (on this same machine, since the server runs on your own computer)
-    // to also copy the finished files into, on top of the in-browser download buttons.
+    // Local folders (on this same machine, since the server runs on your own computer) the
+    // finished files get copied into - required, not optional: the video path always, the
+    // audio path whenever an MP3 is actually being rendered. Checked here too, not just in the
+    // client's own gating, since this endpoint can be hit directly.
     const videoSavePath = String(req.body.videoSavePath || '').trim();
     const audioSavePath = String(req.body.audioSavePath || '').trim();
-    // Purely a UI preference (whether to show the video save-path field) - the MP4 itself
-    // always renders regardless, so this has no effect on the render pipeline below.
-    const renderMp4 = toBool(req.body.renderMp4, true);
+    if (!videoSavePath) {
+      await cleanupPng();
+      return res.status(400).json({ error: 'A local folder to save the MP4 to is required.' });
+    }
+    if (exportMp3 && !audioSavePath) {
+      await cleanupPng();
+      return res.status(400).json({ error: 'A local folder to save the MP3 to is required when rendering an MP3.' });
+    }
 
     if (transition >= startDuration || transition >= endDuration || transition >= effectiveDuration) {
       await cleanupPng();
@@ -348,7 +355,6 @@ app.post('/api/render/:jobId', useJobIdFromParams, upload.single('png'), async (
       normalize,
       targetLufs,
       exportMp3,
-      renderMp4,
       videoSavePath,
       audioSavePath,
       videoCodec,

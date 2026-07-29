@@ -233,16 +233,10 @@
 
       <div class="settings">
         <div class="field field-wide">
-          <label class="inline-check">
-            <input type="checkbox" id="renderMp4" checked />
-            Render MP4
-          </label>
-          <div class="save-path-block" id="videoSavePathBlock">
-            <label for="videoSavePath">Also save the MP4 to this folder on this computer <span class="field-optional">(optional)</span></label>
-            <div class="path-input">
-              <input type="text" id="videoSavePath" name="videoSavePath" placeholder="e.g. C:\Users\andyw\Videos\Sermons or /Users/andy/Movies/Sermons" />
-              <button type="button" class="browse-btn" data-target="videoSavePath">Browse…</button>
-            </div>
+          <label for="videoSavePath">Save the MP4 to this folder on this computer</label>
+          <div class="path-input">
+            <input type="text" id="videoSavePath" name="videoSavePath" placeholder="e.g. C:\Users\andyw\Videos\Sermons or /Users/andy/Movies/Sermons" required />
+            <button type="button" class="browse-btn" data-target="videoSavePath">Browse…</button>
           </div>
         </div>
         <div class="field field-wide">
@@ -251,7 +245,7 @@
             Render MP3
           </label>
           <div class="save-path-block" id="audioSavePathBlock">
-            <label for="audioSavePath">Also save the MP3 to this folder on this computer <span class="field-optional">(optional)</span></label>
+            <label for="audioSavePath">Save the MP3 to this folder on this computer</label>
             <div class="path-input">
               <input type="text" id="audioSavePath" name="audioSavePath" placeholder="e.g. C:\Users\andyw\Music\Sermons or /Users/andy/Music/Sermons" />
               <button type="button" class="browse-btn" data-target="audioSavePath">Browse…</button>
