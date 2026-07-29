@@ -464,7 +464,6 @@
   const videoCodecSelect = document.getElementById('videoCodec');
   const videoQualitySelect = document.getElementById('videoQuality');
   const mp3BitrateSelect = document.getElementById('mp3Bitrate');
-  const estimateSizeBtn = document.getElementById('estimate-size-btn');
   const estimateSizeStatus = document.getElementById('estimate-size-status');
   const estimateSizeError = document.getElementById('estimate-size-error');
 
@@ -511,12 +510,10 @@
 
   videoCodecSelect.addEventListener('change', updateQualityOptionLabels);
 
-  // Tracked separately from state.sizeEstimates (which gets nulled out on every trim change,
-  // see updateTrimUI above) so we know whether the user has ever actually asked for an
-  // estimate on this video - once they have, releasing a trim handle keeps it up to date
-  // automatically; until then, dragging the handles around doesn't trigger any encoding.
-  state.hasEstimatedOnce = false;
-
+  // Estimates run automatically now - as soon as a video's uploaded, and again whenever the
+  // trim range changes - so there's no manual button to gate this behind; every caller just
+  // asks for one and the debounce/in-flight guards below keep that cheap.
+  //
   // Only the currently-selected codec's 3 quality presets get sampled per request (not both
   // codecs' 6) - halves the ffmpeg work in the common case where the codec dropdown is never
   // touched. Switching codecs later lazily fetches just that codec's numbers (see the
@@ -529,7 +526,7 @@
   // used to kick off its own full round of ffmpeg sample encodes, piling up redundant work.
   // This waits for a short quiet period before actually asking the server for a new estimate.
   function scheduleSizeEstimate() {
-    if (!state.hasEstimatedOnce) return;
+    if (!state.videoJobId) return;
     clearTimeout(sizeEstimateDebounceTimer);
     sizeEstimateDebounceTimer = setTimeout(runSizeEstimate, 700);
   }
@@ -544,7 +541,6 @@
       return;
     }
     estimateInFlight = true;
-    estimateSizeBtn.disabled = true;
     estimateSizeError.hidden = true;
     estimateSizeStatus.hidden = false;
     try {
@@ -566,13 +562,11 @@
       state.sizeEstimates = state.sizeEstimates || { video: {}, audio: {} };
       state.sizeEstimates.video = { ...state.sizeEstimates.video, ...data.video };
       state.sizeEstimates.audio = data.audio;
-      state.hasEstimatedOnce = true;
       updateQualityOptionLabels();
     } catch (err) {
       setErrorWithDetail(estimateSizeError, err.message, err.detail);
     } finally {
       estimateSizeStatus.hidden = true;
-      estimateSizeBtn.disabled = false;
       estimateInFlight = false;
       if (estimatePending) {
         estimatePending = false;
@@ -581,11 +575,10 @@
     }
   }
 
-  estimateSizeBtn.addEventListener('click', runSizeEstimate);
   // A codec switch is a single deliberate click, not a rapid-fire nudge - estimate it right
   // away rather than waiting out the debounce, but only if this codec hasn't been sampled yet.
   videoCodecSelect.addEventListener('change', () => {
-    if (state.hasEstimatedOnce && !(state.sizeEstimates && state.sizeEstimates.video[videoCodecSelect.value])) {
+    if (state.videoJobId && !(state.sizeEstimates && state.sizeEstimates.video[videoCodecSelect.value])) {
       runSizeEstimate();
     }
   });
@@ -595,6 +588,7 @@
     trimEndHandle.value = end;
     updateTrimUI();
     scrubTo(start);
+    scheduleSizeEstimate();
   }
 
   // --- Live preview while trimming ---
@@ -1218,7 +1212,6 @@
     trimPanel.hidden = true;
     qualityPanel.hidden = true;
     state.sizeEstimates = null;
-    state.hasEstimatedOnce = false;
     updateRenderButton();
   });
 
@@ -1338,7 +1331,6 @@
     trimPanel.hidden = true;
     qualityPanel.hidden = true;
     state.sizeEstimates = null;
-    state.hasEstimatedOnce = false;
     updateRenderButton();
   }
 
