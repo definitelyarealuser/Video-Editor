@@ -1342,11 +1342,16 @@
         resultPreview.src = url;
         downloadLink.href = url;
         downloadLink.download = outputName + '.mp4';
+        // No need for a download button once the file's already been copied to a chosen local
+        // folder - the confirmation text below is enough. Still shown as a fallback if no
+        // folder was set, or if the copy itself failed, since download is then the only way
+        // to actually get the file.
+        downloadLink.hidden = !!data.videoSavedTo;
 
         if (data.hasMp3) {
           downloadMp3Link.href = `/api/download/${jobId}/mp3`;
           downloadMp3Link.download = outputName + '.mp3';
-          downloadMp3Link.hidden = false;
+          downloadMp3Link.hidden = !!data.audioSavedTo;
         } else {
           downloadMp3Link.hidden = true;
         }
