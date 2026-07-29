@@ -12,6 +12,7 @@
   const inputPng = document.getElementById('input-png');
   const inputVideo = document.getElementById('input-video');
   const renderBtn = document.getElementById('render-btn');
+  const renderRequirements = document.getElementById('render-requirements');
   const form = document.getElementById('render-form');
 
   const videoUploadPct = document.getElementById('video-upload-pct');
@@ -30,6 +31,33 @@
 
   const errorSection = document.getElementById('error-section');
   const errorMessage = document.getElementById('error-message');
+
+  // Fills an error-box container with a plain-English message, plus (if `detail` is present -
+  // e.g. raw ffmpeg stderr) a "Show technical details" toggle that reveals it in a scrollable
+  // monospace block instead of dumping it straight into the main message text.
+  function setErrorWithDetail(container, message, detail) {
+    container.innerHTML = '';
+    container.hidden = false;
+    const msgEl = document.createElement('div');
+    msgEl.textContent = message;
+    container.appendChild(msgEl);
+    if (detail) {
+      const toggle = document.createElement('button');
+      toggle.type = 'button';
+      toggle.className = 'error-detail-toggle';
+      toggle.textContent = 'Show technical details';
+      const pre = document.createElement('pre');
+      pre.className = 'error-detail';
+      pre.textContent = detail;
+      pre.hidden = true;
+      toggle.addEventListener('click', () => {
+        pre.hidden = !pre.hidden;
+        toggle.textContent = pre.hidden ? 'Show technical details' : 'Hide technical details';
+      });
+      container.appendChild(toggle);
+      container.appendChild(pre);
+    }
+  }
 
   const startOverSection = document.getElementById('start-over-section');
   const startOverBtn = document.getElementById('start-over-btn');
@@ -489,8 +517,33 @@
   // automatically; until then, dragging the handles around doesn't trigger any encoding.
   state.hasEstimatedOnce = false;
 
+  // Only the currently-selected codec's 3 quality presets get sampled per request (not both
+  // codecs' 6) - halves the ffmpeg work in the common case where the codec dropdown is never
+  // touched. Switching codecs later lazily fetches just that codec's numbers (see the
+  // videoCodec change handler below), merged into whatever's already cached.
+  let estimateInFlight = false;
+  let estimatePending = false;
+  let sizeEstimateDebounceTimer = null;
+
+  // Nudge-button clicks (and slider drags) can fire several trim changes in a row - each one
+  // used to kick off its own full round of ffmpeg sample encodes, piling up redundant work.
+  // This waits for a short quiet period before actually asking the server for a new estimate.
+  function scheduleSizeEstimate() {
+    if (!state.hasEstimatedOnce) return;
+    clearTimeout(sizeEstimateDebounceTimer);
+    sizeEstimateDebounceTimer = setTimeout(runSizeEstimate, 700);
+  }
+
   async function runSizeEstimate() {
     if (!state.videoJobId) return;
+    clearTimeout(sizeEstimateDebounceTimer);
+    if (estimateInFlight) {
+      // Already running one - just remember to run again with whatever's current once it
+      // finishes, instead of starting a second overlapping round of ffmpeg encodes.
+      estimatePending = true;
+      return;
+    }
+    estimateInFlight = true;
     estimateSizeBtn.disabled = true;
     estimateSizeError.hidden = true;
     estimateSizeStatus.hidden = false;
@@ -498,23 +551,44 @@
       const res = await fetch(`/api/estimate-size/${state.videoJobId}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ trimStart: trimStartHandle.value, trimEnd: trimEndHandle.value }),
+        body: JSON.stringify({
+          trimStart: trimStartHandle.value,
+          trimEnd: trimEndHandle.value,
+          videoCodec: videoCodecSelect.value,
+        }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Could not estimate file sizes.');
-      state.sizeEstimates = data;
+      if (!res.ok) {
+        const err = new Error(data.error || 'Could not estimate file sizes.');
+        err.detail = data.errorDetail;
+        throw err;
+      }
+      state.sizeEstimates = state.sizeEstimates || { video: {}, audio: {} };
+      state.sizeEstimates.video = { ...state.sizeEstimates.video, ...data.video };
+      state.sizeEstimates.audio = data.audio;
       state.hasEstimatedOnce = true;
       updateQualityOptionLabels();
     } catch (err) {
-      estimateSizeError.hidden = false;
-      estimateSizeError.textContent = err.message;
+      setErrorWithDetail(estimateSizeError, err.message, err.detail);
     } finally {
       estimateSizeStatus.hidden = true;
       estimateSizeBtn.disabled = false;
+      estimateInFlight = false;
+      if (estimatePending) {
+        estimatePending = false;
+        runSizeEstimate();
+      }
     }
   }
 
   estimateSizeBtn.addEventListener('click', runSizeEstimate);
+  // A codec switch is a single deliberate click, not a rapid-fire nudge - estimate it right
+  // away rather than waiting out the debounce, but only if this codec hasn't been sampled yet.
+  videoCodecSelect.addEventListener('change', () => {
+    if (state.hasEstimatedOnce && !(state.sizeEstimates && state.sizeEstimates.video[videoCodecSelect.value])) {
+      runSizeEstimate();
+    }
+  });
 
   function setTrimRange(start, end) {
     trimStartHandle.value = start;
@@ -574,7 +648,7 @@
     const start = parseFloat(trimStartHandle.value);
     const end = parseFloat(trimEndHandle.value);
     playRange(start, Math.min(start + SNIPPET_SECONDS, end));
-    if (state.hasEstimatedOnce) runSizeEstimate();
+    scheduleSizeEstimate();
   });
 
   trimEndHandle.addEventListener('input', () => {
@@ -588,7 +662,7 @@
     const start = parseFloat(trimStartHandle.value);
     const end = parseFloat(trimEndHandle.value);
     playRange(Math.max(start, end - SNIPPET_SECONDS), end);
-    if (state.hasEstimatedOnce) runSizeEstimate();
+    scheduleSizeEstimate();
   });
 
   // Fine-tune nudge buttons: step a handle by a fixed amount once dragging has gotten it
@@ -665,11 +739,14 @@
     try {
       const res = await fetch(`/api/analyze/${state.videoJobId}`, { method: 'POST' });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Could not start analysis.');
+      if (!res.ok) {
+        const err = new Error(data.error || 'Could not start analysis.');
+        err.detail = data.errorDetail;
+        throw err;
+      }
     } catch (err) {
       detectProgress.hidden = true;
-      detectError.hidden = false;
-      detectError.textContent = err.message;
+      setErrorWithDetail(detectError, err.message, err.detail);
       detectSermonBtn.disabled = false;
       return;
     }
@@ -680,8 +757,7 @@
       if (data.status === 'error') {
         source.close();
         detectProgress.hidden = true;
-        detectError.hidden = false;
-        detectError.textContent = data.error || 'Analysis failed.';
+        setErrorWithDetail(detectError, data.error || 'Analysis failed.', data.errorDetail);
         detectSermonBtn.disabled = false;
         return;
       }
@@ -1096,8 +1172,8 @@
       }
       if (xhr.status < 200 || xhr.status >= 300) {
         showDzState(dzVideo, 'dz-empty');
+        setErrorWithDetail(errorMessage, data.error || 'Video upload failed.', data.errorDetail);
         errorSection.hidden = false;
-        errorMessage.textContent = data.error || 'Video upload failed.';
         return;
       }
 
@@ -1174,28 +1250,38 @@
     outputNamePreview.textContent = `${parts.join(' - ')}.mp4`;
   }
 
+  // The Render button is just disabled when something's missing, with no other feedback -
+  // browsers never get a chance to show their own "please fill this out" validation UI either,
+  // since a disabled submit button can't be clicked in the first place. This builds an explicit
+  // "still needed" list instead, in the same order the fields appear on the page, so it's
+  // always obvious what's left rather than leaving a greyed-out button unexplained.
   function updateRenderButton() {
-    const nameFilled = nameFieldIds.every((id) => document.getElementById(id).value.trim().length > 0);
-    const coreTextFilled = document.getElementById('coreText').value.trim().length > 0;
-    // The video save path is always required (the MP4 always renders); the audio one only
-    // when there'll actually be an MP3 to save.
-    const videoSavePathFilled = document.getElementById('videoSavePath').value.trim().length > 0;
-    const audioSavePathFilled =
-      !document.getElementById('exportMp3').checked || document.getElementById('audioSavePath').value.trim().length > 0;
-    renderBtn.disabled = !(
-      state.videoJobId &&
-      state.png &&
-      nameFilled &&
-      coreTextFilled &&
-      videoSavePathFilled &&
-      audioSavePathFilled
-    );
+    const missing = [];
+    if (!state.png) missing.push('a bookend image');
+    if (!state.videoJobId) missing.push('a video file');
+    nameFieldIds.forEach((id) => {
+      if (!document.getElementById(id).value.trim()) missing.push(nameFieldPreviewLabels[id]);
+    });
+    if (!document.getElementById('coreText').value.trim()) missing.push('Core Text');
+    if (!document.getElementById('videoSavePath').value.trim()) missing.push('a folder to save the MP4 to');
+    // The audio save path only matters - and is only required - when there'll actually be an
+    // MP3 to save.
+    if (document.getElementById('exportMp3').checked && !document.getElementById('audioSavePath').value.trim()) {
+      missing.push('a folder to save the MP3 to');
+    }
+
+    renderBtn.disabled = missing.length > 0;
+    renderRequirements.hidden = missing.length === 0;
+    if (missing.length > 0) {
+      renderRequirements.textContent = `Still needed before you can render: ${missing.join(', ')}.`;
+    }
     updateOutputNamePreview();
   }
 
   nameFieldIds.forEach((id) => {
     document.getElementById(id).addEventListener('input', updateRenderButton);
   });
+  updateRenderButton(); // populate the "still needed" checklist immediately, not just after the first edit
 
   const coreTextInput = document.getElementById('coreText');
   const coreTextPreview = document.getElementById('coreTextPreview');
@@ -1214,9 +1300,9 @@
     updateRenderButton();
   });
 
-  function showError(message) {
+  function showError(message, detail) {
+    setErrorWithDetail(errorMessage, message, detail);
     errorSection.hidden = false;
-    errorMessage.textContent = message;
     progressSection.hidden = true;
     renderBtn.disabled = false;
     renderBtn.textContent = idleRenderLabel();
@@ -1321,10 +1407,14 @@
     try {
       const res = await fetch(`/api/render/${state.videoJobId}`, { method: 'POST', body: formData });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Render request failed.');
+      if (!res.ok) {
+        const err = new Error(data.error || 'Render request failed.');
+        err.detail = data.errorDetail;
+        throw err;
+      }
       jobId = data.jobId;
     } catch (err) {
-      showError(err.message);
+      showError(err.message, err.detail);
       return;
     }
 
@@ -1335,7 +1425,7 @@
 
       if (data.status === 'error') {
         source.close();
-        showError(data.error || 'Rendering failed.');
+        showError(data.error || 'Rendering failed.', data.errorDetail);
         return;
       }
 

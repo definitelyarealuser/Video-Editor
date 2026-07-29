@@ -171,16 +171,19 @@ function playlistUrn(id) {
  */
 async function getPlaylistDetails() {
   const ids = getPlaylistIds();
-  const results = [];
-  for (const id of ids) {
-    try {
-      const playlist = await apiRequest(`/playlists/${encodeURIComponent(playlistUrn(id))}`);
-      results.push({ id, name: playlist.title || `Playlist ${id}` });
-    } catch (err) {
-      results.push({ id, name: `Playlist ${id} (not found)`, error: err.message || String(err) });
-    }
-  }
-  return results;
+  // Independent lookups, run together rather than one-at-a-time - mirrors vimeo.js's
+  // getShowcaseDetails(). Promise.all keeps results aligned with the input order regardless
+  // of which request actually resolves first.
+  return Promise.all(
+    ids.map(async (id) => {
+      try {
+        const playlist = await apiRequest(`/playlists/${encodeURIComponent(playlistUrn(id))}`);
+        return { id, name: playlist.title || `Playlist ${id}` };
+      } catch (err) {
+        return { id, name: `Playlist ${id} (not found)`, error: err.message || String(err) };
+      }
+    })
+  );
 }
 
 /**

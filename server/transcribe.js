@@ -100,7 +100,11 @@ function extractPcmFloat32(videoPath) {
       else reject(err);
     });
     proc.on('close', (code) => {
-      if (code !== 0) return reject(new Error(`Audio extraction failed (exit ${code}):\n${stderrTail}`));
+      if (code !== 0) {
+        const err = new Error('Could not read the audio track from this video file.');
+        err.detail = stderrTail;
+        return reject(err);
+      }
       const buf = Buffer.concat(chunks);
       // ArrayBuffer.slice always returns a fresh, 0-offset buffer, so the Float32Array view is safely aligned.
       const aligned = buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.length - (buf.length % 4));

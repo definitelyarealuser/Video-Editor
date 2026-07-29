@@ -31,16 +31,18 @@ function getClient() {
 async function getShowcaseDetails() {
   const client = getClient();
   const showcaseIds = getShowcaseIds();
-  const results = [];
-  for (const id of showcaseIds) {
-    try {
-      const res = await client.request({ method: 'GET', path: `/albums/${id}` });
-      results.push({ id, name: (res.body && res.body.name) || `Showcase ${id}` });
-    } catch (err) {
-      results.push({ id, name: `Showcase ${id} (not found)`, error: err.message || String(err) });
-    }
-  }
-  return results;
+  // Independent lookups, run together rather than one-at-a-time - order is preserved either
+  // way since Promise.all keeps results aligned with the input array regardless of timing.
+  return Promise.all(
+    showcaseIds.map(async (id) => {
+      try {
+        const res = await client.request({ method: 'GET', path: `/albums/${id}` });
+        return { id, name: (res.body && res.body.name) || `Showcase ${id}` };
+      } catch (err) {
+        return { id, name: `Showcase ${id} (not found)`, error: err.message || String(err) };
+      }
+    })
+  );
 }
 
 const VALID_PRIVACY_VIEWS = ['anybody', 'unlisted', 'nobody'];

@@ -37,7 +37,14 @@ function run(cmd, args) {
     });
     proc.on('close', (code) => {
       if (code === 0) resolve({ stdout, stderr });
-      else reject(new Error(`${cmd} exited with code ${code}\n${stderr.slice(-4000)}`));
+      else {
+        // Short, plain-English headline for the user; the raw ffmpeg/ffprobe output goes on
+        // `.detail` instead of inline, so callers can offer it as an optional "technical
+        // details" disclosure rather than dumping a wall of stderr into the main error text.
+        const err = new Error(`ffmpeg reported an error while processing the file (exit code ${code}).`);
+        err.detail = stderr.slice(-4000);
+        reject(err);
+      }
     });
   });
 }
@@ -301,7 +308,13 @@ function render({
 
     proc.on('close', (code) => {
       if (code === 0) resolve({ totalDuration });
-      else reject(new Error(`ffmpeg failed (exit ${code}):\n${stderrTail}`));
+      else {
+        const err = new Error(
+          "The render failed partway through. This usually means the video file, trim range, or output settings didn't work together the way ffmpeg expected."
+        );
+        err.detail = stderrTail;
+        reject(err);
+      }
     });
   });
 }
@@ -349,25 +362,31 @@ async function estimateVideoSampleSize({
 }
 
 /**
- * Runs estimateVideoSampleSize for every quality preset of both codecs (6 short encodes total),
- * plus exact arithmetic estimates for each MP3 bitrate preset (no sample needed - CBR MP3 size
- * is just bitrate × duration, unlike CRF video). `mainDurationSeconds` is the trimmed clip length
+ * Runs estimateVideoSampleSize for every quality preset of the requested codec(s), plus exact
+ * arithmetic estimates for each MP3 bitrate preset (no sample needed - CBR MP3 size is just
+ * bitrate × duration, unlike CRF video). `mainDurationSeconds` is the trimmed clip length
  * (bookend PNG holds are brief and compress trivially, so they're left out of the estimate).
+ *
+ * `codec`, if given, only samples that one codec's 3 quality presets instead of both codecs'
+ * 6 - the UI only shows one codec's sizes at a time (whichever is selected), so estimating the
+ * other one up front is wasted work until the user actually switches to it.
  */
-async function estimateFileSizes({ videoPath, trimStart, trimEnd, width, height, fps, mainDurationSeconds }) {
+async function estimateFileSizes({ videoPath, trimStart, trimEnd, width, height, fps, mainDurationSeconds, codec }) {
   const sampleSeconds = Math.min(12, Math.max(4, mainDurationSeconds / 4));
   const rangeStart = trimStart != null ? trimStart : 0;
   const rangeEnd = trimEnd != null ? trimEnd : mainDurationSeconds;
   const midpoint = rangeStart + (rangeEnd - rangeStart) / 2;
   const sampleStart = Math.max(rangeStart, Math.min(midpoint - sampleSeconds / 2, rangeEnd - sampleSeconds));
 
+  const codecsToSample = codec && VIDEO_QUALITY_PRESETS[codec] ? [codec] : Object.keys(VIDEO_QUALITY_PRESETS);
+
   const video = {};
-  for (const codec of Object.keys(VIDEO_QUALITY_PRESETS)) {
-    video[codec] = {};
-    for (const [quality, crf] of Object.entries(VIDEO_QUALITY_PRESETS[codec])) {
+  for (const c of codecsToSample) {
+    video[c] = {};
+    for (const [quality, crf] of Object.entries(VIDEO_QUALITY_PRESETS[c])) {
       // Sequential, not parallel - concurrent ffmpeg encodes would just compete for the same
       // CPU cores and slow each other down with no net time savings.
-      video[codec][quality] = await estimateVideoSampleSize({
+      video[c][quality] = await estimateVideoSampleSize({
         videoPath,
         sampleStart,
         sampleSeconds,
@@ -375,7 +394,7 @@ async function estimateFileSizes({ videoPath, trimStart, trimEnd, width, height,
         width,
         height,
         fps,
-        videoCodec: codec,
+        videoCodec: c,
         videoCrf: crf,
       });
     }

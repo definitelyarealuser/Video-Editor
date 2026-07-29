@@ -151,7 +151,7 @@ app.post('/api/upload-video', assignJobId, upload.single('video'), async (req, r
     res.json({ jobId, duration: videoInfo.duration, width: videoInfo.width, height: videoInfo.height, hasAudio: videoInfo.hasAudio });
   } catch (err) {
     await cleanup();
-    if (!res.headersSent) res.status(500).json({ error: err.message || 'Unexpected server error.' });
+    if (!res.headersSent) res.status(500).json({ error: err.message || 'Unexpected server error.', errorDetail: err.detail });
   }
 });
 
@@ -219,7 +219,7 @@ app.post('/api/analyze/:jobId', useJobIdFromParams, async (req, res) => {
     // real speech-bearing content inside vs. outside the confirmed trim for history.js.
     jobs.update(jobId, { status: 'analyzed', progress: 1, candidates, chunks });
   })().catch((err) => {
-    jobs.update(jobId, { status: 'error', error: err.message });
+    jobs.update(jobId, { status: 'error', error: err.message, errorDetail: err.detail || null });
   });
 });
 
@@ -456,13 +456,13 @@ app.post('/api/render/:jobId', useJobIdFromParams, upload.single('png'), async (
         }
       })
       .catch((err) => {
-        jobs.update(jobId, { status: 'error', error: err.message });
+        jobs.update(jobId, { status: 'error', error: err.message, errorDetail: err.detail || null });
         cleanupPng();
       });
   } catch (err) {
     await cleanupPng();
     if (!res.headersSent) {
-      res.status(500).json({ error: err.message || 'Unexpected server error.' });
+      res.status(500).json({ error: err.message || 'Unexpected server error.', errorDetail: err.detail });
     }
   }
 });
@@ -484,6 +484,10 @@ app.post('/api/estimate-size/:jobId', useJobIdFromParams, async (req, res) => {
   const trimStart = toNonNegativeFloat(req.body.trimStart, 0);
   const trimEnd = toPositiveFloat(req.body.trimEnd, fullDuration);
   const mainDurationSeconds = Math.max(trimEnd - trimStart, 1);
+  // Only sample whichever codec the UI currently has selected - the other one is sampled
+  // lazily later if the user actually switches to it (see the client's videoCodec change
+  // handler), instead of always paying for both up front.
+  const codec = req.body.videoCodec === 'h265' ? 'h265' : req.body.videoCodec === 'h264' ? 'h264' : undefined;
 
   try {
     const sizes = await estimateFileSizes({
@@ -494,10 +498,11 @@ app.post('/api/estimate-size/:jobId', useJobIdFromParams, async (req, res) => {
       height: job.videoInfo.height,
       fps: job.videoInfo.fps,
       mainDurationSeconds,
+      codec,
     });
     res.json(sizes);
   } catch (err) {
-    res.status(500).json({ error: err.message || 'Could not estimate file sizes.' });
+    res.status(500).json({ error: err.message || 'Could not estimate file sizes.', errorDetail: err.detail });
   }
 });
 
@@ -525,6 +530,7 @@ app.get('/api/progress/:jobId', (req, res) => {
         status: j.status,
         progress: j.progress,
         error: j.error,
+        errorDetail: j.errorDetail || undefined,
         hasMp3: !!j.mp3OutputPath,
         candidates: j.candidates || undefined,
         vimeoUrl: j.vimeoUrl || undefined,

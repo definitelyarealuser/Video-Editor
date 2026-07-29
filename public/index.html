@@ -11,6 +11,13 @@
     <header>
       <h1>Sermon Video Editor</h1>
       <p class="subtitle">Bookend a video with a title graphic: fade in from the graphic, crossfade into your video, crossfade back to the graphic, then fade to black.</p>
+      <ol class="walkthrough">
+        <li>Drop in your video</li>
+        <li>Trim to just the sermon <em>(optional)</em></li>
+        <li>Add your bookend image</li>
+        <li>Fill in the details below</li>
+        <li>Click Render</li>
+      </ol>
     </header>
 
     <form id="render-form">
@@ -133,14 +140,6 @@
               <option value="smaller">Smaller File</option>
             </select>
           </div>
-          <div class="field">
-            <label for="mp3Bitrate">MP3 bitrate</label>
-            <select id="mp3Bitrate">
-              <option value="128">128 kbps</option>
-              <option value="192" selected>192 kbps</option>
-              <option value="320">320 kbps</option>
-            </select>
-          </div>
         </div>
 
         <button type="button" id="estimate-size-btn" class="detect-btn">📐 Estimate File Sizes</button>
@@ -148,6 +147,40 @@
           <div class="progress-label" id="estimate-size-label">Estimating… running a few short test encodes, this can take a minute</div>
         </div>
         <div id="estimate-size-error" class="error-box" hidden></div>
+
+        <div class="toggles audio-settings">
+          <div class="toggle-row">
+            <label class="inline-check">
+              <input type="checkbox" id="exportMp3" checked />
+              Render MP3
+            </label>
+            <select id="mp3Bitrate">
+              <option value="128">128 kbps</option>
+              <option value="192" selected>192 kbps</option>
+              <option value="320">320 kbps</option>
+            </select>
+          </div>
+          <div class="toggle-row">
+            <label class="inline-check">
+              <input type="checkbox" id="normalizeAudio" checked />
+              Normalize audio to
+            </label>
+            <select id="targetLufs">
+              <option value="-20">-20</option>
+              <option value="-19">-19</option>
+              <option value="-18">-18</option>
+              <option value="-17">-17</option>
+              <option value="-16">-16</option>
+              <option value="-15">-15</option>
+              <option value="-14" selected>-14 (Default)</option>
+              <option value="-13">-13</option>
+              <option value="-12">-12</option>
+              <option value="-11">-11</option>
+              <option value="-10">-10</option>
+            </select>
+            <span class="toggle-hint">LUFS</span>
+          </div>
+        </div>
       </section>
 
       <div class="settings">
@@ -208,48 +241,19 @@
         </div>
       </div>
 
-      <div class="toggles">
-        <div class="toggle-row">
-          <label class="inline-check">
-            <input type="checkbox" id="normalizeAudio" checked />
-            Normalize audio to
-          </label>
-          <select id="targetLufs">
-            <option value="-20">-20</option>
-            <option value="-19">-19</option>
-            <option value="-18">-18</option>
-            <option value="-17">-17</option>
-            <option value="-16">-16</option>
-            <option value="-15">-15</option>
-            <option value="-14" selected>-14 (Default)</option>
-            <option value="-13">-13</option>
-            <option value="-12">-12</option>
-            <option value="-11">-11</option>
-            <option value="-10">-10</option>
-          </select>
-          <span class="toggle-hint">LUFS</span>
-        </div>
-      </div>
-
       <div class="settings">
         <div class="field field-wide">
           <label for="videoSavePath">Save the MP4 to this folder on this computer</label>
           <div class="path-input">
-            <input type="text" id="videoSavePath" name="videoSavePath" placeholder="e.g. C:\Users\andyw\Videos\Sermons or /Users/andy/Movies/Sermons" required />
+            <input type="text" id="videoSavePath" name="videoSavePath" placeholder="Click Browse… to choose, or type a folder path" required />
             <button type="button" class="browse-btn" data-target="videoSavePath">Browse…</button>
           </div>
         </div>
-        <div class="field field-wide">
-          <label class="inline-check">
-            <input type="checkbox" id="exportMp3" checked />
-            Render MP3
-          </label>
-          <div class="save-path-block" id="audioSavePathBlock">
-            <label for="audioSavePath">Save the MP3 to this folder on this computer</label>
-            <div class="path-input">
-              <input type="text" id="audioSavePath" name="audioSavePath" placeholder="e.g. C:\Users\andyw\Music\Sermons or /Users/andy/Music/Sermons" />
-              <button type="button" class="browse-btn" data-target="audioSavePath">Browse…</button>
-            </div>
+        <div class="field field-wide save-path-block" id="audioSavePathBlock">
+          <label for="audioSavePath">Save the MP3 to this folder on this computer</label>
+          <div class="path-input">
+            <input type="text" id="audioSavePath" name="audioSavePath" placeholder="Click Browse… to choose, or type a folder path" />
+            <button type="button" class="browse-btn" data-target="audioSavePath">Browse…</button>
           </div>
         </div>
       </div>
@@ -259,6 +263,7 @@
         <a id="soundcloud-connect-btn" href="/api/soundcloud/connect" class="soundcloud-connect-link" hidden>Connect SoundCloud</a>
       </div>
 
+      <div id="render-requirements" class="render-requirements" hidden></div>
       <button type="submit" id="render-btn" disabled>Render Video</button>
     </form>
 
@@ -267,6 +272,7 @@
         <div class="progress-fill" id="progress-fill"></div>
       </div>
       <div class="progress-label" id="progress-label">Starting…</div>
+      <div class="progress-safe-note">Safe to close this tab if you need to - rendering continues on this computer, and the finished file(s) will land in your chosen folder(s) either way. You just won't see this progress bar if you come back.</div>
     </section>
 
     <section id="result-section" hidden>
