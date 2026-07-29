@@ -835,6 +835,27 @@ label.core-text-label {
   color: var(--success);
 }
 
+#start-over-section {
+  margin-top: 32px;
+  text-align: center;
+}
+
+.start-over-btn {
+  padding: 12px 24px;
+  font-size: 0.95rem;
+  font-weight: 600;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--panel);
+  color: var(--text);
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.start-over-btn:hover {
+  background: var(--border);
+}
+
 .save-status.save-failed {
   color: var(--error);
 }

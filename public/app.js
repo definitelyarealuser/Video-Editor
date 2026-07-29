@@ -31,6 +31,10 @@
   const errorSection = document.getElementById('error-section');
   const errorMessage = document.getElementById('error-message');
 
+  const startOverSection = document.getElementById('start-over-section');
+  const startOverBtn = document.getElementById('start-over-btn');
+  startOverBtn.addEventListener('click', () => window.location.reload());
+
   const vimeoStatusSection = document.getElementById('vimeo-status-section');
   const vimeoProgressFill = document.getElementById('vimeo-progress-fill');
   const vimeoStatusLabel = document.getElementById('vimeo-status-label');
@@ -1070,6 +1074,7 @@
     videoUploadFill.style.width = '0%';
     videoUploadPct.textContent = '0%';
     errorSection.hidden = true;
+    startOverSection.hidden = true;
 
     const formData = new FormData();
     formData.append('video', file);
@@ -1369,7 +1374,7 @@
         if (data.videoSavedTo) {
           videoSaveStatus.hidden = false;
           videoSaveStatus.className = 'save-status save-ok';
-          videoSaveStatus.textContent = `Video also saved to ${data.videoSavedTo}`;
+          videoSaveStatus.textContent = `Video saved to ${data.videoSavedTo}`;
         } else if (data.videoSaveError) {
           videoSaveStatus.hidden = false;
           videoSaveStatus.className = 'save-status save-failed';
@@ -1378,7 +1383,7 @@
         if (data.audioSavedTo) {
           audioSaveStatus.hidden = false;
           audioSaveStatus.className = 'save-status save-ok';
-          audioSaveStatus.textContent = `Audio also saved to ${data.audioSavedTo}`;
+          audioSaveStatus.textContent = `Audio saved to ${data.audioSavedTo}`;
         } else if (data.audioSaveError) {
           audioSaveStatus.hidden = false;
           audioSaveStatus.className = 'save-status save-failed';
@@ -1462,6 +1467,7 @@
       if (vimeoSettled && soundcloudSettled) {
         source.close();
         finishRenderCycle();
+        startOverSection.hidden = false;
       }
     };
     source.onerror = () => {
