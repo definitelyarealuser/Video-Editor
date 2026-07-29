@@ -479,7 +479,13 @@
 
   videoCodecSelect.addEventListener('change', updateQualityOptionLabels);
 
-  estimateSizeBtn.addEventListener('click', async () => {
+  // Tracked separately from state.sizeEstimates (which gets nulled out on every trim change,
+  // see updateTrimUI above) so we know whether the user has ever actually asked for an
+  // estimate on this video - once they have, releasing a trim handle keeps it up to date
+  // automatically; until then, dragging the handles around doesn't trigger any encoding.
+  state.hasEstimatedOnce = false;
+
+  async function runSizeEstimate() {
     if (!state.videoJobId) return;
     estimateSizeBtn.disabled = true;
     estimateSizeError.hidden = true;
@@ -493,6 +499,7 @@
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Could not estimate file sizes.');
       state.sizeEstimates = data;
+      state.hasEstimatedOnce = true;
       updateQualityOptionLabels();
     } catch (err) {
       estimateSizeError.hidden = false;
@@ -501,7 +508,9 @@
       estimateSizeStatus.hidden = true;
       estimateSizeBtn.disabled = false;
     }
-  });
+  }
+
+  estimateSizeBtn.addEventListener('click', runSizeEstimate);
 
   function setTrimRange(start, end) {
     trimStartHandle.value = start;
@@ -561,6 +570,7 @@
     const start = parseFloat(trimStartHandle.value);
     const end = parseFloat(trimEndHandle.value);
     playRange(start, Math.min(start + SNIPPET_SECONDS, end));
+    if (state.hasEstimatedOnce) runSizeEstimate();
   });
 
   trimEndHandle.addEventListener('input', () => {
@@ -574,6 +584,7 @@
     const start = parseFloat(trimStartHandle.value);
     const end = parseFloat(trimEndHandle.value);
     playRange(Math.max(start, end - SNIPPET_SECONDS), end);
+    if (state.hasEstimatedOnce) runSizeEstimate();
   });
 
   // Fine-tune nudge buttons: step a handle by a fixed amount once dragging has gotten it
@@ -1125,6 +1136,8 @@
     inputVideo.value = '';
     trimPanel.hidden = true;
     qualityPanel.hidden = true;
+    state.sizeEstimates = null;
+    state.hasEstimatedOnce = false;
     updateRenderButton();
   });
 
@@ -1221,6 +1234,8 @@
     inputVideo.value = '';
     trimPanel.hidden = true;
     qualityPanel.hidden = true;
+    state.sizeEstimates = null;
+    state.hasEstimatedOnce = false;
     updateRenderButton();
   }
 
