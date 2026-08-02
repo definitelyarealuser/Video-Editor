@@ -1195,7 +1195,7 @@
     updateRenderButton();
   });
 
-  document.getElementById('use-today-btn').addEventListener('click', () => {
+  function fillTodayDate() {
     const today = new Date();
     const mm = String(today.getMonth() + 1).padStart(2, '0');
     const dd = String(today.getDate()).padStart(2, '0');
@@ -1203,7 +1203,10 @@
     const sermonDateInput = document.getElementById('sermonDate');
     sermonDateInput.value = `${mm} ${dd} ${yy}`;
     updateRenderButton();
-  });
+  }
+
+  document.getElementById('use-today-btn').addEventListener('click', fillTodayDate);
+  fillTodayDate(); // pre-filled on load - today's the overwhelmingly common case, just click Today again if not
 
   // Desktop notification when a render finishes (or fails) while the tab isn't the one you're
   // looking at - permission has to be requested from a real user gesture (the Render click
