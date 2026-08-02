@@ -63,6 +63,25 @@
   const startOverBtn = document.getElementById('start-over-btn');
   startOverBtn.addEventListener('click', () => window.location.reload());
 
+  // Re-Edit jumps straight back into trimming the same video a just-finished render used -
+  // everything else (bookend image, name fields, Core Text, quality/save-path settings) is
+  // left exactly as it is, only the trim range resets to the full file so a start/end mistake
+  // can be fixed without re-entering anything or re-uploading a possibly huge source file.
+  const reEditBtn = document.getElementById('reedit-btn');
+  reEditBtn.addEventListener('click', () => {
+    if (!state.lastVideoJobId || !state.lastVideoFile) return;
+    resultSection.hidden = true;
+    vimeoStatusSection.hidden = true;
+    soundcloudStatusSection.hidden = true;
+    errorSection.hidden = true;
+    startOverSection.hidden = true;
+    reEditBtn.hidden = true;
+    audioSaveStatus.hidden = true;
+    downloadMp3Link.hidden = true;
+    renderBtn.textContent = idleRenderLabel();
+    enterVideoEditingState(state.lastVideoJobId, state.lastVideoFile, state.lastVideoDuration);
+  });
+
   const vimeoStatusSection = document.getElementById('vimeo-status-section');
   const vimeoProgressFill = document.getElementById('vimeo-progress-fill');
   const vimeoStatusLabel = document.getElementById('vimeo-status-label');
@@ -1054,6 +1073,32 @@
   });
 
   // Video dropzone: uploads immediately so it can be analyzed/trimmed before rendering.
+  // Puts the trim/quality editing UI into "editing this video" state - shared by a fresh
+  // upload and by Re-Edit jumping back into the video a just-finished render used, without
+  // needing to re-upload it.
+  function enterVideoEditingState(jobId, file, duration) {
+    state.videoJobId = jobId;
+    state.videoFile = file;
+    state.videoDuration = duration;
+
+    showDzState(dzVideo, 'dz-filled');
+    videoPreview.src = URL.createObjectURL(file);
+    updatePlayPauseLabel();
+    document.getElementById('video-filename').textContent = `${file.name} (${formatTime(duration)})`;
+
+    trimStartHandle.min = 0;
+    trimStartHandle.max = duration;
+    trimStartHandle.step = 0.1;
+    trimEndHandle.min = 0;
+    trimEndHandle.max = duration;
+    trimEndHandle.step = 0.1;
+    setTrimRange(0, duration);
+    trimPanel.hidden = false;
+    qualityPanel.hidden = false;
+
+    updateRenderButton();
+  }
+
   function uploadVideo(file) {
     showDzState(dzVideo, 'dz-uploading');
     videoUploadFill.style.width = '0%';
@@ -1086,25 +1131,7 @@
         return;
       }
 
-      state.videoJobId = data.jobId;
-      state.videoDuration = data.duration;
-
-      showDzState(dzVideo, 'dz-filled');
-      videoPreview.src = URL.createObjectURL(file);
-      updatePlayPauseLabel();
-      document.getElementById('video-filename').textContent = `${file.name} (${formatTime(data.duration)})`;
-
-      trimStartHandle.min = 0;
-      trimStartHandle.max = data.duration;
-      trimStartHandle.step = 0.1;
-      trimEndHandle.min = 0;
-      trimEndHandle.max = data.duration;
-      trimEndHandle.step = 0.1;
-      setTrimRange(0, data.duration);
-      trimPanel.hidden = false;
-      qualityPanel.hidden = false;
-
-      updateRenderButton();
+      enterVideoEditingState(data.jobId, file, data.duration);
     };
     xhr.onerror = () => {
       showDzState(dzVideo, 'dz-empty');
@@ -1117,6 +1144,7 @@
   setupDropzone(dzVideo, inputVideo, uploadVideo);
   dzVideo.querySelector('.dz-clear').addEventListener('dz-clear-click', () => {
     state.videoJobId = null;
+    state.videoFile = null;
     state.videoDuration = 0;
     showDzState(dzVideo, 'dz-empty');
     inputVideo.value = '';
@@ -1239,6 +1267,8 @@
   function resetPanels() {
     errorSection.hidden = true;
     resultSection.hidden = true;
+    startOverSection.hidden = true;
+    reEditBtn.hidden = true;
     downloadMp3Link.hidden = true;
     vimeoStatusSection.hidden = true;
     vimeoResult.hidden = true;
@@ -1258,9 +1288,12 @@
   function finishRenderCycle() {
     renderBtn.disabled = false;
     renderBtn.textContent = idleRenderLabel();
-    // The server deletes the uploaded video after a successful render, so
-    // reset the dropzone/trim panel - a fresh render needs a fresh upload.
+    // Resets the dropzone/trim panel back to "no video loaded" - a fresh render needs a fresh
+    // upload (or a Re-Edit click, which restores from the state.lastVideo* snapshot captured
+    // just before this runs). The server keeps the uploaded video around for a while after a
+    // successful render specifically so Re-Edit has something to jump back into.
     state.videoJobId = null;
+    state.videoFile = null;
     state.videoDuration = 0;
     showDzState(dzVideo, 'dz-empty');
     inputVideo.value = '';
@@ -1505,8 +1538,15 @@
       if (videoDone && vimeoSettled && soundcloudSettled) {
         source.close();
         notifyIfHidden('Render complete', `${computeOutputName()} is done.`);
+        // Snapshot the video this render just used, before finishRenderCycle() below clears
+        // the active editing state - Re-Edit restores from this to jump straight back into
+        // trimming the same file without a re-upload.
+        state.lastVideoJobId = state.videoJobId;
+        state.lastVideoFile = state.videoFile;
+        state.lastVideoDuration = state.videoDuration;
         finishRenderCycle();
         startOverSection.hidden = false;
+        reEditBtn.hidden = false;
       }
     };
     source.onerror = () => {

@@ -32,7 +32,9 @@ Then open http://localhost:3000.
 
 If **Render MP3** is checked, the MP3 renders first - it's just the clip's own audio with no video encoding involved, so it finishes well before the MP4 does. Its save confirmation (and SoundCloud publish, if you opted in) happens right away, while the progress bar switches over to the video and keeps going - you don't have to wait for the video to grab or upload the audio. Once the video's done too, the app copies it to the folder you chose and shows its own confirmation. Download buttons only appear if a local save actually fails, as a fallback way to get the file - otherwise there's nothing to download, since it's already where you asked for it.
 
-The uploaded video is kept on the server until a render actually succeeds (so a render error - e.g. a crossfade duration that's too long - doesn't force you to re-upload a multi-GB file, just fix the setting and retry). Everything is cleaned up automatically after 2 hours regardless.
+Once everything's finished, two buttons appear: **Start Over** clears the whole form for a completely new sermon, while **Re-Edit** jumps straight back into trimming the exact same video - if the start/end points were off, this fixes just that without re-uploading the file or re-typing the bookend image, name fields, Core Text, or any other setting.
+
+The uploaded video is kept on the server for 2 hours after upload regardless of whether the render succeeds, fails, or you use Re-Edit on it more than once - a render error (e.g. a crossfade duration that's too long) or a mis-trimmed cut doesn't force you to re-upload a multi-GB file, just fix the setting and retry. Everything is cleaned up automatically once that window passes.
 
 ## Publishing to Vimeo
 

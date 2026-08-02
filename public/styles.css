@@ -827,7 +827,10 @@ label.core-text-label {
 
 #start-over-section {
   margin-top: 32px;
-  text-align: center;
+  display: flex;
+  justify-content: center;
+  gap: 12px;
+  flex-wrap: wrap;
 }
 
 .start-over-btn {

@@ -159,7 +159,6 @@ app.post('/api/render/:jobId', useJobIdFromParams, upload.single('png'), async (
   const job = jobs.get(jobId);
 
   const cleanupPng = () => (req.file ? fs.promises.rm(req.file.path, { force: true }).catch(() => {}) : Promise.resolve());
-  const cleanupAll = () => fs.promises.rm(path.join(UPLOAD_DIR, jobId), { recursive: true, force: true }).catch(() => {});
 
   try {
     if (!job || !job.videoPath) {
@@ -379,7 +378,10 @@ app.post('/api/render/:jobId', useJobIdFromParams, upload.single('png'), async (
         videoSaveError: videoSaveResult.error || null,
       });
       recordRender({ renderSettings });
-      cleanupAll();
+      // The uploaded source video is deliberately never deleted right after a render (success
+      // or failure) - Re-Edit on the client can jump back into trimming this same job's video
+      // without a re-upload, as long as it does so before the periodic sweep below reclaims it
+      // (2 hours after upload, same as everything else).
 
       // Publishing was confirmed up front (at the "Render" click), so it runs automatically
       // here with no further approval needed - but only ever when that confirmation actually
