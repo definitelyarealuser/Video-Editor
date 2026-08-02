@@ -321,6 +321,7 @@
   normalizeAudioCheckbox.addEventListener('change', () => {
     targetLufsSelect.disabled = !normalizeAudioCheckbox.checked;
   });
+  targetLufsSelect.disabled = !normalizeAudioCheckbox.checked;
 
   const exportMp3Checkbox = document.getElementById('exportMp3');
   // The idle label reflects whatever's checked right now - only touched outside an
@@ -391,10 +392,8 @@
       if (typeof s.transition === 'number') document.getElementById('transition').value = s.transition;
       if (typeof s.fadeOut === 'number') document.getElementById('fadeOut').value = s.fadeOut;
       if (typeof s.crossfadeAudio === 'boolean') document.getElementById('crossfadeAudio').checked = s.crossfadeAudio;
-      if (typeof s.normalize === 'boolean') {
-        normalizeAudioCheckbox.checked = s.normalize;
-        targetLufsSelect.disabled = !s.normalize;
-      }
+      // Normalize audio deliberately always starts unchecked rather than recalling the
+      // last-used value - same reasoning as video quality/MP3 bitrate above.
       if (typeof s.targetLufs === 'number' && document.querySelector(`#targetLufs option[value="${s.targetLufs}"]`)) {
         targetLufsSelect.value = String(s.targetLufs);
       }
