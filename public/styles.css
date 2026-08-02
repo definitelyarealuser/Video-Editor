@@ -808,6 +808,19 @@ label.core-text-label {
   word-break: break-all;
 }
 
+.audio-result-group {
+  text-align: center;
+}
+
+.audio-save-status-standalone {
+  margin-top: 20px;
+  padding: 12px 14px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  text-align: left;
+}
+
 .save-status.save-ok {
   color: var(--success);
 }

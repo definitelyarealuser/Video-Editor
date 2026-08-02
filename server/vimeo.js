@@ -55,7 +55,7 @@ const VALID_PRIVACY_VIEWS = ['anybody', 'unlisted', 'nobody'];
  */
 async function uploadAndPublish({ filePath, name, description, showcaseIds, privacy, onProgress }) {
   const client = getClient();
-  const privacyView = VALID_PRIVACY_VIEWS.includes(privacy) ? privacy : 'nobody';
+  const privacyView = VALID_PRIVACY_VIEWS.includes(privacy) ? privacy : 'anybody';
 
   const videoUri = await new Promise((resolve, reject) => {
     client.upload(

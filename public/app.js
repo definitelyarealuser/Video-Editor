@@ -432,10 +432,10 @@
     return `${m}:${String(s).padStart(2, '0')}`;
   }
 
-  // Elapsed is just wall-clock time since rendering started; remaining is a simple linear
-  // extrapolation from the fraction complete so far (ffmpeg's own progress reporting, not a
-  // separate estimate) - reliable once a little progress has actually happened, meaningless
-  // before that, so it reads as "estimating" for the first couple of percent.
+  // Elapsed is just wall-clock time since the current phase started; remaining is a simple
+  // linear extrapolation from the fraction complete so far (ffmpeg's own progress reporting,
+  // not a separate estimate) - reliable once a little progress has actually happened,
+  // meaningless before that, so it reads as "estimating" for the first couple of percent.
   let renderStartTime = null;
   function formatElapsedRemaining(fraction) {
     const elapsedSec = (Date.now() - renderStartTime) / 1000;
@@ -445,6 +445,22 @@
       return `${elapsedText} · About ${formatTime(remainingSec)} remaining`;
     }
     return `${elapsedText} · Estimating time remaining…`;
+  }
+
+  // The MP3 (when requested) renders first, then the video - two sequential phases with very
+  // different typical durations, so each gets its own elapsed-time clock rather than one
+  // running total that would make the remaining-time estimate meaningless across the switch.
+  let currentRenderPhase = null;
+  function updateRenderProgressUI(phaseKey, label, fraction) {
+    if (currentRenderPhase !== phaseKey) {
+      currentRenderPhase = phaseKey;
+      renderStartTime = Date.now();
+    }
+    const pct = Math.round(fraction * 100);
+    progressFill.style.width = pct + '%';
+    progressLabel.textContent = `${label}… ${pct}%`;
+    progressTime.hidden = false;
+    progressTime.textContent = formatElapsedRemaining(fraction);
   }
 
   function updateTrimUI() {
@@ -1189,12 +1205,33 @@
     updateRenderButton();
   });
 
+  // Desktop notification when a render finishes (or fails) while the tab isn't the one you're
+  // looking at - permission has to be requested from a real user gesture (the Render click
+  // itself), and browsers silently ignore a repeat request once it's been granted or denied.
+  function requestNotificationPermission() {
+    if (!('Notification' in window)) return;
+    if (Notification.permission === 'default') {
+      Notification.requestPermission().catch(() => {});
+    }
+  }
+
+  function notifyIfHidden(title, body) {
+    if (!('Notification' in window) || Notification.permission !== 'granted') return;
+    if (!document.hidden) return; // tab's right here - a system notification would just be noise
+    const notification = new Notification(title, { body });
+    notification.onclick = () => {
+      window.focus();
+      notification.close();
+    };
+  }
+
   function showError(message, detail) {
     setErrorWithDetail(errorMessage, message, detail);
     errorSection.hidden = false;
     progressSection.hidden = true;
     renderBtn.disabled = false;
     renderBtn.textContent = idleRenderLabel();
+    notifyIfHidden('Render failed', message);
   }
 
   function resetPanels() {
@@ -1213,6 +1250,7 @@
     progressFill.style.width = '0%';
     progressLabel.textContent = 'Uploading files…';
     progressTime.hidden = true;
+    currentRenderPhase = null;
   }
 
   function finishRenderCycle() {
@@ -1233,6 +1271,10 @@
   form.addEventListener('submit', async (e) => {
     e.preventDefault();
     if (!state.videoJobId || !state.png) return;
+
+    // Asked for right on the click that starts a render - a real user gesture, which browsers
+    // require for a permission prompt like this.
+    requestNotificationPermission();
 
     // Confirmed up front, before rendering even starts, so publishing can run automatically
     // once the render finishes with no further approval needed - but it's always a fresh,
@@ -1306,7 +1348,6 @@
     }
 
     progressLabel.textContent = 'Rendering…';
-    renderStartTime = Date.now();
     const source = new EventSource(`/api/progress/${jobId}`);
     source.onmessage = (evt) => {
       const data = JSON.parse(evt.data);
@@ -1317,21 +1358,53 @@
         return;
       }
 
+      // Two sequential phases while status is still 'rendering': the MP3 (if requested) goes
+      // first since it's dramatically faster (no PNG, no libx264 encode), then the video.
       if (data.status === 'rendering') {
-        const fraction = data.progress || 0;
-        const pct = Math.round(fraction * 100);
-        progressFill.style.width = pct + '%';
-        progressLabel.textContent = `Rendering… ${pct}%`;
-        progressTime.hidden = false;
-        progressTime.textContent = formatElapsedRemaining(fraction);
-        return;
+        if (data.mp3Status === 'rendering') {
+          updateRenderProgressUI('audio', 'Rendering audio', data.mp3Progress || 0);
+        } else {
+          updateRenderProgressUI('video', 'Rendering video', data.progress || 0);
+        }
       }
 
-      // Rendering itself has finished (status is 'done'/'publishing'/'published'/'publish-error').
-      // Show the result panel exactly once, then let Vimeo and SoundCloud update independently
-      // off whatever fields changed in each message - they run in parallel server-side and
-      // don't share a single terminal condition, unlike the render step above.
-      if (resultSection.hidden) {
+      // Audio-ready milestone: reveals as soon as the fast audio pass settles (done or
+      // failed), independent of the video - which is likely still going for a while yet -
+      // so the MP3 can be grabbed/uploaded to SoundCloud right away instead of waiting.
+      if (data.mp3Status && data.mp3Status !== 'rendering' && audioSaveStatus.hidden) {
+        audioSaveStatus.hidden = false;
+        if (data.mp3Status === 'error') {
+          audioSaveStatus.className = 'save-status audio-save-status-standalone save-failed';
+          setErrorWithDetail(audioSaveStatus, data.mp3Error || 'Could not render the MP3.', data.mp3ErrorDetail);
+        } else if (data.audioSavedTo) {
+          audioSaveStatus.className = 'save-status audio-save-status-standalone save-ok';
+          audioSaveStatus.textContent = `Audio saved to ${data.audioSavedTo}`;
+        } else if (data.audioSaveError) {
+          audioSaveStatus.className = 'save-status audio-save-status-standalone save-failed';
+          audioSaveStatus.textContent = `Could not save audio to that folder: ${data.audioSaveError}`;
+        }
+
+        if (data.hasMp3 && data.mp3Status === 'done') {
+          downloadMp3Link.href = `/api/download/${jobId}/mp3`;
+          downloadMp3Link.download = computeOutputName() + '.mp3';
+          // Saving locally is required, so this is only shown as a fallback if the save itself
+          // failed - same policy as the MP4 download button below.
+          downloadMp3Link.hidden = !data.audioSaveError;
+        }
+      }
+
+      // SoundCloud publishing can start as soon as the MP3 is ready, well before the video -
+      // reveal its status section independently rather than waiting on the video result below.
+      if (data.scStatus && soundcloudStatusSection.hidden) {
+        soundcloudStatusSection.hidden = false;
+        soundcloudProgressFill.style.width = '0%';
+        soundcloudStatusLabel.textContent = 'Publishing to SoundCloud…';
+      }
+
+      // The video result panel shows once the video itself is done (status has moved past
+      // 'rendering') - the MP3/SoundCloud milestones above may well have already happened by
+      // this point, or may still be in progress; they're tracked independently either way.
+      if (data.status !== 'rendering' && resultSection.hidden) {
         progressSection.hidden = true;
         resultSection.hidden = false;
         const outputName = computeOutputName();
@@ -1344,14 +1417,6 @@
         // itself failed, since download is then the only way left to actually get the file.
         downloadLink.hidden = !data.videoSaveError;
 
-        if (data.hasMp3) {
-          downloadMp3Link.href = `/api/download/${jobId}/mp3`;
-          downloadMp3Link.download = outputName + '.mp3';
-          downloadMp3Link.hidden = !data.audioSaveError;
-        } else {
-          downloadMp3Link.hidden = true;
-        }
-
         if (data.videoSavedTo) {
           videoSaveStatus.hidden = false;
           videoSaveStatus.className = 'save-status save-ok';
@@ -1361,25 +1426,11 @@
           videoSaveStatus.className = 'save-status save-failed';
           videoSaveStatus.textContent = `Could not save video to that folder: ${data.videoSaveError}`;
         }
-        if (data.audioSavedTo) {
-          audioSaveStatus.hidden = false;
-          audioSaveStatus.className = 'save-status save-ok';
-          audioSaveStatus.textContent = `Audio saved to ${data.audioSavedTo}`;
-        } else if (data.audioSaveError) {
-          audioSaveStatus.hidden = false;
-          audioSaveStatus.className = 'save-status save-failed';
-          audioSaveStatus.textContent = `Could not save audio to that folder: ${data.audioSaveError}`;
-        }
 
         if (publishToVimeo) {
           vimeoStatusSection.hidden = false;
           vimeoProgressFill.style.width = '0%';
           vimeoStatusLabel.textContent = 'Publishing to Vimeo…';
-        }
-        if (publishToSoundCloud) {
-          soundcloudStatusSection.hidden = false;
-          soundcloudProgressFill.style.width = '0%';
-          soundcloudStatusLabel.textContent = 'Publishing to SoundCloud…';
         }
       }
 
@@ -1442,11 +1493,16 @@
       }
 
       // Mirrors the server's terminal() gating - only close the stream and reset the form once
-      // every platform actually confirmed for this render has reached its own end state.
+      // the video itself is done AND every platform actually confirmed for this render has
+      // reached its own end state. The video-done check matters now that status stays
+      // 'rendering' through both the audio and video phases - without it, a render with
+      // neither Vimeo nor SoundCloud publishing requested would look "settled" immediately.
+      const videoDone = data.status !== 'rendering';
       const vimeoSettled = !publishToVimeo || data.status === 'published' || data.status === 'publish-error';
       const soundcloudSettled = !publishToSoundCloud || data.scStatus === 'published' || data.scStatus === 'error';
-      if (vimeoSettled && soundcloudSettled) {
+      if (videoDone && vimeoSettled && soundcloudSettled) {
         source.close();
+        notifyIfHidden('Render complete', `${computeOutputName()} is done.`);
         finishRenderCycle();
         startOverSection.hidden = false;
       }

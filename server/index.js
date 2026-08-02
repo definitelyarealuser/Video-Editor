@@ -8,7 +8,7 @@ const express = require('express');
 const multer = require('multer');
 
 const jobs = require('./jobs');
-const { probe, render, checkFfmpegAvailable, estimateFileSizes, VIDEO_QUALITY_PRESETS, MP3_BITRATE_PRESETS } = require('./ffmpeg');
+const { probe, render, renderAudio, checkFfmpegAvailable, estimateFileSizes, VIDEO_QUALITY_PRESETS, MP3_BITRATE_PRESETS } = require('./ffmpeg');
 const { recordRender, getLastRenderSettings } = require('./history');
 const vimeo = require('./vimeo');
 const soundcloud = require('./soundcloud');
@@ -224,7 +224,7 @@ app.post('/api/render/:jobId', useJobIdFromParams, upload.single('png'), async (
     const vimeoShowcaseIds = req.body.vimeoShowcaseIds !== undefined
       ? String(req.body.vimeoShowcaseIds).split(',').map((s) => s.trim()).filter(Boolean)
       : undefined;
-    const vimeoPrivacy = String(req.body.vimeoPrivacy || 'nobody');
+    const vimeoPrivacy = String(req.body.vimeoPrivacy || 'anybody');
     const publishToSoundCloud =
       toBool(req.body.publishToSoundCloud, false) && exportMp3 && soundcloud.isConfigured() && soundcloud.isConnected();
     const soundcloudPlaylistIds = req.body.soundcloudPlaylistIds !== undefined
@@ -269,6 +269,8 @@ app.post('/api/render/:jobId', useJobIdFromParams, upload.single('png'), async (
       outputName: `${outputName}.mp4`,
       mp3OutputPath,
       mp3OutputName: mp3OutputPath ? `${outputName}.mp3` : null,
+      mp3Status: mp3OutputPath ? 'rendering' : null,
+      mp3Progress: 0,
       willPublishToVimeo: publishToVimeo,
       willPublishToSoundcloud: publishToSoundCloud,
     });
@@ -290,92 +292,120 @@ app.post('/api/render/:jobId', useJobIdFromParams, upload.single('png'), async (
       mp3Bitrate,
     };
 
-    render({
-      pngPath,
-      videoCrf,
-      mp3Bitrate,
-      videoPath: job.videoPath,
-      outputPath,
-      mp3OutputPath,
-      trimStart: isTrimmed ? trimStart : null,
-      trimEnd: isTrimmed ? trimEnd : null,
-      startDuration,
-      endDuration,
-      transition,
-      fadeOut,
-      crossfadeAudio,
-      normalize,
-      targetLufs,
-      videoInfo: { ...job.videoInfo, duration: effectiveDuration },
-      onProgress: (fraction) => {
-        jobs.update(jobId, { progress: fraction });
-      },
-    })
-      .then(async () => {
-        const videoSaveResult = await copyToFolder(outputPath, videoSavePath, `${outputName}.mp4`);
-        const audioSaveResult = mp3OutputPath
-          ? await copyToFolder(mp3OutputPath, audioSavePath, `${outputName}.mp3`)
-          : {};
-        jobs.update(jobId, {
-          status: 'done',
-          progress: 1,
-          videoSavedTo: videoSaveResult.savedTo || null,
-          videoSaveError: videoSaveResult.error || null,
-          audioSavedTo: audioSaveResult.savedTo || null,
-          audioSaveError: audioSaveResult.error || null,
-        });
-        recordRender({ renderSettings });
-        cleanupAll();
+    (async () => {
+      // The MP3, if requested, renders first - it's just the clip's own audio (no PNG, no
+      // libx264 encode), so it finishes dramatically faster than the video and can be saved
+      // and published to SoundCloud while the video render is still going, instead of both
+      // outputs only becoming available together at the very end.
+      if (mp3OutputPath) {
+        try {
+          await renderAudio({
+            videoPath: job.videoPath,
+            outputPath: mp3OutputPath,
+            trimStart: isTrimmed ? trimStart : null,
+            trimEnd: isTrimmed ? trimEnd : null,
+            transition,
+            normalize,
+            targetLufs,
+            mp3Bitrate,
+            videoInfo: { ...job.videoInfo, duration: effectiveDuration },
+            onProgress: (fraction) => jobs.update(jobId, { mp3Progress: fraction }),
+          });
+          const audioSaveResult = await copyToFolder(mp3OutputPath, audioSavePath, `${outputName}.mp3`);
+          jobs.update(jobId, {
+            mp3Status: 'done',
+            mp3Progress: 1,
+            audioSavedTo: audioSaveResult.savedTo || null,
+            audioSaveError: audioSaveResult.error || null,
+          });
 
-        // Publishing was confirmed up front (at the "Render" click), so it runs automatically
-        // here with no further approval needed - but only ever when that confirmation actually
-        // happened for this specific render.
-        if (publishToVimeo) {
-          jobs.update(jobId, { status: 'publishing', progress: 0, error: null });
-          vimeo
-            .uploadAndPublish({
-              filePath: outputPath,
-              name: outputName,
-              description: vimeoDescription,
-              showcaseIds: vimeoShowcaseIds,
-              privacy: vimeoPrivacy,
-              onProgress: (fraction) => jobs.update(jobId, { progress: fraction }),
-            })
-            .then(({ videoUrl, showcaseResults }) => {
-              jobs.update(jobId, { status: 'published', progress: 1, vimeoUrl: videoUrl, vimeoShowcaseResults: showcaseResults });
-            })
-            .catch((err) => {
-              jobs.update(jobId, { status: 'publish-error', error: err.message });
-            });
+          // Runs independently of (and in parallel with) the video render and Vimeo publish
+          // below - a SoundCloud failure shouldn't block or be blocked by either, and vice versa.
+          if (publishToSoundCloud) {
+            jobs.update(jobId, { scStatus: 'publishing', scProgress: 0, scError: null });
+            soundcloud
+              .uploadAndPublish({
+                filePath: mp3OutputPath,
+                title: outputName,
+                description: vimeoDescription, // same Core Text, sent to both platforms
+                privacy: soundcloudPrivacy,
+                playlistIds: soundcloudPlaylistIds,
+                onProgress: (fraction) => jobs.update(jobId, { scProgress: fraction }),
+              })
+              .then(({ trackUrl, playlistResults }) => {
+                jobs.update(jobId, { scStatus: 'published', scProgress: 1, scUrl: trackUrl, scPlaylistResults: playlistResults });
+              })
+              .catch((err) => {
+                jobs.update(jobId, { scStatus: 'error', scError: err.message });
+              });
+          }
+        } catch (err) {
+          // An MP3 failure is reported but doesn't abort the render - the video is still the
+          // main deliverable, and a failed audio pass shouldn't waste an otherwise-good video.
+          jobs.update(jobId, {
+            mp3Status: 'error',
+            mp3Progress: 1,
+            mp3Error: err.message,
+            mp3ErrorDetail: err.detail || null,
+          });
         }
+      }
 
-        // Runs independently of (and in parallel with) the Vimeo publish above - the two
-        // platforms don't depend on each other, so a SoundCloud failure shouldn't block or be
-        // blocked by Vimeo's, and vice versa. Tracked under separate sc*-prefixed job fields
-        // rather than overloading `status`, which stays Vimeo's alone.
-        if (publishToSoundCloud) {
-          jobs.update(jobId, { scStatus: 'publishing', scProgress: 0, scError: null });
-          soundcloud
-            .uploadAndPublish({
-              filePath: mp3OutputPath,
-              title: outputName,
-              description: vimeoDescription, // same Core Text, sent to both platforms
-              privacy: soundcloudPrivacy,
-              playlistIds: soundcloudPlaylistIds,
-              onProgress: (fraction) => jobs.update(jobId, { scProgress: fraction }),
-            })
-            .then(({ trackUrl, playlistResults }) => {
-              jobs.update(jobId, { scStatus: 'published', scProgress: 1, scUrl: trackUrl, scPlaylistResults: playlistResults });
-            })
-            .catch((err) => {
-              jobs.update(jobId, { scStatus: 'error', scError: err.message });
-            });
-        }
-      })
-      .catch((err) => {
-        jobs.update(jobId, { status: 'error', error: err.message, errorDetail: err.detail || null });
-        cleanupPng();
+      await render({
+        pngPath,
+        videoCrf,
+        videoPath: job.videoPath,
+        outputPath,
+        trimStart: isTrimmed ? trimStart : null,
+        trimEnd: isTrimmed ? trimEnd : null,
+        startDuration,
+        endDuration,
+        transition,
+        fadeOut,
+        crossfadeAudio,
+        normalize,
+        targetLufs,
+        videoInfo: { ...job.videoInfo, duration: effectiveDuration },
+        onProgress: (fraction) => {
+          jobs.update(jobId, { progress: fraction });
+        },
       });
+
+      const videoSaveResult = await copyToFolder(outputPath, videoSavePath, `${outputName}.mp4`);
+      jobs.update(jobId, {
+        status: 'done',
+        progress: 1,
+        videoSavedTo: videoSaveResult.savedTo || null,
+        videoSaveError: videoSaveResult.error || null,
+      });
+      recordRender({ renderSettings });
+      cleanupAll();
+
+      // Publishing was confirmed up front (at the "Render" click), so it runs automatically
+      // here with no further approval needed - but only ever when that confirmation actually
+      // happened for this specific render.
+      if (publishToVimeo) {
+        jobs.update(jobId, { status: 'publishing', progress: 0, error: null });
+        vimeo
+          .uploadAndPublish({
+            filePath: outputPath,
+            name: outputName,
+            description: vimeoDescription,
+            showcaseIds: vimeoShowcaseIds,
+            privacy: vimeoPrivacy,
+            onProgress: (fraction) => jobs.update(jobId, { progress: fraction }),
+          })
+          .then(({ videoUrl, showcaseResults }) => {
+            jobs.update(jobId, { status: 'published', progress: 1, vimeoUrl: videoUrl, vimeoShowcaseResults: showcaseResults });
+          })
+          .catch((err) => {
+            jobs.update(jobId, { status: 'publish-error', error: err.message });
+          });
+      }
+    })().catch((err) => {
+      jobs.update(jobId, { status: 'error', error: err.message, errorDetail: err.detail || null });
+      cleanupPng();
+    });
   } catch (err) {
     await cleanupPng();
     if (!res.headersSent) {
@@ -444,6 +474,10 @@ app.get('/api/progress/:jobId', (req, res) => {
         error: j.error,
         errorDetail: j.errorDetail || undefined,
         hasMp3: !!j.mp3OutputPath,
+        mp3Status: j.mp3Status || undefined,
+        mp3Progress: j.mp3Progress,
+        mp3Error: j.mp3Error || undefined,
+        mp3ErrorDetail: j.mp3ErrorDetail || undefined,
         vimeoUrl: j.vimeoUrl || undefined,
         vimeoShowcaseResults: j.vimeoShowcaseResults || undefined,
         scStatus: j.scStatus || undefined,
@@ -498,7 +532,9 @@ app.get('/api/download/:jobId', (req, res) => {
 
 app.get('/api/download/:jobId/mp3', (req, res) => {
   const job = jobs.get(req.params.jobId);
-  if (!job || job.status !== 'done' || !job.mp3OutputPath) return res.status(404).end();
+  // Checks mp3Status specifically, not the overall job status - the MP3 finishes well before
+  // the video does, and should be downloadable as soon as it's ready rather than waiting on it.
+  if (!job || job.mp3Status !== 'done' || !job.mp3OutputPath) return res.status(404).end();
   res.sendFile(job.mp3OutputPath);
 });
 

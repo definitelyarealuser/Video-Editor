@@ -250,15 +250,21 @@
       <div class="progress-safe-note">Safe to close this tab if you need to - rendering continues on this computer, and the finished file(s) will land in your chosen folder(s) either way. You just won't see this progress bar if you come back.</div>
     </section>
 
+    <!-- The MP3 (when requested) renders first and finishes well before the video, so its
+         download link and save status appear here as soon as it's ready - independent of
+         #result-section below, which is about the video and only appears once that's done. -->
+    <div class="audio-result-group">
+      <a id="download-mp3-link" class="download-btn download-btn-secondary" download hidden>Download MP3</a>
+      <div id="audio-save-status" class="save-status audio-save-status-standalone" hidden></div>
+    </div>
+
     <section id="result-section" hidden>
       <h2>Your video is ready</h2>
       <video id="result-preview" controls playsinline preload="metadata"></video>
       <div class="download-row">
         <a id="download-link" class="download-btn" download>Download MP4</a>
-        <a id="download-mp3-link" class="download-btn download-btn-secondary" download hidden>Download MP3</a>
       </div>
       <div id="video-save-status" class="save-status" hidden></div>
-      <div id="audio-save-status" class="save-status" hidden></div>
     </section>
 
     <section id="vimeo-status-section" class="vimeo-status-section" hidden>
@@ -298,9 +304,9 @@
 
       <label for="vimeo-privacy">Privacy</label>
       <select id="vimeo-privacy">
-        <option value="nobody" selected>Private - only you (and anyone granted access)</option>
+        <option value="nobody">Private - only you (and anyone granted access)</option>
         <option value="unlisted">Unlisted - only people with the link</option>
-        <option value="anybody">Public - anybody can view</option>
+        <option value="anybody" selected>Public - anybody can view</option>
       </select>
 
       <label>Add to showcases</label>

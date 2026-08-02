@@ -99,6 +99,10 @@ async function probe(filePath) {
  * video transition starts/ends (`crossfadeAudio: false`). Optionally the
  * combined audio is loudness-normalized (EBU R128 `loudnorm`) before the
  * final fade-out.
+ *
+ * The MP3 export is a wholly separate ffmpeg pass (see buildAudioOnlyFilterGraph/
+ * renderAudio below) - it doesn't touch the PNG or video streams at all, so it renders
+ * much faster than the full MP4 and can be saved/published while the video is still going.
  */
 function buildFilterGraph({
   width,
@@ -113,7 +117,6 @@ function buildFilterGraph({
   crossfadeAudio,
   normalize,
   targetLufs,
-  needsMp3,
 }) {
   const totalDuration = startDuration + endDuration + videoDuration - 2 * transition;
   const offset1 = startDuration - transition;
@@ -132,24 +135,16 @@ function buildFilterGraph({
   ];
 
   const mainAudioSource = hasAudio
-    ? `[1:a]aformat=sample_rates=48000:channel_layouts=stereo[mainaSrc]`
-    : `anullsrc=channel_layout=stereo:sample_rate=48000,atrim=0:${videoDuration},asetpts=PTS-STARTPTS[mainaSrc]`;
+    ? `[1:a]aformat=sample_rates=48000:channel_layouts=stereo[maina]`
+    : `anullsrc=channel_layout=stereo:sample_rate=48000,atrim=0:${videoDuration},asetpts=PTS-STARTPTS[maina]`;
 
   const audioChain = [mainAudioSource];
-
-  // The MP3 export uses its own copy of the main audio (trimmed to just the
-  // clip itself, not the PNG holds), so split off a second copy up front
-  // when needed — a filter pad can only feed one downstream consumer.
-  const mainaLabel = needsMp3 ? 'maina' : 'mainaSrc';
-  if (needsMp3) {
-    audioChain.push(`[mainaSrc]asplit=2[maina][mainaMp3]`);
-  }
 
   if (crossfadeAudio) {
     audioChain.push(
       `anullsrc=channel_layout=stereo:sample_rate=48000,atrim=0:${startDuration},asetpts=PTS-STARTPTS[silence1]`,
       `anullsrc=channel_layout=stereo:sample_rate=48000,atrim=0:${endDuration},asetpts=PTS-STARTPTS[silence2]`,
-      `[silence1][${mainaLabel}]acrossfade=d=${transition}[xa1]`,
+      `[silence1][maina]acrossfade=d=${transition}[xa1]`,
       `[xa1][silence2]acrossfade=d=${transition}[xa2]`
     );
   } else {
@@ -158,7 +153,7 @@ function buildFilterGraph({
     audioChain.push(
       `anullsrc=channel_layout=stereo:sample_rate=48000,atrim=0:${offset1},asetpts=PTS-STARTPTS[silence1]`,
       `anullsrc=channel_layout=stereo:sample_rate=48000,atrim=0:${endDuration - transition},asetpts=PTS-STARTPTS[silence2]`,
-      `[silence1][${mainaLabel}][silence2]concat=n=3:v=0:a=1[xa2]`
+      `[silence1][maina][silence2]concat=n=3:v=0:a=1[xa2]`
     );
   }
 
@@ -169,105 +164,42 @@ function buildFilterGraph({
   }
   audioChain.push(`[${lastAudioLabel}]afade=t=out:st=${fadeStart}:d=${fadeOut}[aout]`);
 
-  const audioOutputLabels = ['aout'];
-
-  if (needsMp3) {
-    // Just the clip's own audio (no PNG-hold silence), still fading up from
-    // silence and back down over `transition` seconds at each end, mirroring
-    // the crossfade the picture does — regardless of the full render's
-    // audio-crossfade toggle.
-    let mp3Label = 'mainaMp3';
-    if (normalize) {
-      audioChain.push(`[mainaMp3]loudnorm=I=${targetLufs}:TP=-1.5:LRA=11[mainaMp3n]`);
-      mp3Label = 'mainaMp3n';
-    }
-    audioChain.push(
-      `[${mp3Label}]afade=t=in:st=0:d=${transition}[mp3faded]`,
-      `[mp3faded]afade=t=out:st=${videoDuration - transition}:d=${transition}[aoutMp3]`
-    );
-    audioOutputLabels.push('aoutMp3');
-  }
-
   return {
     filterComplex: [...videoChain, ...audioChain].join(';'),
     totalDuration,
-    audioOutputLabels,
   };
 }
 
 /**
- * Kicks off the render. Calls onProgress(fractionComplete) periodically.
+ * Builds the filter_complex for the standalone MP3 pass: just the clip's own audio (no
+ * PNG-hold silence), fading up from silence and back down over `transition` seconds at each
+ * end - mirroring the crossfade the picture does in the full render, regardless of that
+ * render's own audio-crossfade toggle - with optional loudness normalization.
  */
-function render({
-  pngPath,
-  videoPath,
-  outputPath,
-  mp3OutputPath,
-  trimStart,
-  trimEnd,
-  startDuration,
-  endDuration,
-  transition,
-  fadeOut,
-  crossfadeAudio,
-  normalize,
-  targetLufs,
-  videoInfo,
-  videoCrf = VIDEO_QUALITY_PRESETS.high,
-  mp3Bitrate = 192,
-  onProgress,
-}) {
-  const { filterComplex, totalDuration, audioOutputLabels } = buildFilterGraph({
-    width: videoInfo.width,
-    height: videoInfo.height,
-    fps: videoInfo.fps,
-    videoDuration: videoInfo.duration,
-    hasAudio: videoInfo.hasAudio,
-    startDuration,
-    endDuration,
-    transition,
-    fadeOut,
-    crossfadeAudio,
-    normalize,
-    targetLufs,
-    needsMp3: !!mp3OutputPath,
-  });
+function buildAudioOnlyFilterGraph({ videoDuration, hasAudio, transition, normalize, targetLufs }) {
+  const mainAudioSource = hasAudio
+    ? `[0:a]aformat=sample_rates=48000:channel_layouts=stereo[maina]`
+    : `anullsrc=channel_layout=stereo:sample_rate=48000,atrim=0:${videoDuration},asetpts=PTS-STARTPTS[maina]`;
 
-  const videoInputArgs =
-    trimStart != null && trimEnd != null
-      ? ['-ss', String(trimStart), '-to', String(trimEnd), '-i', videoPath]
-      : ['-i', videoPath];
-
-  const args = [
-    '-y',
-    '-loop', '1', '-t', String(startDuration), '-i', pngPath,
-    ...videoInputArgs,
-    '-loop', '1', '-t', String(endDuration), '-i', pngPath,
-    '-filter_complex', filterComplex,
-    '-map', '[vout]',
-    '-map', `[${audioOutputLabels[0]}]`,
-    '-c:v', 'libx264',
-    '-preset', 'medium',
-    '-crf', String(videoCrf),
-    '-pix_fmt', 'yuv420p',
-    // Tags the output as Rec.709 rather than leaving color metadata unspecified - doesn't
-    // convert the actual pixel values (most footage is already effectively Rec.709 anyway),
-    // just removes the guesswork for Vimeo's transcoder on ingest.
-    '-colorspace', 'bt709',
-    '-color_primaries', 'bt709',
-    '-color_trc', 'bt709',
-    '-c:a', 'aac',
-    '-b:a', '320k', // matches Vimeo's recommended source-upload audio bitrate
-    '-movflags', '+faststart',
-    '-progress', 'pipe:1',
-    '-nostats',
-    outputPath,
-  ];
-
-  if (mp3OutputPath) {
-    args.push('-map', `[${audioOutputLabels[1]}]`, '-c:a', 'libmp3lame', '-b:a', `${mp3Bitrate}k`, mp3OutputPath);
+  const chain = [mainAudioSource];
+  let label = 'maina';
+  if (normalize) {
+    chain.push(`[maina]loudnorm=I=${targetLufs}:TP=-1.5:LRA=11[mainan]`);
+    label = 'mainan';
   }
+  chain.push(
+    `[${label}]afade=t=in:st=0:d=${transition}[faded]`,
+    `[faded]afade=t=out:st=${videoDuration - transition}:d=${transition}[aout]`
+  );
 
+  return { filterComplex: chain.join(';') };
+}
+
+/**
+ * Spawns ffmpeg with `-progress pipe:1` and reports fractional progress against
+ * `totalDuration` as it runs. Shared by both the video and audio-only render passes.
+ */
+function runFfmpegRender(args, totalDuration, onProgress, failureMessage) {
   return new Promise((resolve, reject) => {
     const proc = spawn('ffmpeg', args);
     let stderrTail = '';
@@ -298,16 +230,140 @@ function render({
     });
 
     proc.on('close', (code) => {
-      if (code === 0) resolve({ totalDuration });
+      if (code === 0) resolve();
       else {
-        const err = new Error(
-          "The render failed partway through. This usually means the video file, trim range, or output settings didn't work together the way ffmpeg expected."
-        );
+        const err = new Error(failureMessage);
         err.detail = stderrTail;
         reject(err);
       }
     });
   });
+}
+
+/**
+ * Kicks off the video (MP4) render. Calls onProgress(fractionComplete) periodically.
+ * The MP3, if requested, is a separate pass - see renderAudio() below.
+ */
+function render({
+  pngPath,
+  videoPath,
+  outputPath,
+  trimStart,
+  trimEnd,
+  startDuration,
+  endDuration,
+  transition,
+  fadeOut,
+  crossfadeAudio,
+  normalize,
+  targetLufs,
+  videoInfo,
+  videoCrf = VIDEO_QUALITY_PRESETS.high,
+  onProgress,
+}) {
+  const { filterComplex, totalDuration } = buildFilterGraph({
+    width: videoInfo.width,
+    height: videoInfo.height,
+    fps: videoInfo.fps,
+    videoDuration: videoInfo.duration,
+    hasAudio: videoInfo.hasAudio,
+    startDuration,
+    endDuration,
+    transition,
+    fadeOut,
+    crossfadeAudio,
+    normalize,
+    targetLufs,
+  });
+
+  const videoInputArgs =
+    trimStart != null && trimEnd != null
+      ? ['-ss', String(trimStart), '-to', String(trimEnd), '-i', videoPath]
+      : ['-i', videoPath];
+
+  const args = [
+    '-y',
+    '-loop', '1', '-t', String(startDuration), '-i', pngPath,
+    ...videoInputArgs,
+    '-loop', '1', '-t', String(endDuration), '-i', pngPath,
+    '-filter_complex', filterComplex,
+    '-map', '[vout]',
+    '-map', '[aout]',
+    '-c:v', 'libx264',
+    '-preset', 'medium',
+    '-crf', String(videoCrf),
+    '-pix_fmt', 'yuv420p',
+    // Tags the output as Rec.709 rather than leaving color metadata unspecified - doesn't
+    // convert the actual pixel values (most footage is already effectively Rec.709 anyway),
+    // just removes the guesswork for Vimeo's transcoder on ingest.
+    '-colorspace', 'bt709',
+    '-color_primaries', 'bt709',
+    '-color_trc', 'bt709',
+    '-c:a', 'aac',
+    '-b:a', '320k', // matches Vimeo's recommended source-upload audio bitrate
+    '-movflags', '+faststart',
+    '-progress', 'pipe:1',
+    '-nostats',
+    outputPath,
+  ];
+
+  return runFfmpegRender(
+    args,
+    totalDuration,
+    onProgress,
+    "The render failed partway through. This usually means the video file, trim range, or output settings didn't work together the way ffmpeg expected."
+  );
+}
+
+/**
+ * Kicks off the MP3 render - its own ffmpeg pass, entirely separate from the video (no PNG
+ * inputs, no video decode at all). Deliberately run before the video render (see server/index.js)
+ * since it's dramatically faster - just the clip's own audio, no libx264 encode involved - so
+ * the MP3 can be saved and published to SoundCloud while the video is still going.
+ */
+function renderAudio({
+  videoPath,
+  outputPath,
+  trimStart,
+  trimEnd,
+  transition,
+  normalize,
+  targetLufs,
+  videoInfo,
+  mp3Bitrate = 192,
+  onProgress,
+}) {
+  const { filterComplex } = buildAudioOnlyFilterGraph({
+    videoDuration: videoInfo.duration,
+    hasAudio: videoInfo.hasAudio,
+    transition,
+    normalize,
+    targetLufs,
+  });
+
+  const videoInputArgs =
+    trimStart != null && trimEnd != null
+      ? ['-ss', String(trimStart), '-to', String(trimEnd), '-i', videoPath]
+      : ['-i', videoPath];
+
+  const args = [
+    '-y',
+    ...videoInputArgs,
+    '-filter_complex', filterComplex,
+    '-map', '[aout]',
+    '-c:a', 'libmp3lame',
+    '-b:a', `${mp3Bitrate}k`,
+    '-progress', 'pipe:1',
+    '-nostats',
+    outputPath,
+  ];
+
+  return runFfmpegRender(
+    args,
+    videoInfo.duration,
+    onProgress,
+    "The audio render failed partway through. This usually means the trim range or normalization settings didn't work together the way ffmpeg expected."
+  );
 }
 
 /**
@@ -380,6 +436,7 @@ async function estimateFileSizes({ videoPath, trimStart, trimEnd, width, height,
 module.exports = {
   probe,
   render,
+  renderAudio,
   checkFfmpegAvailable,
   estimateFileSizes,
   VIDEO_QUALITY_PRESETS,
