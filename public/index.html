@@ -232,9 +232,48 @@
         </div>
       </div>
 
-      <div id="vimeo-connect-section" class="soundcloud-connect-section" hidden>
-        <span id="vimeo-connect-status"></span>
-        <a id="vimeo-connect-btn" href="/api/vimeo/connect" class="soundcloud-connect-link" hidden>Connect Vimeo</a>
+      <div id="vimeo-setup-section" class="vimeo-setup-section">
+        <div id="vimeo-status-row" class="soundcloud-connect-section">
+          <span id="vimeo-connect-status"></span>
+          <a id="vimeo-connect-btn" href="/api/vimeo/connect" class="soundcloud-connect-link" hidden>Connect Vimeo</a>
+          <button type="button" id="vimeo-toggle-setup-btn" class="soundcloud-connect-link">Set up Vimeo publishing…</button>
+        </div>
+
+        <div id="vimeo-setup-form" class="vimeo-setup-form" hidden>
+          <p class="vimeo-setup-intro">To let this app upload directly to Vimeo, create a small (free) "app" on Vimeo's site - a one-time step. This is just how Vimeo lets an outside program connect to an account; you won't need to come back to Vimeo's site again once it's done.</p>
+          <ol class="vimeo-setup-steps">
+            <li>Go to <a href="https://developer.vimeo.com/apps" target="_blank" rel="noopener">developer.vimeo.com/apps</a> and log in with the Vimeo account you want to publish to. (Requires a Vimeo Pro, Business, or Premium plan - the free plan doesn't allow this kind of connection.)</li>
+            <li>Click <strong>Create App</strong>. Give it any name (e.g. "Sermon Video Editor") - the details don't matter, it's just for your own use.</li>
+            <li>On the new app's page, find <strong>Redirect URIs</strong> (under "Authentication") and add exactly this, then save: <code>http://localhost:3000/api/vimeo/oauth-callback</code></li>
+            <li>Still on that page, copy the <strong>Client Identifier</strong> and <strong>Client Secret</strong> into the two boxes below.</li>
+            <li>Click <strong>Save</strong> below, then click <strong>Connect Vimeo</strong> and log in with your Vimeo account when it asks - that's the last step.</li>
+          </ol>
+
+          <div class="field">
+            <label for="vimeo-client-id-input">Client Identifier</label>
+            <input type="text" id="vimeo-client-id-input" autocomplete="off" placeholder="Paste it here" />
+          </div>
+          <div class="field">
+            <label for="vimeo-client-secret-input">Client Secret</label>
+            <input type="password" id="vimeo-client-secret-input" autocomplete="off" placeholder="Paste it here" />
+          </div>
+          <div class="field">
+            <label for="vimeo-showcase-ids-input">
+              Showcases <span class="field-optional">(optional - every published video gets added to these automatically)</span>
+            </label>
+            <input type="text" id="vimeo-showcase-ids-input" autocomplete="off" placeholder="e.g. 1234567, 9876543" />
+            <div class="vimeo-setup-hint">Comma-separated. Find an ID in the showcase's URL: vimeo.com/showcase/<strong>XXXXXXX</strong>. Can be left blank, or added later.</div>
+          </div>
+
+          <div id="vimeo-setup-locked-note" class="vimeo-setup-hint" hidden>The Client Identifier and Secret are set on this machine outside the app and can't be edited here.</div>
+          <div id="vimeo-setup-error" class="error-box" hidden></div>
+
+          <div class="vimeo-setup-actions">
+            <button type="button" id="vimeo-setup-reset-btn" class="modal-btn-ghost" hidden>Disconnect &amp; clear</button>
+            <button type="button" id="vimeo-setup-cancel-btn" class="modal-btn-ghost">Cancel</button>
+            <button type="button" id="vimeo-setup-save-btn" class="modal-btn-primary">Save</button>
+          </div>
+        </div>
       </div>
 
       <div id="soundcloud-connect-section" class="soundcloud-connect-section" hidden>

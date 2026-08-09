@@ -640,8 +640,38 @@ app.get('/api/vimeo-status', (req, res) => {
   res.json({
     configured: vimeo.isConfigured(),
     connected: vimeo.isConnected(),
+    hasOAuthApp: vimeo.hasOAuthApp(),
     showcaseCount: vimeo.getShowcaseIds().length,
   });
+});
+
+// The Vimeo setup panel's own state - whether a Client Identifier/Secret have been saved
+// (without ever sending the secret itself back down), so the form can show "already saved"
+// instead of blank fields, and explain when env vars are in charge instead.
+app.get('/api/vimeo-app-config', (req, res) => {
+  res.json(vimeo.getAppConfigStatus());
+});
+
+// Saves the Client Identifier/Secret entered in the app's own setup panel - the whole point of
+// this endpoint is that a non-technical user never has to find, open, or edit .env for this.
+app.post('/api/vimeo-app-config', (req, res) => {
+  try {
+    const { clientId, clientSecret } = req.body || {};
+    const showcaseIds = req.body && req.body.showcaseIds !== undefined
+      ? String(req.body.showcaseIds).split(',').map((s) => s.trim()).filter(Boolean)
+      : undefined;
+    vimeo.saveAppConfig({ clientId, clientSecret, showcaseIds });
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(400).json({ error: err.message || 'Could not save Vimeo settings.' });
+  }
+});
+
+// Full reset - clears the saved Client Identifier/Secret AND any connected account token, so
+// someone can switch Vimeo accounts or start over after entering the wrong values.
+app.delete('/api/vimeo-app-config', (req, res) => {
+  vimeo.clearAppConfig();
+  res.json({ ok: true });
 });
 
 // Real showcase names for the configured IDs, so the publish dialog can offer a friendly

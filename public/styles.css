@@ -225,7 +225,8 @@ header h1 {
 }
 
 .field input[type="number"],
-.field input[type="text"] {
+.field input[type="text"],
+.field input[type="password"] {
   width: 100%;
   background: var(--panel);
   border: 1px solid var(--border);
@@ -465,6 +466,83 @@ label.core-text-label {
 
 .soundcloud-connect-link:hover {
   text-decoration: underline;
+}
+
+button.soundcloud-connect-link {
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  font-size: inherit;
+  font-family: inherit;
+}
+
+.vimeo-setup-section {
+  margin-bottom: 16px;
+}
+
+.vimeo-setup-form {
+  margin-top: 10px;
+  padding: 16px 18px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+}
+
+.vimeo-setup-intro {
+  font-size: 0.85rem;
+  color: var(--muted);
+  line-height: 1.5;
+  margin: 0 0 10px;
+}
+
+.vimeo-setup-steps {
+  font-size: 0.85rem;
+  line-height: 1.6;
+  margin: 0 0 16px;
+  padding-left: 22px;
+}
+
+.vimeo-setup-steps li {
+  margin-bottom: 8px;
+}
+
+.vimeo-setup-steps a {
+  color: var(--accent);
+}
+
+.vimeo-setup-steps code,
+.vimeo-setup-hint code {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 1px 6px;
+  font-size: 0.85em;
+  word-break: break-all;
+}
+
+.vimeo-setup-hint {
+  font-size: 0.78rem;
+  color: var(--muted);
+  margin-top: 6px;
+}
+
+.vimeo-setup-form .field {
+  margin-bottom: 14px;
+}
+
+.vimeo-setup-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 16px;
+}
+
+/* .modal-btn-primary/.modal-btn-secondary default to flex: 1 (right for the modal row they were
+   built for), which would stretch them full-width here since this row right-aligns instead. */
+.vimeo-setup-actions .modal-btn-primary,
+.vimeo-setup-actions .modal-btn-secondary {
+  flex: 0 0 auto;
 }
 
 .download-row {

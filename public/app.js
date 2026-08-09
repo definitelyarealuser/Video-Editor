@@ -114,39 +114,161 @@
   const soundcloudConnectStatus = document.getElementById('soundcloud-connect-status');
   const soundcloudConnectBtn = document.getElementById('soundcloud-connect-btn');
 
-  const vimeoConnectSection = document.getElementById('vimeo-connect-section');
   const vimeoConnectStatus = document.getElementById('vimeo-connect-status');
   const vimeoConnectBtn = document.getElementById('vimeo-connect-btn');
+  const vimeoToggleSetupBtn = document.getElementById('vimeo-toggle-setup-btn');
+  const vimeoSetupForm = document.getElementById('vimeo-setup-form');
+  const vimeoClientIdInput = document.getElementById('vimeo-client-id-input');
+  const vimeoClientSecretInput = document.getElementById('vimeo-client-secret-input');
+  const vimeoShowcaseIdsInput = document.getElementById('vimeo-showcase-ids-input');
+  const vimeoSetupLockedNote = document.getElementById('vimeo-setup-locked-note');
+  const vimeoSetupError = document.getElementById('vimeo-setup-error');
+  const vimeoSetupResetBtn = document.getElementById('vimeo-setup-reset-btn');
+  const vimeoSetupCancelBtn = document.getElementById('vimeo-setup-cancel-btn');
+  const vimeoSetupSaveBtn = document.getElementById('vimeo-setup-save-btn');
 
   state.vimeoConnected = false;
-  // The connect row only ever shows for the OAuth path (VIMEO_CLIENT_ID/SECRET) - a legacy
-  // VIMEO_ACCESS_TOKEN is already connected with nothing left to do, so there's nothing useful
-  // to show a button for in that case even though `configured` is also true then.
+  state.vimeoHasOAuthApp = false;
+  let vimeoSetupOpen = false;
+
+  // Shows/hides the status row's pieces based on where things stand - connected (either method),
+  // OAuth app saved but not yet connected, or nothing set up at all. A legacy VIMEO_ACCESS_TOKEN
+  // is already connected with nothing left to configure, so the setup panel itself hides then -
+  // there's nothing there for that path to do.
   function refreshVimeoConnectUI() {
-    vimeoConnectSection.hidden = !state.vimeoConfigured;
+    const legacyConnected = state.vimeoConnected && !state.vimeoHasOAuthApp;
     if (state.vimeoConnected) {
       vimeoConnectStatus.textContent = 'Vimeo: connected';
       vimeoConnectStatus.classList.add('connected');
       vimeoConnectBtn.hidden = true;
-    } else {
+    } else if (state.vimeoHasOAuthApp) {
       vimeoConnectStatus.textContent = 'Vimeo: not connected';
       vimeoConnectStatus.classList.remove('connected');
       vimeoConnectBtn.hidden = false;
+    } else {
+      vimeoConnectStatus.textContent = 'Vimeo: not set up';
+      vimeoConnectStatus.classList.remove('connected');
+      vimeoConnectBtn.hidden = true;
     }
+    vimeoToggleSetupBtn.hidden = legacyConnected;
+    vimeoToggleSetupBtn.textContent = state.vimeoHasOAuthApp ? 'Vimeo settings…' : 'Set up Vimeo publishing…';
   }
+
+  function refreshVimeoShowcases() {
+    return fetch('/api/vimeo-showcases')
+      .then((res) => res.json())
+      .then((data) => {
+        state.vimeoShowcases = data.showcases || [];
+      })
+      .catch(() => {});
+  }
+
   function loadVimeoStatus() {
     return fetch('/api/vimeo-status')
       .then((res) => res.json())
       .then((data) => {
         state.vimeoConfigured = !!data.configured;
         state.vimeoConnected = !!data.connected;
+        state.vimeoHasOAuthApp = !!data.hasOAuthApp;
         refreshVimeoConnectUI();
+        // Nothing set up yet on a brand-new install - open the instructions right away rather
+        // than waiting for a click, since there's nothing yet to hint that a toggle exists.
+        if (!state.vimeoConnected && !state.vimeoHasOAuthApp && !vimeoSetupOpen) {
+          openVimeoSetupForm();
+        }
       })
       .catch(() => {
         state.vimeoConfigured = false;
         state.vimeoConnected = false;
+        state.vimeoHasOAuthApp = false;
       });
   }
+
+  function openVimeoSetupForm() {
+    vimeoSetupError.hidden = true;
+    fetch('/api/vimeo-app-config')
+      .then((res) => res.json())
+      .then((data) => {
+        vimeoClientIdInput.value = data.clientId || '';
+        vimeoClientSecretInput.value = '';
+        vimeoClientSecretInput.placeholder = data.hasSecret ? 'Already saved - leave blank to keep it' : 'Paste it here';
+        vimeoShowcaseIdsInput.value = (data.showcaseIds || []).join(', ');
+        vimeoSetupLockedNote.hidden = !data.lockedByEnv;
+        vimeoClientIdInput.disabled = data.lockedByEnv;
+        vimeoClientSecretInput.disabled = data.lockedByEnv;
+        vimeoSetupSaveBtn.hidden = data.lockedByEnv;
+        vimeoSetupResetBtn.hidden = data.lockedByEnv || !state.vimeoHasOAuthApp;
+      })
+      .catch(() => {});
+    vimeoSetupForm.hidden = false;
+    vimeoSetupOpen = true;
+  }
+
+  function closeVimeoSetupForm() {
+    vimeoSetupForm.hidden = true;
+    vimeoSetupOpen = false;
+  }
+
+  vimeoToggleSetupBtn.addEventListener('click', () => {
+    if (vimeoSetupOpen) closeVimeoSetupForm();
+    else openVimeoSetupForm();
+  });
+  vimeoSetupCancelBtn.addEventListener('click', closeVimeoSetupForm);
+
+  vimeoSetupSaveBtn.addEventListener('click', async () => {
+    vimeoSetupError.hidden = true;
+    const clientId = vimeoClientIdInput.value.trim();
+    const clientSecret = vimeoClientSecretInput.value.trim();
+    const showcaseIds = vimeoShowcaseIdsInput.value.trim();
+    if (!clientId) {
+      vimeoSetupError.hidden = false;
+      vimeoSetupError.textContent = 'Paste in the Client Identifier from the Vimeo app page first.';
+      return;
+    }
+    const body = { clientId, showcaseIds };
+    // Leaving the secret blank on an edit means "keep the one already saved" - only require a
+    // freshly-typed one when nothing's saved yet (the placeholder tells us which case this is).
+    if (clientSecret) {
+      body.clientSecret = clientSecret;
+    } else if (!vimeoClientSecretInput.placeholder.startsWith('Already saved')) {
+      vimeoSetupError.hidden = false;
+      vimeoSetupError.textContent = 'Paste in the Client Secret from the Vimeo app page too.';
+      return;
+    }
+    vimeoSetupSaveBtn.disabled = true;
+    try {
+      const res = await fetch('/api/vimeo-app-config', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Could not save Vimeo settings.');
+      await loadVimeoStatus();
+      await refreshVimeoShowcases();
+      closeVimeoSetupForm();
+    } catch (err) {
+      vimeoSetupError.hidden = false;
+      vimeoSetupError.textContent = err.message;
+    } finally {
+      vimeoSetupSaveBtn.disabled = false;
+    }
+  });
+
+  vimeoSetupResetBtn.addEventListener('click', async () => {
+    if (!window.confirm('Disconnect Vimeo and clear the saved Client ID/Secret? You can set it up again any time.')) return;
+    vimeoSetupResetBtn.disabled = true;
+    try {
+      await fetch('/api/vimeo-app-config', { method: 'DELETE' });
+      await loadVimeoStatus();
+      closeVimeoSetupForm();
+    } catch {
+      // Non-critical - worst case they just try again.
+    } finally {
+      vimeoSetupResetBtn.disabled = false;
+    }
+  });
+
   loadVimeoStatus();
 
   state.soundcloudConfigured = false;
@@ -198,14 +320,7 @@
     const vimeoResult = params.get('vimeo');
     if (!vimeoResult) return;
     if (vimeoResult === 'connected') {
-      loadVimeoStatus().then(() => {
-        fetch('/api/vimeo-showcases')
-          .then((res) => res.json())
-          .then((data) => {
-            state.vimeoShowcases = data.showcases || [];
-          })
-          .catch(() => {});
-      });
+      loadVimeoStatus().then(refreshVimeoShowcases);
     } else if (vimeoResult === 'error') {
       const message = params.get('message') || 'Could not connect to Vimeo.';
       errorSection.hidden = false;
