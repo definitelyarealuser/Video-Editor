@@ -1,0 +1,6 @@
+#!/bin/bash
+# This is the actual "binary" macOS launches when someone double-clicks the .app - its only
+# job is to hand off to Terminal.app so the real setup work (Contents/Resources/bootstrap.command)
+# runs somewhere the user can see it happening, the same way double-clicking a .command file does.
+DIR="$(cd "$(dirname "$0")/../Resources" && pwd)"
+open -a Terminal "$DIR/bootstrap.command"

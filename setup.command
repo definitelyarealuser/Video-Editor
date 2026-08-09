@@ -9,6 +9,18 @@
 # Safe to re-run any time - it updates an existing install instead of duplicating it.
 set -e
 
+# When this runs via `curl ... | bash` (as documented above, and as the installer .app does
+# under the hood), stdin is the pipe from curl, not the real terminal - any `read` below, or
+# inside something this script shells out to (notably Homebrew's own installer, which asks for
+# a keypress to confirm), would see stdin already at EOF instead of waiting on the user. Re-attach
+# stdin to the actual terminal device so those all behave the same as running this script directly.
+# Best-effort: if there's no controlling terminal to reattach to for some reason, don't let that
+# abort the whole install (`set -e` would otherwise treat a failed exec as fatal) - just fall
+# back to the original stdin.
+if [ ! -t 0 ]; then
+  exec < /dev/tty 2>/dev/null || true
+fi
+
 APP_DIR="$HOME/Video-Editor"
 REPO_URL="https://github.com/definitelyarealuser/Video-Editor.git"
 # NOTE: update this once the app's work has been merged into main.
