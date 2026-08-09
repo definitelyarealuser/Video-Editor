@@ -9,7 +9,7 @@ REPO_URL="https://raw.githubusercontent.com/definitelyarealuser/Video-Editor"
 # NOTE: update this once the app's work has been merged into main, same as setup.command's own note.
 BRANCH="claude/sermon-video-editor-fa7r7w"
 
-if ! curl -fsSL "$REPO_URL/$BRANCH/setup.command" | bash; then
+if ! /bin/bash -c "$(curl -fsSL "$REPO_URL/$BRANCH/setup.command")"; then
   echo ""
   echo "Something went wrong during setup - check the messages above for details."
   echo "(A common cause is no internet connection.)"

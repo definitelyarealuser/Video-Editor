@@ -2,24 +2,21 @@
 # One-time setup for a Mac that's never run this app before.
 #
 # Run it with (update this URL to the /main/ branch once this work is merged there):
-#   curl -fsSL https://raw.githubusercontent.com/definitelyarealuser/Video-Editor/claude/sermon-video-editor-fa7r7w/setup.command | bash
+#   /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/definitelyarealuser/Video-Editor/claude/sermon-video-editor-fa7r7w/setup.command)"
 #
 # It installs Homebrew (if needed), Node/ffmpeg/git via Homebrew, downloads the app to
 # ~/Video-Editor, installs its dependencies, and adds a double-click shortcut to the Desktop.
 # Safe to re-run any time - it updates an existing install instead of duplicating it.
+#
+# NOTE: deliberately documented/invoked as `bash -c "$(curl ...)"`, not `curl ... | bash` - the
+# latter feeds this script to bash through bash's own stdin, which bash is still reading from
+# to get the rest of the script's commands as it goes. Any attempt inside a piped script to
+# redirect stdin elsewhere (even just for one `read`) yanks away the very stream bash is using
+# to read the rest of the script, and it hangs waiting for a human to type the remaining commands
+# instead. `bash -c "$(curl ...)"` sidesteps this entirely - the whole script is captured into a
+# string first, so bash never reads its own program text from stdin, leaving stdin free to be the
+# real terminal the whole time (same pattern the Homebrew install line below already relies on).
 set -e
-
-# When this runs via `curl ... | bash` (as documented above, and as the installer .app does
-# under the hood), stdin is the pipe from curl, not the real terminal - any `read` below, or
-# inside something this script shells out to (notably Homebrew's own installer, which asks for
-# a keypress to confirm), would see stdin already at EOF instead of waiting on the user. Re-attach
-# stdin to the actual terminal device so those all behave the same as running this script directly.
-# Best-effort: if there's no controlling terminal to reattach to for some reason, don't let that
-# abort the whole install (`set -e` would otherwise treat a failed exec as fatal) - just fall
-# back to the original stdin.
-if [ ! -t 0 ]; then
-  exec < /dev/tty 2>/dev/null || true
-fi
 
 APP_DIR="$HOME/Video-Editor"
 REPO_URL="https://github.com/definitelyarealuser/Video-Editor.git"
