@@ -392,6 +392,7 @@
       if (!data) return;
       if (data.videoSavePath) videoSavePathInput.value = data.videoSavePath;
       if (data.audioSavePath) audioSavePathInput.value = data.audioSavePath;
+      updateRenderButton();
     })
     .catch(() => {
       // Non-critical - the fields just stay empty.
@@ -1039,6 +1040,7 @@
       if (data.path) {
         targetInput.value = data.path;
         saveSavePaths();
+        updateRenderButton();
       }
       // data.path === null just means the user clicked Cancel in the native dialog - not an
       // error, nothing to do.
@@ -1068,6 +1070,7 @@
     if (folderBrowserTargetInput && folderBrowserCurrentDir) {
       folderBrowserTargetInput.value = folderBrowserCurrentDir;
       saveSavePaths();
+      updateRenderButton();
     }
     closeFolderBrowser();
   });
