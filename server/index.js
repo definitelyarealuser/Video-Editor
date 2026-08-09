@@ -15,6 +15,7 @@ const soundcloud = require('./soundcloud');
 const bookendImages = require('./bookendImages');
 const savePaths = require('./savePaths');
 const nativeFolderPicker = require('./nativeFolderPicker');
+const gitUpdate = require('./gitUpdate');
 
 const PORT = process.env.PORT || 3000;
 const ROOT = path.join(__dirname, '..');
@@ -686,6 +687,40 @@ app.get('/api/soundcloud/oauth-callback', async (req, res) => {
     res.redirect('/?soundcloud=connected');
   } catch (err) {
     res.redirect(`/?soundcloud=error&message=${encodeURIComponent(err.message || 'Connection failed.')}`);
+  }
+});
+
+// Current commit info, for the "Up to date (abc1234 - ...)" status line - cheap, no network
+// call, safe to hit on every page load unlike the check/apply routes below.
+app.get('/api/update/status', async (req, res) => {
+  try {
+    const [branch, current] = await Promise.all([gitUpdate.getCurrentBranch(), gitUpdate.getCurrentCommit()]);
+    res.json({ branch, current });
+  } catch (err) {
+    res.status(500).json({ error: err.message || 'Could not read the current version.' });
+  }
+});
+
+// Fetches from GitHub and reports whether the remote branch has moved ahead - doesn't change
+// anything on disk.
+app.post('/api/update/check', async (req, res) => {
+  try {
+    res.json(await gitUpdate.checkForUpdate());
+  } catch (err) {
+    res.status(500).json({ error: err.message || 'Could not check for updates.', errorDetail: err.detail });
+  }
+});
+
+// Pulls the latest code and restarts the server so it takes effect - the process exits with
+// a specific code (42) that start.command's wrapping loop recognizes as "restart me", as
+// opposed to any other exit meaning the app actually stopped.
+app.post('/api/update/apply', async (req, res) => {
+  try {
+    const result = await gitUpdate.applyUpdate();
+    res.json({ ok: true, ...result });
+    setTimeout(() => process.exit(42), 500);
+  } catch (err) {
+    res.status(500).json({ error: err.message || 'Update failed.', errorDetail: err.detail });
   }
 });
 

@@ -59,6 +59,83 @@
     }
   }
 
+  // --- Software updates: pulls the latest code from GitHub with one click. The server exits
+  // deliberately after applying one (see server/gitUpdate.js) and start.command's wrapping
+  // loop restarts it automatically, so every machine running this app can pick up new
+  // features/fixes the same simple way.
+  const updateStatusText = document.getElementById('update-status-text');
+  const checkUpdateBtn = document.getElementById('check-update-btn');
+  const applyUpdateBtn = document.getElementById('apply-update-btn');
+
+  function shortHash(hash) {
+    return (hash || '').slice(0, 7);
+  }
+
+  async function checkForCodeUpdate() {
+    checkUpdateBtn.disabled = true;
+    applyUpdateBtn.hidden = true;
+    updateStatusText.textContent = 'Checking for updates…';
+    try {
+      const res = await fetch('/api/update/check', { method: 'POST' });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Could not check for updates.');
+      if (data.updateAvailable) {
+        updateStatusText.textContent = `Update available: "${data.latest.message}" (currently on "${data.current.message}")`;
+        applyUpdateBtn.hidden = false;
+      } else {
+        updateStatusText.textContent = `Up to date (${shortHash(data.current.hash)} - "${data.current.message}")`;
+      }
+    } catch (err) {
+      updateStatusText.textContent = `Could not check for updates: ${err.message}`;
+    } finally {
+      checkUpdateBtn.disabled = false;
+    }
+  }
+
+  // Polls a cheap endpoint until the server responds again - it exits deliberately right
+  // after a successful update, and start.command's loop restarts it, but there's a brief gap
+  // in between where requests fail before the fresh process is back up.
+  async function waitForServerRestart() {
+    await new Promise((resolve) => setTimeout(resolve, 1500)); // let the old process actually exit first
+    for (let i = 0; i < 30; i++) {
+      try {
+        const res = await fetch('/api/update/status', { cache: 'no-store' });
+        if (res.ok) return true;
+      } catch {
+        // Still down - keep waiting.
+      }
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+    }
+    return false;
+  }
+
+  async function applyCodeUpdate() {
+    applyUpdateBtn.disabled = true;
+    checkUpdateBtn.disabled = true;
+    updateStatusText.textContent = 'Updating… this will restart the app in a few seconds.';
+    try {
+      const res = await fetch('/api/update/apply', { method: 'POST' });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Update failed.');
+      updateStatusText.textContent = 'Update applied - waiting for the app to restart…';
+      const backUp = await waitForServerRestart();
+      if (backUp) {
+        window.location.reload();
+        return;
+      }
+      updateStatusText.textContent = 'Update applied, but the app hasn’t come back up yet - give it a few more seconds, then refresh the page.';
+    } catch (err) {
+      updateStatusText.textContent = `Update failed: ${err.message}`;
+    } finally {
+      applyUpdateBtn.disabled = false;
+      checkUpdateBtn.disabled = false;
+    }
+  }
+
+  checkUpdateBtn.addEventListener('click', checkForCodeUpdate);
+  applyUpdateBtn.addEventListener('click', applyCodeUpdate);
+  checkForCodeUpdate(); // check once automatically on load, so an update doesn't go unnoticed
+
   const startOverSection = document.getElementById('start-over-section');
   const startOverBtn = document.getElementById('start-over-btn');
   startOverBtn.addEventListener('click', () => window.location.reload());
