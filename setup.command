@@ -1,8 +1,8 @@
 #!/bin/bash
 # One-time setup for a Mac that's never run this app before.
 #
-# Run it with:
-#   curl -fsSL https://raw.githubusercontent.com/definitelyarealuser/Video-Editor/main/setup.command | bash
+# Run it with (update this URL to the /main/ branch once this work is merged there):
+#   curl -fsSL https://raw.githubusercontent.com/definitelyarealuser/Video-Editor/claude/sermon-video-editor-fa7r7w/setup.command | bash
 #
 # It installs Homebrew (if needed), Node/ffmpeg/git via Homebrew, downloads the app to
 # ~/Video-Editor, installs its dependencies, and adds a double-click shortcut to the Desktop.

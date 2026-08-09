@@ -16,10 +16,10 @@ The rendered output is: **PNG** (held for N seconds) → **crossfade** → **you
 
 ## Run it
 
-**On a Mac that's never run this before**, paste this into Terminal once:
+**On a Mac that's never run this before**, paste this into Terminal once (the URL points at the current development branch - update it to `/main/` once this work is merged there):
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/definitelyarealuser/Video-Editor/main/setup.command | bash
+curl -fsSL https://raw.githubusercontent.com/definitelyarealuser/Video-Editor/claude/sermon-video-editor-fa7r7w/setup.command | bash
 ```
 
 This installs Homebrew, Node, ffmpeg, and git if they're not already there, downloads the app to `~/Video-Editor`, and adds a **Sermon Video Editor** shortcut to your Desktop - double-click that any time to start the app (it opens a Terminal window and your browser automatically; closing the window stops the app). Re-running the command above on a Mac that already has it just updates it in place, same as the in-app Update button below.
