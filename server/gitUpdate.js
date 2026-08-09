@@ -9,20 +9,31 @@ const path = require('path');
 
 const ROOT = path.join(__dirname, '..');
 
-function run(cmd, args) {
+// Local git commands (rev-parse, log, status, reset) and npm install are given a generous
+// timeout - npm install in particular can legitimately take a while on a fresh machine.
+// `git fetch` specifically uses a much shorter one (see fetchOrigin below), since it's the
+// only network-dependent step and this all runs automatically at every launch - a slow or
+// unreachable connection should fail fast and let the app start with the code already on
+// disk, not hang the whole launch indefinitely.
+function run(cmd, args, { timeoutMs = 120000 } = {}) {
   return new Promise((resolve, reject) => {
     // shell: true so `npm` resolves correctly on Windows (where the real executable is
     // npm.cmd) - Node's execFile doesn't go through a shell by default, which is otherwise a
     // classic gotcha for spawning npm cross-platform.
-    execFile(cmd, args, { cwd: ROOT, shell: true, maxBuffer: 10 * 1024 * 1024 }, (err, stdout, stderr) => {
+    execFile(cmd, args, { cwd: ROOT, shell: true, timeout: timeoutMs, maxBuffer: 10 * 1024 * 1024 }, (err, stdout, stderr) => {
       if (err) {
-        const e = new Error((stderr || '').trim() || err.message);
+        const timedOut = err.killed && err.signal === 'SIGTERM';
+        const e = new Error(timedOut ? `${cmd} ${args[0]} timed out - is there a network connection?` : (stderr || '').trim() || err.message);
         e.detail = stderr;
         return reject(e);
       }
       resolve((stdout || '').trim());
     });
   });
+}
+
+function fetchOrigin(branch) {
+  return run('git', ['fetch', 'origin', branch], { timeoutMs: 10000 });
 }
 
 function getCurrentBranch() {
@@ -46,7 +57,7 @@ async function isWorkingTreeClean() {
  */
 async function checkForUpdate() {
   const branch = await getCurrentBranch();
-  await run('git', ['fetch', 'origin', branch]);
+  await fetchOrigin(branch);
   const current = await getCurrentCommit();
   const latestHash = await run('git', ['rev-parse', `origin/${branch}`]);
   const latestMessage = await run('git', ['log', '-1', '--pretty=%s', `origin/${branch}`]);
@@ -74,7 +85,7 @@ async function applyUpdate() {
   }
 
   const branch = await getCurrentBranch();
-  await run('git', ['fetch', 'origin', branch]);
+  await fetchOrigin(branch);
   await run('git', ['reset', '--hard', `origin/${branch}`]);
   await run('npm', ['install']);
 

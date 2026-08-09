@@ -2,9 +2,10 @@
 # Double-click this file to start (or restart) the Sermon Video Editor.
 #
 # Leave the Terminal window that opens running in the background while you use the app -
-# closing it stops the app. This loop is what lets the in-app "Update Now" button work: after
-# pulling new code, the server deliberately exits with code 42 to ask for a restart, and this
-# script relaunches it right away with the fresh code instead of just stopping.
+# closing it stops the app. On every launch, the server automatically checks GitHub for a
+# newer version and, if one exists, pulls it down and deliberately exits with code 42 to ask
+# for a restart - this loop is what relaunches it right away with the fresh code, so an update
+# never needs a click to take effect.
 cd "$(dirname "$0")" || exit 1
 
 ( sleep 2 && open "http://localhost:${PORT:-3000}" ) &

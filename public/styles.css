@@ -447,50 +447,6 @@ label.core-text-label {
   font-size: 0.85rem;
 }
 
-.update-check {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  flex-wrap: wrap;
-  margin-top: 14px;
-  font-size: 0.8rem;
-}
-
-.update-status-text {
-  color: var(--muted);
-}
-
-.update-check-btn {
-  background: color-mix(in srgb, var(--accent) 14%, var(--panel));
-  border: 1px solid color-mix(in srgb, var(--accent) 40%, var(--border));
-  color: var(--accent);
-  border-radius: 8px;
-  padding: 6px 12px;
-  font-size: 0.8rem;
-  cursor: pointer;
-  white-space: nowrap;
-}
-
-.update-check-btn:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--accent) 24%, var(--panel));
-  border-color: var(--accent);
-}
-
-.update-check-btn:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-}
-
-.update-check-btn-primary {
-  background: var(--accent);
-  border-color: var(--accent);
-  color: white;
-}
-
-.update-check-btn-primary:hover:not(:disabled) {
-  background: var(--accent-hover);
-}
-
 #soundcloud-connect-status {
   color: var(--muted);
 }

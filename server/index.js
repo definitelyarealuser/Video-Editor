@@ -701,32 +701,34 @@ app.get('/api/update/status', async (req, res) => {
   }
 });
 
-// Fetches from GitHub and reports whether the remote branch has moved ahead - doesn't change
-// anything on disk.
-app.post('/api/update/check', async (req, res) => {
+// Checks GitHub for a newer commit on this branch and, if one exists, pulls it down and
+// restarts before ever binding the port - fully automatic, no button/API call needed. The
+// process exits with a specific code (42) that start.command's wrapping loop recognizes as
+// "restart me" (as opposed to any other exit meaning the app actually stopped); the relaunch
+// then re-runs this same check, finds nothing new, and proceeds to actually listen. A failed
+// check or apply (no network, dirty working tree, npm failure, etc.) must never block startup -
+// it just falls through and starts with whatever code is already on disk.
+async function checkAndApplyUpdateThenListen() {
   try {
-    res.json(await gitUpdate.checkForUpdate());
+    const result = await gitUpdate.checkForUpdate();
+    if (result.updateAvailable) {
+      console.log(`Update available: "${result.latest.message}" (currently on "${result.current.message}") - applying...`);
+      await gitUpdate.applyUpdate();
+      console.log('Update applied - restarting to load the new code...');
+      process.exit(42);
+      return;
+    }
+    console.log(`Up to date (${result.current.hash.slice(0, 7)} - "${result.current.message}").`);
   } catch (err) {
-    res.status(500).json({ error: err.message || 'Could not check for updates.', errorDetail: err.detail });
+    console.log(`Skipping update check (${err.message}) - starting with the code already on disk.`);
   }
-});
 
-// Pulls the latest code and restarts the server so it takes effect - the process exits with
-// a specific code (42) that start.command's wrapping loop recognizes as "restart me", as
-// opposed to any other exit meaning the app actually stopped.
-app.post('/api/update/apply', async (req, res) => {
-  try {
-    const result = await gitUpdate.applyUpdate();
-    res.json({ ok: true, ...result });
-    setTimeout(() => process.exit(42), 500);
-  } catch (err) {
-    res.status(500).json({ error: err.message || 'Update failed.', errorDetail: err.detail });
-  }
-});
+  app.listen(PORT, () => {
+    console.log(`Sermon Video Editor running at http://localhost:${PORT}`);
+  });
+}
 
-app.listen(PORT, () => {
-  console.log(`Sermon Video Editor running at http://localhost:${PORT}`);
-});
+checkAndApplyUpdateThenListen();
 
 // Sweep old jobs periodically so disk usage doesn't grow unbounded - this now also
 // covers uploaded-but-never-rendered videos, since those can now sit around much

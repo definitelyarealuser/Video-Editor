@@ -22,7 +22,7 @@ The rendered output is: **PNG** (held for N seconds) → **crossfade** → **you
 curl -fsSL https://raw.githubusercontent.com/definitelyarealuser/Video-Editor/claude/sermon-video-editor-fa7r7w/setup.command | bash
 ```
 
-This installs Homebrew, Node, ffmpeg, and git if they're not already there, downloads the app to `~/Video-Editor`, and adds a **Sermon Video Editor** shortcut to your Desktop - double-click that any time to start the app (it opens a Terminal window and your browser automatically; closing the window stops the app). Re-running the command above on a Mac that already has it just updates it in place, same as the in-app Update button below.
+This installs Homebrew, Node, ffmpeg, and git if they're not already there, downloads the app to `~/Video-Editor`, and adds a **Sermon Video Editor** shortcut to your Desktop - double-click that any time to start the app (it opens a Terminal window and your browser automatically; closing the window stops the app). Re-running the command above on a Mac that already has it just updates it in place, same as the automatic update check described below.
 
 **Manually, or on any other platform:**
 
@@ -35,7 +35,7 @@ Then open http://localhost:3000.
 
 ### Updating
 
-A **Check for Updates** button sits in the header and checks automatically on load. If a newer version is available on GitHub, **Update Now** pulls it down, reinstalls dependencies if they changed, and restarts the app - the same double-click shortcut picks the new code up with no further steps, on every machine you've installed it on. Requires the app to have been started via `start.command` (which the Desktop shortcut and manual double-click both use) - that's what actually restarts the server process after an update finishes.
+Fully automatic - no button, no steps. Every time you start the app (via the Desktop shortcut or `start.command`), it checks GitHub for a newer version before it even opens the browser tab. If one's available, it pulls it down, reinstalls dependencies if they changed, and restarts itself once to load the new code - you'll just see a few extra seconds of startup, then the app comes up already current. Works the same way on every machine you've installed it on. Requires the app to have been started via `start.command` (which the Desktop shortcut and manual double-click both use) - that's what relaunches the server process after it exits to apply an update.
 
 1. Drop your video (a trimmed clip, or a full multi-hour service recording) into the video dropzone. It uploads right away.
 2. If it's a full service file, use the **Trim to just the sermon** panel: drag the two handles to select just the sermon - dragging seeks the preview to that exact frame live (muted), and letting go plays a short unmuted snippet right at the cut point, so you can confirm both picture and audio without a separate step. Once you're close (within a few seconds), use the **-5s/-1s/-0.1s/+0.1s/+1s/+5s** nudge buttons under the Start/End readout to fine-tune each handle precisely - each nudge gives the same live preview as dragging. Below that, **Preview Start** / **Preview End** play a short snippet right at the in- or out-point, and **Play** starts playback from wherever the preview is parked while **Stop** halts it and jumps back to the start of your selection.
