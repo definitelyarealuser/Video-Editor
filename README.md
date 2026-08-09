@@ -103,3 +103,5 @@ Once a video's uploaded, an **Output quality** panel appears above the render se
 - The crossfade duration must be shorter than both PNG durations and the video's own length.
 - The PNG is letterboxed (scaled + padded with black) to match the video's resolution, so any aspect ratio works.
 - Video is re-encoded with `libx264`/`aac` (CRF 18) regardless of the source codec, since a filter graph like this requires decoding and re-encoding anyway.
+
+<!-- auto-update end-to-end test marker -->
