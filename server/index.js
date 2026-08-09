@@ -217,7 +217,7 @@ app.post('/api/render/:jobId', useJobIdFromParams, upload.single('png'), async (
       : 'high';
     const videoCrf = VIDEO_QUALITY_PRESETS[videoQuality];
     const mp3Bitrate = MP3_BITRATE_PRESETS.includes(Number(req.body.mp3Bitrate)) ? Number(req.body.mp3Bitrate) : 192;
-    const publishToVimeo = toBool(req.body.publishToVimeo, false) && vimeo.isConfigured();
+    const publishToVimeo = toBool(req.body.publishToVimeo, false) && vimeo.isConnected();
     const vimeoDescription = String(req.body.vimeoDescription || '').slice(0, 5000);
     // Which configured showcases to actually add it to for this render - defaults to "all of
     // them" (undefined) when the field wasn't sent, e.g. by an older client.
@@ -632,20 +632,48 @@ app.post('/api/save-paths', (req, res) => {
   res.json(savePaths.setSavePaths(req.body || {}));
 });
 
-// Whether Vimeo publishing is set up at all - the frontend only offers the option when this
-// is true, since without a token there's nothing it could do.
+// Whether Vimeo publishing is set up (a legacy token, or an OAuth app's client id/secret) and
+// connected (a usable access token actually exists) - these are separate because setting up an
+// OAuth app doesn't mean Connect Vimeo has actually been clicked yet, same distinction as
+// SoundCloud's status below.
 app.get('/api/vimeo-status', (req, res) => {
-  res.json({ configured: vimeo.isConfigured(), showcaseCount: vimeo.getShowcaseIds().length });
+  res.json({
+    configured: vimeo.isConfigured(),
+    connected: vimeo.isConnected(),
+    showcaseCount: vimeo.getShowcaseIds().length,
+  });
 });
 
 // Real showcase names for the configured IDs, so the publish dialog can offer a friendly
 // checkbox list instead of raw numbers.
 app.get('/api/vimeo-showcases', async (req, res) => {
-  if (!vimeo.isConfigured()) return res.json({ showcases: [] });
+  if (!vimeo.isConnected()) return res.json({ showcases: [] });
   try {
     res.json({ showcases: await vimeo.getShowcaseDetails() });
   } catch (err) {
     res.status(500).json({ error: err.message || 'Could not fetch Vimeo showcases.' });
+  }
+});
+
+// Full-page redirect (not fetched) - mirrors /api/soundcloud/connect below. Only meaningful
+// when an OAuth app (VIMEO_CLIENT_ID/VIMEO_CLIENT_SECRET) is set up - a legacy VIMEO_ACCESS_TOKEN
+// is already connected with nothing further to do, so the frontend never offers this button then.
+app.get('/api/vimeo/connect', (req, res) => {
+  try {
+    res.redirect(vimeo.getAuthorizeUrl());
+  } catch (err) {
+    res.status(400).send(err.message || 'Vimeo OAuth is not configured.');
+  }
+});
+
+app.get('/api/vimeo/oauth-callback', async (req, res) => {
+  try {
+    const { code, state, error, error_description: errorDescription } = req.query;
+    if (error) throw new Error(errorDescription || error);
+    await vimeo.handleOAuthCallback(code, state);
+    res.redirect('/?vimeo=connected');
+  } catch (err) {
+    res.redirect(`/?vimeo=error&message=${encodeURIComponent(err.message || 'Connection failed.')}`);
   }
 });
 

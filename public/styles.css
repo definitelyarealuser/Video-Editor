@@ -447,11 +447,13 @@ label.core-text-label {
   font-size: 0.85rem;
 }
 
-#soundcloud-connect-status {
+#soundcloud-connect-status,
+#vimeo-connect-status {
   color: var(--muted);
 }
 
-#soundcloud-connect-status.connected {
+#soundcloud-connect-status.connected,
+#vimeo-connect-status.connected {
   color: var(--success);
 }
 

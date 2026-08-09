@@ -63,16 +63,27 @@ The uploaded video is kept on the server for 2 hours after upload regardless of 
 
 ## Publishing to Vimeo
 
-Optional, and off by default - the app works exactly as before if you skip this section entirely.
+Optional, and off by default - the app works exactly as before if you skip this section entirely. Two ways to connect an account - pick one:
 
-1. Copy `.env.example` to `.env` and fill in:
-   - `VIMEO_ACCESS_TOKEN`: a personal access token from https://developer.vimeo.com/apps, with the `public`, `private`, `upload`, `edit`, and `interact` scopes. Requires a Vimeo plan that supports API uploads (Pro/Business/Premium - not the free tier).
-   - `VIMEO_SHOWCASE_IDS`: comma-separated showcase (album) IDs every published video gets added to - find an ID in the showcase's URL (`vimeo.com/showcase/XXXXXXX`). Update this whenever the year or sermon series changes.
+**Option A - a personal access token (simplest on one machine, manual on every additional one):**
+
+1. Copy `.env.example` to `.env` and fill in `VIMEO_ACCESS_TOKEN`: a personal access token from https://developer.vimeo.com/apps, with the `public`, `private`, `upload`, `edit`, and `interact` scopes. Requires a Vimeo plan that supports API uploads (Pro/Business/Premium - not the free tier).
 2. Restart the app (`npm start`) so it picks up `.env`.
 
-With that in place, clicking **Render Video** shows a **"Publish to Vimeo?"** dialog - it's a deliberate choice every time, never remembered from a previous render. The title and description aren't re-entered here - they're the file name (Series / Sermon Title / Speaker's Name / Sermon Date) and Core Text you already filled in on the main form. Privacy defaults to Public (adjustable per-render via the dropdown). The dialog just checks every configured showcase by default; uncheck any you don't want this particular video added to. Choose **Render & Publish to Vimeo**, and once rendering finishes, the app uploads the MP4 with that title and description and adds it to whichever showcases were checked - no separate manual step. A results panel shows the Vimeo link and which showcases succeeded or failed (one showcase failing, e.g. a stale ID, doesn't block the others). Choosing **Render Only** just renders normally, same as if Vimeo weren't configured at all. **Cancel** (or clicking outside the dialog, or pressing Escape) backs out entirely - no render happens at all, so you can adjust settings first and click **Render Video** again.
+This works right away, with nothing further to click in the app - but `.env` is never copied between machines automatically (it's gitignored, and the update mechanism deliberately never touches it), so setting up a second or third machine means manually copying this same value into a new `.env` there too.
 
-`.env` is gitignored - the token never gets committed.
+**Option B - Connect Vimeo button (a bit more setup once, but each additional machine only needs a login, not a copied secret):**
+
+1. On the same app page at https://developer.vimeo.com/apps where a personal access token is generated, find the app's **Client Identifier** and **Client Secret** instead.
+2. In the app's settings, add `http://localhost:3000/api/vimeo/oauth-callback` as a callback/redirect URL.
+3. Copy `.env.example` to `.env` and fill in `VIMEO_CLIENT_ID` and `VIMEO_CLIENT_SECRET` with those two values (leave `VIMEO_ACCESS_TOKEN` blank).
+4. Restart the app (`npm start`), then click the **Connect Vimeo** link that appears above the Render button, and log in with the Vimeo account once.
+
+Either way, also fill in `VIMEO_SHOWCASE_IDS` in `.env`: comma-separated showcase (album) IDs every published video gets added to - find an ID in the showcase's URL (`vimeo.com/showcase/XXXXXXX`). Update this whenever the year or sermon series changes.
+
+With either option connected, clicking **Render Video** shows a **"Publish to Vimeo?"** dialog - it's a deliberate choice every time, never remembered from a previous render. The title and description aren't re-entered here - they're the file name (Series / Sermon Title / Speaker's Name / Sermon Date) and Core Text you already filled in on the main form. Privacy defaults to Public (adjustable per-render via the dropdown). The dialog just checks every configured showcase by default; uncheck any you don't want this particular video added to. Choose **Render & Publish to Vimeo**, and once rendering finishes, the app uploads the MP4 with that title and description and adds it to whichever showcases were checked - no separate manual step. A results panel shows the Vimeo link and which showcases succeeded or failed (one showcase failing, e.g. a stale ID, doesn't block the others). Choosing **Render Only** just renders normally, same as if Vimeo weren't configured at all. **Cancel** (or clicking outside the dialog, or pressing Escape) backs out entirely - no render happens at all, so you can adjust settings first and click **Render Video** again.
+
+`.env` is gitignored - none of these values ever get committed. With Option B, the account-level token itself lives in `data/vimeo-tokens.json`, also gitignored.
 
 ## Publishing to SoundCloud
 

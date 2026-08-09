@@ -114,14 +114,40 @@
   const soundcloudConnectStatus = document.getElementById('soundcloud-connect-status');
   const soundcloudConnectBtn = document.getElementById('soundcloud-connect-btn');
 
-  fetch('/api/vimeo-status')
-    .then((res) => res.json())
-    .then((data) => {
-      state.vimeoConfigured = !!data.configured;
-    })
-    .catch(() => {
-      state.vimeoConfigured = false;
-    });
+  const vimeoConnectSection = document.getElementById('vimeo-connect-section');
+  const vimeoConnectStatus = document.getElementById('vimeo-connect-status');
+  const vimeoConnectBtn = document.getElementById('vimeo-connect-btn');
+
+  state.vimeoConnected = false;
+  // The connect row only ever shows for the OAuth path (VIMEO_CLIENT_ID/SECRET) - a legacy
+  // VIMEO_ACCESS_TOKEN is already connected with nothing left to do, so there's nothing useful
+  // to show a button for in that case even though `configured` is also true then.
+  function refreshVimeoConnectUI() {
+    vimeoConnectSection.hidden = !state.vimeoConfigured;
+    if (state.vimeoConnected) {
+      vimeoConnectStatus.textContent = 'Vimeo: connected';
+      vimeoConnectStatus.classList.add('connected');
+      vimeoConnectBtn.hidden = true;
+    } else {
+      vimeoConnectStatus.textContent = 'Vimeo: not connected';
+      vimeoConnectStatus.classList.remove('connected');
+      vimeoConnectBtn.hidden = false;
+    }
+  }
+  function loadVimeoStatus() {
+    return fetch('/api/vimeo-status')
+      .then((res) => res.json())
+      .then((data) => {
+        state.vimeoConfigured = !!data.configured;
+        state.vimeoConnected = !!data.connected;
+        refreshVimeoConnectUI();
+      })
+      .catch(() => {
+        state.vimeoConfigured = false;
+        state.vimeoConnected = false;
+      });
+  }
+  loadVimeoStatus();
 
   state.soundcloudConfigured = false;
   state.soundcloudConnected = false;
@@ -163,6 +189,33 @@
     .catch(() => {
       state.soundcloudPlaylists = [];
     });
+
+  // After the OAuth redirect bounces back from Vimeo (see server's /api/vimeo/oauth-callback),
+  // show a one-off confirmation/error, then scrub the query string so a page refresh doesn't
+  // repeat it. Mirrors handleSoundCloudOAuthReturn below.
+  (function handleVimeoOAuthReturn() {
+    const params = new URLSearchParams(window.location.search);
+    const vimeoResult = params.get('vimeo');
+    if (!vimeoResult) return;
+    if (vimeoResult === 'connected') {
+      loadVimeoStatus().then(() => {
+        fetch('/api/vimeo-showcases')
+          .then((res) => res.json())
+          .then((data) => {
+            state.vimeoShowcases = data.showcases || [];
+          })
+          .catch(() => {});
+      });
+    } else if (vimeoResult === 'error') {
+      const message = params.get('message') || 'Could not connect to Vimeo.';
+      errorSection.hidden = false;
+      errorMessage.textContent = `Vimeo: ${message}`;
+    }
+    params.delete('vimeo');
+    params.delete('message');
+    const newQuery = params.toString();
+    window.history.replaceState({}, '', window.location.pathname + (newQuery ? `?${newQuery}` : ''));
+  })();
 
   // After the OAuth redirect bounces back from SoundCloud (see server's /oauth-callback), show
   // a one-off confirmation/error, then scrub the query string so a page refresh doesn't repeat it.
@@ -1317,7 +1370,7 @@
     // Confirmed up front, before rendering even starts, so publishing can run automatically
     // once the render finishes with no further approval needed - but it's always a fresh,
     // deliberate choice, never remembered from a previous render.
-    const vimeoChoice = state.vimeoConfigured
+    const vimeoChoice = state.vimeoConnected
       ? await confirmVimeoPublish()
       : { publish: false, showcaseIds: [] };
     if (vimeoChoice.cancelled) return; // back out entirely - no render, nothing changes
