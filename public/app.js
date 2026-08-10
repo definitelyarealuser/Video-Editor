@@ -1390,13 +1390,9 @@
 
   // Series / Sermon Title / Speaker's Name / Sermon Date combine into a single string that
   // doubles as the rendered file name and the title sent to Vimeo (and, manually, SoundCloud).
+  // All four are optional - blank ones are just skipped, not replaced with a placeholder, so a
+  // partially-filled-in set of fields never leaves a dangling " - " in the name.
   const nameFieldIds = ['seriesName', 'sermonTitle', 'speakerName', 'sermonDate'];
-  const nameFieldPreviewLabels = {
-    seriesName: 'Series',
-    sermonTitle: 'Sermon Title',
-    speakerName: "Speaker's Name",
-    sermonDate: 'Sermon Date',
-  };
   const outputNamePreview = document.getElementById('outputNamePreview');
 
   function computeOutputName() {
@@ -1406,14 +1402,10 @@
     return parts.join(' - ');
   }
 
-  // Unlike computeOutputName(), this never comes up empty - blank fields fall back to their
-  // own label so the preview always reads as a filled-in example of the final file name.
+  // Mirrors the server's own filename sanitizer (server/index.js's sanitizeFilename) so the
+  // preview matches reality even in the all-blank case, rather than showing an empty name.
   function updateOutputNamePreview() {
-    const parts = nameFieldIds.map((id) => {
-      const value = document.getElementById(id).value.trim();
-      return value || nameFieldPreviewLabels[id];
-    });
-    outputNamePreview.textContent = `${parts.join(' - ')}.mp4`;
+    outputNamePreview.textContent = `${computeOutputName() || 'sermon-final'}.mp4`;
   }
 
   // The Render button is just disabled when something's missing, with no other feedback -
@@ -1466,7 +1458,6 @@
   }
 
   document.getElementById('use-today-btn').addEventListener('click', fillTodayDate);
-  fillTodayDate(); // pre-filled on load - today's the overwhelmingly common case, just click Today again if not
 
   // Desktop notification when a render finishes (or fails) while the tab isn't the one you're
   // looking at - permission has to be requested from a real user gesture (the Render click
