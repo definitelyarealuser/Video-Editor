@@ -148,15 +148,12 @@
       vimeoConnectStatus.textContent = 'Vimeo: connected';
       vimeoConnectStatus.classList.add('connected');
       vimeoConnectBtn.hidden = true;
-    } else if (readyToConnect) {
+    } else {
+      // Neither "not connected" nor "not set up" needs spelling out in text - the button next
+      // to it (Connect to Vimeo, or Set up Vimeo publishing…) already makes that obvious.
       vimeoConnectStatus.hidden = true;
       vimeoConnectStatus.classList.remove('connected');
-      vimeoConnectBtn.hidden = false;
-    } else {
-      vimeoConnectStatus.hidden = false;
-      vimeoConnectStatus.textContent = 'Vimeo: not set up';
-      vimeoConnectStatus.classList.remove('connected');
-      vimeoConnectBtn.hidden = true;
+      vimeoConnectBtn.hidden = !readyToConnect;
     }
     // Shown right in the status row (not buried in the setup panel) whenever connected at all,
     // by either method - this is specifically for testing the connect flow again, or switching
