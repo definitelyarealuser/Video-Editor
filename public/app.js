@@ -151,12 +151,11 @@
       vimeoConnectStatus.classList.remove('connected');
       vimeoConnectBtn.hidden = true;
     }
-    // Signing out is only meaningful for the OAuth path - a legacy VIMEO_ACCESS_TOKEN has no
-    // separate stored token to clear, the env var itself is the connection. Shown right in the
-    // status row (not buried in the setup panel) so it's there to find without already knowing
-    // to look for it - this is specifically for testing the connect flow again, or switching
-    // which Vimeo account is linked, without having to re-enter the Client ID/Secret.
-    vimeoDisconnectBtn.hidden = !(state.vimeoConnected && state.vimeoHasOAuthApp);
+    // Shown right in the status row (not buried in the setup panel) whenever connected at all,
+    // by either method - this is specifically for testing the connect flow again, or switching
+    // which Vimeo account is linked. For a legacy VIMEO_ACCESS_TOKEN the server also blanks it
+    // in .env and restarts, since that's the only way to actually clear an env var's effect.
+    vimeoDisconnectBtn.hidden = !state.vimeoConnected;
     vimeoToggleSetupBtn.hidden = legacyConnected;
     vimeoToggleSetupBtn.textContent = state.vimeoHasOAuthApp ? 'Vimeo settings…' : 'Set up Vimeo publishing…';
   }
@@ -280,7 +279,17 @@
     if (!window.confirm('Sign out of the connected Vimeo account? Your saved Client ID/Secret stay put - click Connect Vimeo any time to sign back in.')) return;
     vimeoDisconnectBtn.disabled = true;
     try {
-      await fetch('/api/vimeo/disconnect', { method: 'POST' });
+      const res = await fetch('/api/vimeo/disconnect', { method: 'POST' });
+      const data = await res.json().catch(() => ({}));
+      if (data.restarting) {
+        // A legacy VIMEO_ACCESS_TOKEN needed an actual restart to clear (env vars only load at
+        // startup) - the server is about to exit and start.command's loop relaunches it, but
+        // this tab doesn't know to reload itself once that's done, so just say so plainly.
+        vimeoConnectStatus.textContent = 'Vimeo: signing out - restarting the app, give it a few seconds then refresh this page…';
+        vimeoConnectStatus.classList.remove('connected');
+        vimeoDisconnectBtn.hidden = true;
+        return;
+      }
       await loadVimeoStatus();
     } catch {
       // Non-critical - worst case they just try again.

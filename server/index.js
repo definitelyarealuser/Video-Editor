@@ -677,10 +677,15 @@ app.delete('/api/vimeo-app-config', (req, res) => {
 // Signs out of the connected Vimeo account without clearing the Client Identifier/Secret -
 // works regardless of whether those came from the saved file or env vars, so Connect Vimeo can
 // be redone (e.g. to test the connect flow, or switch which Vimeo account is linked) without
-// re-entering app credentials.
+// re-entering app credentials. A legacy VIMEO_ACCESS_TOKEN needs an actual restart to take
+// effect (env vars are only read once, at startup) - same exit(42) restart-on-launch's own
+// update mechanism uses, so start.command's wrapping loop picks it back up automatically.
 app.post('/api/vimeo/disconnect', (req, res) => {
-  vimeo.disconnect();
-  res.json({ ok: true });
+  const { restartNeeded } = vimeo.disconnect();
+  res.json({ ok: true, restarting: restartNeeded });
+  if (restartNeeded) {
+    setTimeout(() => process.exit(42), 500);
+  }
 });
 
 // Real showcase names for the configured IDs, so the publish dialog can offer a friendly

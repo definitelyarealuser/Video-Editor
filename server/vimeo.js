@@ -26,6 +26,7 @@ const { Vimeo } = require('@vimeo/vimeo');
 const DATA_DIR = path.join(__dirname, '..', 'data');
 const TOKENS_PATH = path.join(DATA_DIR, 'vimeo-tokens.json');
 const APP_CONFIG_PATH = path.join(DATA_DIR, 'vimeo-app-config.json');
+const ENV_PATH = path.join(__dirname, '..', '.env');
 
 const SCOPES = ['public', 'private', 'upload', 'edit', 'interact'];
 
@@ -63,13 +64,33 @@ function clearAppConfig() {
   fs.rmSync(TOKENS_PATH, { force: true });
 }
 
+// A bare VIMEO_ACCESS_TOKEN has no separate stored connection to clear - the env var the process
+// was launched with *is* the connection, so the only way to actually sign out is to blank that
+// line in .env and restart (env vars are only read once, at startup). Blanks the value rather
+// than deleting the line, matching .env.example's style, and leaves everything else in the file
+// untouched. Returns true if it actually changed something (there was a real value to clear).
+function clearLegacyTokenFromEnvFile() {
+  let content;
+  try {
+    content = fs.readFileSync(ENV_PATH, 'utf8');
+  } catch {
+    return false;
+  }
+  const updated = content.replace(/^VIMEO_ACCESS_TOKEN\s*=.*$/m, 'VIMEO_ACCESS_TOKEN=');
+  if (updated === content) return false;
+  fs.writeFileSync(ENV_PATH, updated);
+  return true;
+}
+
 // Signs out of the connected Vimeo account without touching the saved (or env-provided) Client
 // Identifier/Secret - lets Connect Vimeo be done again, e.g. to test the connect flow fresh or
-// switch which Vimeo account is linked, without re-entering the app credentials. Only meaningful
-// for the OAuth path (hasOAuthApp) - a legacy VIMEO_ACCESS_TOKEN has no separate stored token to
-// clear, since the env var itself is the connection.
+// switch which Vimeo account is linked, without re-entering the app credentials. For the OAuth
+// path this just clears the stored account token; for a legacy VIMEO_ACCESS_TOKEN, it also blanks
+// that line in .env and reports that a restart is needed for the change to actually take effect.
 function disconnect() {
   fs.rmSync(TOKENS_PATH, { force: true });
+  const restartNeeded = hasLegacyToken() ? clearLegacyTokenFromEnvFile() : false;
+  return { restartNeeded };
 }
 
 function getClientId() {
