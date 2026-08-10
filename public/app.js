@@ -1425,9 +1425,8 @@
     const missing = [];
     if (!state.png) missing.push('a bookend image');
     if (!state.videoJobId) missing.push('a video file');
-    nameFieldIds.forEach((id) => {
-      if (!document.getElementById(id).value.trim()) missing.push(nameFieldPreviewLabels[id]);
-    });
+    // Series/Sermon Title/Speaker's Name/Sermon Date are optional - computeOutputName() and the
+    // server's own filename sanitizer both already handle any subset of them being blank.
     if (!document.getElementById('coreText').value.trim()) missing.push('Core Text');
     if (!document.getElementById('videoSavePath').value.trim()) missing.push('a folder to save the MP4 to');
     // The audio save path only matters - and is only required - when there'll actually be an
