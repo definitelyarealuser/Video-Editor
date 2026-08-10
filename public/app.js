@@ -127,6 +127,7 @@
   const vimeoSetupResetBtn = document.getElementById('vimeo-setup-reset-btn');
   const vimeoSetupCancelBtn = document.getElementById('vimeo-setup-cancel-btn');
   const vimeoSetupSaveBtn = document.getElementById('vimeo-setup-save-btn');
+  const vimeoTempWipeBtn = document.getElementById('vimeo-temp-wipe-btn'); // TEMPORARY, see index.html
 
   state.vimeoConnected = false;
   state.vimeoHasOAuthApp = false;
@@ -138,8 +139,10 @@
   // there's nothing there for that path to do.
   function refreshVimeoConnectUI() {
     const legacyConnected = state.vimeoConnected && !state.vimeoHasOAuthApp;
-    // Credentials saved but the account isn't linked yet - the Connect to Vimeo button alone
-    // already says that, so the status text and settings toggle just add clutter here.
+    // Credentials saved but the account isn't linked yet - Connect to Vimeo is the primary
+    // action here, so its status text is redundant, but editing/resetting the saved credentials
+    // should still be reachable - just as a lighter-weight text link instead of a second button
+    // competing with Connect to Vimeo.
     const readyToConnect = !state.vimeoConnected && state.vimeoHasOAuthApp;
     if (state.vimeoConnected) {
       vimeoConnectStatus.hidden = false;
@@ -161,8 +164,17 @@
     // which Vimeo account is linked. For a legacy VIMEO_ACCESS_TOKEN the server also blanks it
     // in .env and restarts, since that's the only way to actually clear an env var's effect.
     vimeoDisconnectBtn.hidden = !state.vimeoConnected;
-    vimeoToggleSetupBtn.hidden = legacyConnected || readyToConnect;
-    vimeoToggleSetupBtn.textContent = state.vimeoHasOAuthApp ? 'Vimeo settings…' : 'Set up Vimeo publishing…';
+
+    vimeoToggleSetupBtn.hidden = legacyConnected;
+    if (readyToConnect) {
+      vimeoToggleSetupBtn.textContent = 'Edit Vimeo Connection';
+      vimeoToggleSetupBtn.classList.remove('vimeo-rect-btn');
+      vimeoToggleSetupBtn.classList.add('soundcloud-connect-link');
+    } else {
+      vimeoToggleSetupBtn.textContent = state.vimeoHasOAuthApp ? 'Vimeo settings…' : 'Set up Vimeo publishing…';
+      vimeoToggleSetupBtn.classList.remove('soundcloud-connect-link');
+      vimeoToggleSetupBtn.classList.add('vimeo-rect-btn');
+    }
   }
 
   function refreshVimeoShowcases() {
@@ -295,6 +307,21 @@
       // Non-critical - worst case they just try again.
     } finally {
       vimeoDisconnectBtn.disabled = false;
+    }
+  });
+
+  // TEMPORARY - for testing the setup flow from scratch; remove once done testing.
+  vimeoTempWipeBtn.addEventListener('click', async () => {
+    if (!window.confirm('[testing] Wipe the saved Vimeo Client ID/Secret and account token, back to a completely fresh state?')) return;
+    vimeoTempWipeBtn.disabled = true;
+    try {
+      await fetch('/api/vimeo-app-config', { method: 'DELETE' });
+      await loadVimeoStatus();
+      closeVimeoSetupForm();
+    } catch {
+      // Non-critical - worst case they just try again.
+    } finally {
+      vimeoTempWipeBtn.disabled = false;
     }
   });
 
