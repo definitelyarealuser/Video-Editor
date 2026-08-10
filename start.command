@@ -8,7 +8,21 @@
 # never needs a click to take effect.
 cd "$(dirname "$0")" || exit 1
 
-( sleep 2 && open "http://localhost:${PORT:-3000}" ) &
+# Waits for the server to actually be listening before opening the browser tab, rather than
+# guessing a fixed delay - the update check that runs on every launch (git fetch, and sometimes
+# a full update + npm ci) can easily take longer than a couple of seconds, and a browser tab
+# opened too early just shows "can't connect" instead of the app. Gives up quietly after a
+# minute rather than polling forever if something's genuinely wrong.
+(
+  URL="http://localhost:${PORT:-3000}"
+  for _ in $(seq 1 60); do
+    if curl -fsS -o /dev/null "$URL" 2>/dev/null; then
+      open "$URL"
+      exit 0
+    fi
+    sleep 1
+  done
+) &
 
 while true; do
   node server/index.js
