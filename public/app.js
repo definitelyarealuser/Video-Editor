@@ -127,7 +127,6 @@
   const vimeoSetupResetBtn = document.getElementById('vimeo-setup-reset-btn');
   const vimeoSetupCancelBtn = document.getElementById('vimeo-setup-cancel-btn');
   const vimeoSetupSaveBtn = document.getElementById('vimeo-setup-save-btn');
-  const vimeoTempWipeBtn = document.getElementById('vimeo-temp-wipe-btn'); // TEMPORARY, see index.html
 
   state.vimeoConnected = false;
   state.vimeoHasOAuthApp = false;
@@ -307,21 +306,6 @@
       // Non-critical - worst case they just try again.
     } finally {
       vimeoDisconnectBtn.disabled = false;
-    }
-  });
-
-  // TEMPORARY - for testing the setup flow from scratch; remove once done testing.
-  vimeoTempWipeBtn.addEventListener('click', async () => {
-    if (!window.confirm('[testing] Wipe the saved Vimeo Client ID/Secret and account token, back to a completely fresh state?')) return;
-    vimeoTempWipeBtn.disabled = true;
-    try {
-      await fetch('/api/vimeo-app-config', { method: 'DELETE' });
-      await loadVimeoStatus();
-      closeVimeoSetupForm();
-    } catch {
-      // Non-critical - worst case they just try again.
-    } finally {
-      vimeoTempWipeBtn.disabled = false;
     }
   });
 
