@@ -510,10 +510,14 @@ button.soundcloud-connect-link {
   margin-bottom: 16px;
 }
 
-.vimeo-setup-dialog {
-  max-width: 560px;
+/* Compound selector (not just .vimeo-setup-dialog) so this reliably beats .modal-dialog's own
+   max-width: 480px below, regardless of source order - two classes on the selector outrank one
+   even when the lower-specificity rule comes later in the file. */
+.modal-dialog.vimeo-setup-dialog {
+  max-width: 640px;
   max-height: 85vh;
   overflow-y: auto;
+  overflow-x: hidden;
 }
 
 .vimeo-setup-intro {
@@ -560,6 +564,7 @@ button.soundcloud-connect-link {
 
 .vimeo-setup-actions {
   display: flex;
+  flex-wrap: wrap;
   justify-content: flex-end;
   gap: 10px;
   margin-top: 16px;
@@ -1177,6 +1182,7 @@ button.soundcloud-connect-link {
   border-radius: 8px;
   font-size: 0.9rem;
   cursor: pointer;
+  white-space: nowrap;
 }
 
 .modal-btn-ghost:hover {
