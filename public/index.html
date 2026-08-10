@@ -250,7 +250,7 @@
               <li>Click <strong>Create App</strong>. Give it any name (e.g. "Sermon Video Editor") - the details don't matter, it's just for your own use.</li>
               <li>On the new app's page, find <strong>Redirect URIs</strong> (under "Authentication") and add exactly this, then save: <code>http://localhost:3000/api/vimeo/oauth-callback</code></li>
               <li>Still on that page, copy the <strong>Client Identifier</strong> and <strong>Client Secret</strong> into the two boxes below.</li>
-              <li>Click <strong>Save</strong> below, then click <strong>Connect Vimeo</strong> and log in with your Vimeo account when it asks - that's the last step.</li>
+              <li>Click <strong>Connect to Vimeo</strong> below and log in with your Vimeo account when it asks - that saves what you entered and finishes the connection in one step.</li>
             </ol>
 
             <div class="field">
@@ -276,8 +276,7 @@
               <button type="button" id="vimeo-setup-reset-btn" class="modal-btn-ghost" hidden>Forget these credentials</button>
               <button type="button" id="vimeo-setup-disconnect-btn" class="modal-btn-ghost" hidden>Disconnect Vimeo</button>
               <button type="button" id="vimeo-setup-cancel-btn" class="modal-btn-ghost">Cancel</button>
-              <button type="button" id="vimeo-setup-save-btn" class="modal-btn-primary">Save</button>
-              <a id="vimeo-setup-connect-btn" href="/api/vimeo/connect" class="modal-btn-primary" hidden>Connect to Vimeo</a>
+              <button type="button" id="vimeo-setup-save-btn" class="modal-btn-primary">Connect to Vimeo</button>
             </div>
           </div>
         </div>

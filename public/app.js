@@ -127,7 +127,6 @@
   const vimeoSetupDisconnectBtn = document.getElementById('vimeo-setup-disconnect-btn');
   const vimeoSetupCancelBtn = document.getElementById('vimeo-setup-cancel-btn');
   const vimeoSetupSaveBtn = document.getElementById('vimeo-setup-save-btn');
-  const vimeoSetupConnectBtn = document.getElementById('vimeo-setup-connect-btn');
   const vimeoTempWipeBtn = document.getElementById('vimeo-temp-wipe-btn'); // TEMPORARY, see index.html
 
   state.vimeoConnected = false;
@@ -198,13 +197,13 @@
       });
   }
 
-  // Credentials are saved but the account isn't linked yet - the next (and last) step is
-  // Connect to Vimeo, so it replaces Save right there in the popup instead of the user having
-  // to close it and go find a separate button on the page.
+  // One button does double duty: while not yet connected, it reads "Connect to Vimeo" and both
+  // saves what's in the fields AND goes straight to Vimeo's permission screen in a single click
+  // (see the click handler below) - no separate Save-then-Connect step. Once actually connected,
+  // it reads "Save" and just persists edits (reconnecting isn't needed, or wanted, at that point).
   function updateVimeoSetupDialogActions(lockedByEnv) {
-    const readyToConnect = state.vimeoHasOAuthApp && !state.vimeoConnected;
-    vimeoSetupConnectBtn.hidden = !readyToConnect;
-    vimeoSetupSaveBtn.hidden = readyToConnect || lockedByEnv;
+    vimeoSetupSaveBtn.textContent = state.vimeoConnected ? 'Save' : 'Connect to Vimeo';
+    vimeoSetupSaveBtn.hidden = lockedByEnv;
     vimeoSetupDisconnectBtn.hidden = !state.vimeoConnected;
   }
 
@@ -267,6 +266,9 @@
       vimeoSetupError.textContent = 'Paste in the Client Secret from the Vimeo app page too.';
       return;
     }
+    // Captured before the save - if this wasn't already connected, saving successfully should
+    // go straight on to Connect to Vimeo, combining what used to be two clicks into one.
+    const shouldConnectAfterSave = !state.vimeoConnected;
     vimeoSetupSaveBtn.disabled = true;
     try {
       const res = await fetch('/api/vimeo-app-config', {
@@ -276,10 +278,12 @@
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Could not save Vimeo settings.');
+      if (shouldConnectAfterSave) {
+        window.location.href = '/api/vimeo/connect';
+        return;
+      }
       await loadVimeoStatus();
       await refreshVimeoShowcases();
-      // Stay open - Connect to Vimeo (the last step) now takes Save's place right here, instead
-      // of closing and making the user go find a separate button on the page.
       updateVimeoSetupDialogActions(false);
       vimeoSetupResetBtn.hidden = false;
     } catch (err) {
