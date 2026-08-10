@@ -116,6 +116,7 @@
 
   const vimeoConnectStatus = document.getElementById('vimeo-connect-status');
   const vimeoConnectBtn = document.getElementById('vimeo-connect-btn');
+  const vimeoDisconnectBtn = document.getElementById('vimeo-disconnect-btn');
   const vimeoToggleSetupBtn = document.getElementById('vimeo-toggle-setup-btn');
   const vimeoSetupForm = document.getElementById('vimeo-setup-form');
   const vimeoClientIdInput = document.getElementById('vimeo-client-id-input');
@@ -150,6 +151,12 @@
       vimeoConnectStatus.classList.remove('connected');
       vimeoConnectBtn.hidden = true;
     }
+    // Signing out is only meaningful for the OAuth path - a legacy VIMEO_ACCESS_TOKEN has no
+    // separate stored token to clear, the env var itself is the connection. Shown right in the
+    // status row (not buried in the setup panel) so it's there to find without already knowing
+    // to look for it - this is specifically for testing the connect flow again, or switching
+    // which Vimeo account is linked, without having to re-enter the Client ID/Secret.
+    vimeoDisconnectBtn.hidden = !(state.vimeoConnected && state.vimeoHasOAuthApp);
     vimeoToggleSetupBtn.hidden = legacyConnected;
     vimeoToggleSetupBtn.textContent = state.vimeoHasOAuthApp ? 'Vimeo settings…' : 'Set up Vimeo publishing…';
   }
@@ -256,7 +263,7 @@
   });
 
   vimeoSetupResetBtn.addEventListener('click', async () => {
-    if (!window.confirm('Disconnect Vimeo and clear the saved Client ID/Secret? You can set it up again any time.')) return;
+    if (!window.confirm('Forget the saved Vimeo Client ID/Secret and sign out? You can set it up again any time.')) return;
     vimeoSetupResetBtn.disabled = true;
     try {
       await fetch('/api/vimeo-app-config', { method: 'DELETE' });
@@ -266,6 +273,19 @@
       // Non-critical - worst case they just try again.
     } finally {
       vimeoSetupResetBtn.disabled = false;
+    }
+  });
+
+  vimeoDisconnectBtn.addEventListener('click', async () => {
+    if (!window.confirm('Sign out of the connected Vimeo account? Your saved Client ID/Secret stay put - click Connect Vimeo any time to sign back in.')) return;
+    vimeoDisconnectBtn.disabled = true;
+    try {
+      await fetch('/api/vimeo/disconnect', { method: 'POST' });
+      await loadVimeoStatus();
+    } catch {
+      // Non-critical - worst case they just try again.
+    } finally {
+      vimeoDisconnectBtn.disabled = false;
     }
   });
 

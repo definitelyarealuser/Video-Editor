@@ -674,6 +674,15 @@ app.delete('/api/vimeo-app-config', (req, res) => {
   res.json({ ok: true });
 });
 
+// Signs out of the connected Vimeo account without clearing the Client Identifier/Secret -
+// works regardless of whether those came from the saved file or env vars, so Connect Vimeo can
+// be redone (e.g. to test the connect flow, or switch which Vimeo account is linked) without
+// re-entering app credentials.
+app.post('/api/vimeo/disconnect', (req, res) => {
+  vimeo.disconnect();
+  res.json({ ok: true });
+});
+
 // Real showcase names for the configured IDs, so the publish dialog can offer a friendly
 // checkbox list instead of raw numbers.
 app.get('/api/vimeo-showcases', async (req, res) => {

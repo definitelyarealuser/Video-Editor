@@ -63,6 +63,15 @@ function clearAppConfig() {
   fs.rmSync(TOKENS_PATH, { force: true });
 }
 
+// Signs out of the connected Vimeo account without touching the saved (or env-provided) Client
+// Identifier/Secret - lets Connect Vimeo be done again, e.g. to test the connect flow fresh or
+// switch which Vimeo account is linked, without re-entering the app credentials. Only meaningful
+// for the OAuth path (hasOAuthApp) - a legacy VIMEO_ACCESS_TOKEN has no separate stored token to
+// clear, since the env var itself is the connection.
+function disconnect() {
+  fs.rmSync(TOKENS_PATH, { force: true });
+}
+
 function getClientId() {
   return process.env.VIMEO_CLIENT_ID || (loadAppConfig() || {}).clientId || null;
 }
@@ -243,5 +252,6 @@ module.exports = {
   getAppConfigStatus,
   saveAppConfig,
   clearAppConfig,
+  disconnect,
   uploadAndPublish,
 };
