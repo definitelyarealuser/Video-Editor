@@ -479,6 +479,7 @@ label.core-text-label {
   cursor: pointer;
   white-space: nowrap;
   font-family: inherit;
+  text-decoration: none;
 }
 
 .vimeo-rect-btn:hover {

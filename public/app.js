@@ -138,15 +138,20 @@
   // there's nothing there for that path to do.
   function refreshVimeoConnectUI() {
     const legacyConnected = state.vimeoConnected && !state.vimeoHasOAuthApp;
+    // Credentials saved but the account isn't linked yet - the Connect to Vimeo button alone
+    // already says that, so the status text and settings toggle just add clutter here.
+    const readyToConnect = !state.vimeoConnected && state.vimeoHasOAuthApp;
     if (state.vimeoConnected) {
+      vimeoConnectStatus.hidden = false;
       vimeoConnectStatus.textContent = 'Vimeo: connected';
       vimeoConnectStatus.classList.add('connected');
       vimeoConnectBtn.hidden = true;
-    } else if (state.vimeoHasOAuthApp) {
-      vimeoConnectStatus.textContent = 'Vimeo: not connected';
+    } else if (readyToConnect) {
+      vimeoConnectStatus.hidden = true;
       vimeoConnectStatus.classList.remove('connected');
       vimeoConnectBtn.hidden = false;
     } else {
+      vimeoConnectStatus.hidden = false;
       vimeoConnectStatus.textContent = 'Vimeo: not set up';
       vimeoConnectStatus.classList.remove('connected');
       vimeoConnectBtn.hidden = true;
@@ -156,7 +161,7 @@
     // which Vimeo account is linked. For a legacy VIMEO_ACCESS_TOKEN the server also blanks it
     // in .env and restarts, since that's the only way to actually clear an env var's effect.
     vimeoDisconnectBtn.hidden = !state.vimeoConnected;
-    vimeoToggleSetupBtn.hidden = legacyConnected;
+    vimeoToggleSetupBtn.hidden = legacyConnected || readyToConnect;
     vimeoToggleSetupBtn.textContent = state.vimeoHasOAuthApp ? 'Vimeo settings…' : 'Set up Vimeo publishing…';
   }
 
