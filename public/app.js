@@ -228,6 +228,14 @@
     else openVimeoSetupForm();
   });
   vimeoSetupCancelBtn.addEventListener('click', closeVimeoSetupForm);
+  // Popup behavior matching the app's other modals - click the backdrop or press Escape to
+  // back out without saving.
+  vimeoSetupForm.addEventListener('click', (e) => {
+    if (e.target === vimeoSetupForm) closeVimeoSetupForm();
+  });
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && vimeoSetupOpen) closeVimeoSetupForm();
+  });
 
   vimeoSetupSaveBtn.addEventListener('click', async () => {
     vimeoSetupError.hidden = true;

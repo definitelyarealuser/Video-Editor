@@ -510,12 +510,10 @@ button.soundcloud-connect-link {
   margin-bottom: 16px;
 }
 
-.vimeo-setup-form {
-  margin-top: 10px;
-  padding: 16px 18px;
-  background: var(--panel);
-  border: 1px solid var(--border);
-  border-radius: 12px;
+.vimeo-setup-dialog {
+  max-width: 560px;
+  max-height: 85vh;
+  overflow-y: auto;
 }
 
 .vimeo-setup-intro {
@@ -556,7 +554,7 @@ button.soundcloud-connect-link {
   margin-top: 6px;
 }
 
-.vimeo-setup-form .field {
+.vimeo-setup-dialog .field {
   margin-bottom: 14px;
 }
 
