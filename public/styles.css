@@ -1144,6 +1144,8 @@ button.soundcloud-connect-link {
   font-weight: 600;
   cursor: pointer;
   text-align: center;
+  text-decoration: none;
+  display: inline-block;
 }
 
 .modal-btn-secondary {

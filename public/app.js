@@ -127,6 +127,8 @@
   const vimeoSetupResetBtn = document.getElementById('vimeo-setup-reset-btn');
   const vimeoSetupCancelBtn = document.getElementById('vimeo-setup-cancel-btn');
   const vimeoSetupSaveBtn = document.getElementById('vimeo-setup-save-btn');
+  const vimeoSetupConnectBtn = document.getElementById('vimeo-setup-connect-btn');
+  const vimeoTempWipeBtn = document.getElementById('vimeo-temp-wipe-btn'); // TEMPORARY, see index.html
 
   state.vimeoConnected = false;
   state.vimeoHasOAuthApp = false;
@@ -198,6 +200,15 @@
       });
   }
 
+  // Credentials are saved but the account isn't linked yet - the next (and last) step is
+  // Connect to Vimeo, so it replaces Save right there in the popup instead of the user having
+  // to close it and go find a separate button on the page.
+  function updateVimeoSetupDialogActions(lockedByEnv) {
+    const readyToConnect = state.vimeoHasOAuthApp && !state.vimeoConnected;
+    vimeoSetupConnectBtn.hidden = !readyToConnect;
+    vimeoSetupSaveBtn.hidden = readyToConnect || lockedByEnv;
+  }
+
   function openVimeoSetupForm() {
     vimeoSetupError.hidden = true;
     fetch('/api/vimeo-app-config')
@@ -210,7 +221,7 @@
         vimeoSetupLockedNote.hidden = !data.lockedByEnv;
         vimeoClientIdInput.disabled = data.lockedByEnv;
         vimeoClientSecretInput.disabled = data.lockedByEnv;
-        vimeoSetupSaveBtn.hidden = data.lockedByEnv;
+        updateVimeoSetupDialogActions(data.lockedByEnv);
         vimeoSetupResetBtn.hidden = data.lockedByEnv || !state.vimeoHasOAuthApp;
       })
       .catch(() => {});
@@ -268,7 +279,10 @@
       if (!res.ok) throw new Error(data.error || 'Could not save Vimeo settings.');
       await loadVimeoStatus();
       await refreshVimeoShowcases();
-      closeVimeoSetupForm();
+      // Stay open - Connect to Vimeo (the last step) now takes Save's place right here, instead
+      // of closing and making the user go find a separate button on the page.
+      updateVimeoSetupDialogActions(false);
+      vimeoSetupResetBtn.hidden = false;
     } catch (err) {
       vimeoSetupError.hidden = false;
       vimeoSetupError.textContent = err.message;
@@ -311,6 +325,21 @@
       // Non-critical - worst case they just try again.
     } finally {
       vimeoDisconnectBtn.disabled = false;
+    }
+  });
+
+  // TEMPORARY - for testing the setup flow from scratch; remove once done testing.
+  vimeoTempWipeBtn.addEventListener('click', async () => {
+    if (!window.confirm('[testing] Wipe the saved Vimeo Client ID/Secret and account token, back to a completely fresh state?')) return;
+    vimeoTempWipeBtn.disabled = true;
+    try {
+      await fetch('/api/vimeo-app-config', { method: 'DELETE' });
+      await loadVimeoStatus();
+      closeVimeoSetupForm();
+    } catch {
+      // Non-critical - worst case they just try again.
+    } finally {
+      vimeoTempWipeBtn.disabled = false;
     }
   });
 
