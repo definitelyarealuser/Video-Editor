@@ -177,11 +177,6 @@
         state.vimeoConnected = !!data.connected;
         state.vimeoHasOAuthApp = !!data.hasOAuthApp;
         refreshVimeoConnectUI();
-        // Nothing set up yet on a brand-new install - open the instructions right away rather
-        // than waiting for a click, since there's nothing yet to hint that a toggle exists.
-        if (!state.vimeoConnected && !state.vimeoHasOAuthApp && !vimeoSetupOpen) {
-          openVimeoSetupForm();
-        }
       })
       .catch(() => {
         state.vimeoConfigured = false;
