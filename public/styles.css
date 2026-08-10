@@ -453,9 +453,37 @@ label.core-text-label {
   color: var(--muted);
 }
 
-#soundcloud-connect-status.connected,
-#vimeo-connect-status.connected {
+#soundcloud-connect-status.connected {
   color: var(--success);
+}
+
+#vimeo-connect-status.connected {
+  display: inline-block;
+  color: var(--success);
+  font-weight: 600;
+  background: color-mix(in srgb, var(--success) 14%, var(--panel));
+  border: 1px solid color-mix(in srgb, var(--success) 40%, var(--border));
+  border-radius: 8px;
+  padding: 6px 14px;
+}
+
+.vimeo-rect-btn {
+  display: inline-block;
+  background: color-mix(in srgb, var(--accent) 14%, var(--panel));
+  border: 1px solid color-mix(in srgb, var(--accent) 40%, var(--border));
+  color: var(--accent);
+  border-radius: 8px;
+  padding: 6px 14px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  font-family: inherit;
+}
+
+.vimeo-rect-btn:hover {
+  background: color-mix(in srgb, var(--accent) 24%, var(--panel));
+  border-color: var(--accent);
 }
 
 .soundcloud-connect-link {
