@@ -116,7 +116,6 @@
 
   const vimeoConnectStatus = document.getElementById('vimeo-connect-status');
   const vimeoConnectBtn = document.getElementById('vimeo-connect-btn');
-  const vimeoDisconnectBtn = document.getElementById('vimeo-disconnect-btn');
   const vimeoToggleSetupBtn = document.getElementById('vimeo-toggle-setup-btn');
   const vimeoSetupForm = document.getElementById('vimeo-setup-form');
   const vimeoClientIdInput = document.getElementById('vimeo-client-id-input');
@@ -125,6 +124,7 @@
   const vimeoSetupLockedNote = document.getElementById('vimeo-setup-locked-note');
   const vimeoSetupError = document.getElementById('vimeo-setup-error');
   const vimeoSetupResetBtn = document.getElementById('vimeo-setup-reset-btn');
+  const vimeoSetupDisconnectBtn = document.getElementById('vimeo-setup-disconnect-btn');
   const vimeoSetupCancelBtn = document.getElementById('vimeo-setup-cancel-btn');
   const vimeoSetupSaveBtn = document.getElementById('vimeo-setup-save-btn');
   const vimeoSetupConnectBtn = document.getElementById('vimeo-setup-connect-btn');
@@ -157,19 +157,17 @@
       vimeoConnectStatus.classList.remove('connected');
       vimeoConnectBtn.hidden = !readyToConnect;
     }
-    // Shown right in the status row (not buried in the setup panel) whenever connected at all,
-    // by either method - this is specifically for testing the connect flow again, or switching
-    // which Vimeo account is linked. For a legacy VIMEO_ACCESS_TOKEN the server also blanks it
-    // in .env and restarts, since that's the only way to actually clear an env var's effect.
-    vimeoDisconnectBtn.hidden = !state.vimeoConnected;
-
     vimeoToggleSetupBtn.hidden = legacyConnected;
-    if (readyToConnect) {
-      vimeoToggleSetupBtn.textContent = 'Edit Vimeo Connection';
+    if (state.vimeoHasOAuthApp) {
+      // "Set up Vimeo publishing…" (nothing saved yet) is the only state with no adjacent
+      // primary action, so it's the only one that stays a boxed button - both "ready to
+      // connect" and "connected" already have one (Connect to Vimeo, or nothing needed at all),
+      // so this is just a lighter-weight link to reach the same settings/disconnect popup.
+      vimeoToggleSetupBtn.textContent = readyToConnect ? 'Edit Vimeo Connection' : 'Vimeo settings…';
       vimeoToggleSetupBtn.classList.remove('vimeo-rect-btn');
       vimeoToggleSetupBtn.classList.add('soundcloud-connect-link');
     } else {
-      vimeoToggleSetupBtn.textContent = state.vimeoHasOAuthApp ? 'Vimeo settings…' : 'Set up Vimeo publishing…';
+      vimeoToggleSetupBtn.textContent = 'Set up Vimeo publishing…';
       vimeoToggleSetupBtn.classList.remove('soundcloud-connect-link');
       vimeoToggleSetupBtn.classList.add('vimeo-rect-btn');
     }
@@ -207,6 +205,7 @@
     const readyToConnect = state.vimeoHasOAuthApp && !state.vimeoConnected;
     vimeoSetupConnectBtn.hidden = !readyToConnect;
     vimeoSetupSaveBtn.hidden = readyToConnect || lockedByEnv;
+    vimeoSetupDisconnectBtn.hidden = !state.vimeoConnected;
   }
 
   function openVimeoSetupForm() {
@@ -305,9 +304,9 @@
     }
   });
 
-  vimeoDisconnectBtn.addEventListener('click', async () => {
-    if (!window.confirm('Sign out of the connected Vimeo account? Your saved Client ID/Secret stay put - click Connect Vimeo any time to sign back in.')) return;
-    vimeoDisconnectBtn.disabled = true;
+  vimeoSetupDisconnectBtn.addEventListener('click', async () => {
+    if (!window.confirm('Sign out of the connected Vimeo account? Your saved Client ID/Secret stay put - click Connect to Vimeo any time to sign back in.')) return;
+    vimeoSetupDisconnectBtn.disabled = true;
     try {
       const res = await fetch('/api/vimeo/disconnect', { method: 'POST' });
       const data = await res.json().catch(() => ({}));
@@ -315,16 +314,18 @@
         // A legacy VIMEO_ACCESS_TOKEN needed an actual restart to clear (env vars only load at
         // startup) - the server is about to exit and start.command's loop relaunches it, but
         // this tab doesn't know to reload itself once that's done, so just say so plainly.
+        closeVimeoSetupForm();
+        vimeoConnectStatus.hidden = false;
         vimeoConnectStatus.textContent = 'Vimeo: signing out - restarting the app, give it a few seconds then refresh this page…';
         vimeoConnectStatus.classList.remove('connected');
-        vimeoDisconnectBtn.hidden = true;
         return;
       }
       await loadVimeoStatus();
+      closeVimeoSetupForm();
     } catch {
       // Non-critical - worst case they just try again.
     } finally {
-      vimeoDisconnectBtn.disabled = false;
+      vimeoSetupDisconnectBtn.disabled = false;
     }
   });
 

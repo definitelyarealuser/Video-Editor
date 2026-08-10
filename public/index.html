@@ -236,7 +236,6 @@
         <div id="vimeo-status-row" class="soundcloud-connect-section">
           <span id="vimeo-connect-status"></span>
           <a id="vimeo-connect-btn" href="/api/vimeo/connect" class="vimeo-rect-btn" hidden>Connect to Vimeo</a>
-          <button type="button" id="vimeo-disconnect-btn" class="soundcloud-connect-link" hidden>Disconnect Vimeo…</button>
           <button type="button" id="vimeo-toggle-setup-btn" class="vimeo-rect-btn">Set up Vimeo publishing…</button>
           <!-- TEMPORARY - for testing the setup flow from scratch; remove once done testing. -->
           <button type="button" id="vimeo-temp-wipe-btn" class="soundcloud-connect-link">[testing] Wipe saved Vimeo data…</button>
@@ -275,6 +274,7 @@
 
             <div class="vimeo-setup-actions">
               <button type="button" id="vimeo-setup-reset-btn" class="modal-btn-ghost" hidden>Forget these credentials</button>
+              <button type="button" id="vimeo-setup-disconnect-btn" class="modal-btn-ghost" hidden>Disconnect Vimeo</button>
               <button type="button" id="vimeo-setup-cancel-btn" class="modal-btn-ghost">Cancel</button>
               <button type="button" id="vimeo-setup-save-btn" class="modal-btn-primary">Save</button>
               <a id="vimeo-setup-connect-btn" href="/api/vimeo/connect" class="modal-btn-primary" hidden>Connect to Vimeo</a>
