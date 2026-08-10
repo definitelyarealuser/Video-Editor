@@ -46,9 +46,14 @@ async function getCurrentCommit() {
   return { hash, message };
 }
 
-async function isWorkingTreeClean() {
+// Returns the list of dirty-status lines for tracked files only (each a raw `git status
+// --porcelain` line) - empty means clean. Deliberately ignores untracked files (`??` lines):
+// `git reset --hard` below never touches them either way, so a stray file (an editor backup,
+// a stray .env.save, anything not part of the actual codebase) poses no risk of being silently
+// overwritten and shouldn't block an update that can't actually touch it.
+async function trackedFileChanges() {
   const status = await run('git', ['status', '--porcelain']);
-  return status.length === 0;
+  return status.split('\n').filter((line) => line.trim() && !line.startsWith('??'));
 }
 
 /**
@@ -85,10 +90,10 @@ async function applyUpdate() {
   // Ignores failure (e.g. nothing to discard) - not worth treating as fatal either way.
   await run('git', ['checkout', '--', 'package-lock.json']).catch(() => {});
 
-  const clean = await isWorkingTreeClean();
-  if (!clean) {
+  const dirty = await trackedFileChanges();
+  if (dirty.length > 0) {
     throw new Error(
-      "This install has local file changes that an update would overwrite - that shouldn't normally happen. Leave this one to whoever manages the code."
+      `This install has local file changes that an update would overwrite - that shouldn't normally happen. Leave this one to whoever manages the code. (${dirty.join(', ')})`
     );
   }
 
