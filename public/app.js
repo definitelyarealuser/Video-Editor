@@ -117,6 +117,9 @@
   const soundcloudClientIdInput = document.getElementById('soundcloud-client-id-input');
   const soundcloudClientSecretInput = document.getElementById('soundcloud-client-secret-input');
   const soundcloudPlaylistIdsInput = document.getElementById('soundcloud-playlist-ids-input');
+  const soundcloudPlaylistLookupInput = document.getElementById('soundcloud-playlist-lookup-input');
+  const soundcloudPlaylistLookupBtn = document.getElementById('soundcloud-playlist-lookup-btn');
+  const soundcloudPlaylistLookupStatus = document.getElementById('soundcloud-playlist-lookup-status');
   const soundcloudSetupLockedNote = document.getElementById('soundcloud-setup-locked-note');
   const soundcloudSetupError = document.getElementById('soundcloud-setup-error');
   const soundcloudSetupResetBtn = document.getElementById('soundcloud-setup-reset-btn');
@@ -507,6 +510,40 @@
       // Non-critical - worst case they just try again.
     } finally {
       soundcloudSetupDisconnectBtn.disabled = false;
+    }
+  });
+
+  // A playlist's ordinary web link (soundcloud.com/user/sets/name) doesn't contain the numeric
+  // ID the API needs, unlike Vimeo's showcase links - so offer to resolve it server-side (which
+  // requires an active connection) instead of asking anyone to dig for it by hand.
+  soundcloudPlaylistLookupBtn.addEventListener('click', async () => {
+    const url = soundcloudPlaylistLookupInput.value.trim();
+    soundcloudPlaylistLookupStatus.hidden = false;
+    if (!url) {
+      soundcloudPlaylistLookupStatus.textContent = 'Paste a playlist link first.';
+      return;
+    }
+    soundcloudPlaylistLookupBtn.disabled = true;
+    soundcloudPlaylistLookupStatus.textContent = 'Looking it up…';
+    try {
+      const res = await fetch(`/api/soundcloud-resolve-playlist?url=${encodeURIComponent(url)}`);
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Could not resolve that playlist URL.');
+      const existingIds = soundcloudPlaylistIdsInput.value
+        .split(',')
+        .map((s) => s.trim())
+        .filter(Boolean);
+      if (existingIds.includes(data.id)) {
+        soundcloudPlaylistLookupStatus.textContent = `"${data.name}" (${data.id}) is already in the list above.`;
+      } else {
+        soundcloudPlaylistIdsInput.value = [...existingIds, data.id].join(', ');
+        soundcloudPlaylistLookupStatus.textContent = `Added "${data.name}" (${data.id}) to the list above.`;
+      }
+      soundcloudPlaylistLookupInput.value = '';
+    } catch (err) {
+      soundcloudPlaylistLookupStatus.textContent = err.message;
+    } finally {
+      soundcloudPlaylistLookupBtn.disabled = false;
     }
   });
 

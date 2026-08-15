@@ -261,6 +261,26 @@ async function getPlaylistDetails() {
 }
 
 /**
+ * Turns a playlist's ordinary share URL (soundcloud.com/user/sets/name) into its numeric ID,
+ * via SoundCloud's own /resolve endpoint - the share URL doesn't contain the ID itself, so the
+ * setup panel offers this as a paste-a-link alternative to hunting for it by hand.
+ */
+async function resolvePlaylistUrl(url) {
+  const trimmed = String(url || '').trim();
+  if (!trimmed) throw new Error('Paste a SoundCloud playlist URL first.');
+  let resolved;
+  try {
+    resolved = await apiRequest(`/resolve?url=${encodeURIComponent(trimmed)}`);
+  } catch (err) {
+    throw new Error('Could not find a playlist at that URL - double check it was copied in full.');
+  }
+  if (!resolved || resolved.kind !== 'playlist') {
+    throw new Error('That URL points to something other than a playlist (a track or user, maybe) - paste a playlist link instead.');
+  }
+  return { id: String(resolved.id), name: resolved.title || `Playlist ${resolved.id}` };
+}
+
+/**
  * Uploads `filePath` (an MP3) to SoundCloud with the given title/description/privacy, then
  * adds it to `playlistIds` (defaults to every ID in SOUNDCLOUD_PLAYLIST_IDS if not given).
  * Playlist updates replace the whole track list, so each one is read-modify-write: fetch the
@@ -313,6 +333,7 @@ module.exports = {
   hasOAuthApp,
   getPlaylistIds,
   getPlaylistDetails,
+  resolvePlaylistUrl,
   getAuthorizeUrl,
   handleOAuthCallback,
   getAppConfigStatus,

@@ -744,6 +744,17 @@ app.get('/api/soundcloud-playlists', async (req, res) => {
   }
 });
 
+app.get('/api/soundcloud-resolve-playlist', async (req, res) => {
+  if (!soundcloud.isConnected()) {
+    return res.status(400).json({ error: 'Connect to SoundCloud first, then playlist URLs can be looked up automatically.' });
+  }
+  try {
+    res.json(await soundcloud.resolvePlaylistUrl(req.query.url));
+  } catch (err) {
+    res.status(400).json({ error: err.message || 'Could not resolve that playlist URL.' });
+  }
+});
+
 // The SoundCloud setup panel's own state - whether a Client ID/Secret have been saved (without
 // ever sending the secret itself back down), so the form can show "already saved" instead of
 // blank fields, and explain when env vars are in charge instead. Mirrors /api/vimeo-app-config.

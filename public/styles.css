@@ -559,6 +559,22 @@ button.soundcloud-connect-link {
   margin-bottom: 14px;
 }
 
+.soundcloud-playlist-lookup-row {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.soundcloud-playlist-lookup-row input {
+  flex: 1;
+  min-width: 0;
+}
+
+.soundcloud-playlist-lookup-row .modal-btn-ghost {
+  border: 1px solid var(--border);
+  padding: 8px 12px;
+}
+
 .vimeo-setup-actions {
   display: flex;
   flex-wrap: wrap;
