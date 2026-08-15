@@ -475,8 +475,7 @@
       const playlistsRes = await fetch('/api/soundcloud-playlists');
       const playlistsData = await playlistsRes.json().catch(() => ({}));
       state.soundcloudPlaylists = playlistsData.playlists || [];
-      updateSoundCloudSetupDialogActions(false);
-      soundcloudSetupResetBtn.hidden = false;
+      closeSoundCloudSetupForm();
     } catch (err) {
       soundcloudSetupError.hidden = false;
       soundcloudSetupError.textContent = err.message;
