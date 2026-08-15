@@ -225,8 +225,7 @@ app.post('/api/render/:jobId', useJobIdFromParams, upload.single('png'), async (
       ? String(req.body.vimeoShowcaseIds).split(',').map((s) => s.trim()).filter(Boolean)
       : undefined;
     const vimeoPrivacy = String(req.body.vimeoPrivacy || 'anybody');
-    const publishToSoundCloud =
-      toBool(req.body.publishToSoundCloud, false) && exportMp3 && soundcloud.isConfigured() && soundcloud.isConnected();
+    const publishToSoundCloud = toBool(req.body.publishToSoundCloud, false) && exportMp3 && soundcloud.isConnected();
     const soundcloudPlaylistIds = req.body.soundcloudPlaylistIds !== undefined
       ? String(req.body.soundcloudPlaylistIds).split(',').map((s) => s.trim()).filter(Boolean)
       : undefined;
@@ -721,12 +720,15 @@ app.get('/api/vimeo/oauth-callback', async (req, res) => {
   }
 });
 
-// Whether SoundCloud publishing is set up (env vars present) and connected (OAuth completed) -
-// these are separate because being configured doesn't mean the one-time login has happened yet.
+// Whether SoundCloud publishing is set up (an OAuth app's client id/secret, from the saved file
+// or env vars) and connected (a usable refresh token actually exists) - these are separate
+// because setting up an OAuth app doesn't mean Connect SoundCloud has actually been clicked yet,
+// same distinction as Vimeo's status above.
 app.get('/api/soundcloud-status', (req, res) => {
   res.json({
     configured: soundcloud.isConfigured(),
     connected: soundcloud.isConnected(),
+    hasOAuthApp: soundcloud.hasOAuthApp(),
     playlistCount: soundcloud.getPlaylistIds().length,
   });
 });
@@ -734,7 +736,7 @@ app.get('/api/soundcloud-status', (req, res) => {
 // Real playlist names for the configured IDs, so the publish dialog can offer a friendly
 // checkbox list instead of raw numbers - mirrors /api/vimeo-showcases.
 app.get('/api/soundcloud-playlists', async (req, res) => {
-  if (!soundcloud.isConfigured() || !soundcloud.isConnected()) return res.json({ playlists: [] });
+  if (!soundcloud.isConnected()) return res.json({ playlists: [] });
   try {
     res.json({ playlists: await soundcloud.getPlaylistDetails() });
   } catch (err) {
@@ -742,13 +744,52 @@ app.get('/api/soundcloud-playlists', async (req, res) => {
   }
 });
 
+// The SoundCloud setup panel's own state - whether a Client ID/Secret have been saved (without
+// ever sending the secret itself back down), so the form can show "already saved" instead of
+// blank fields, and explain when env vars are in charge instead. Mirrors /api/vimeo-app-config.
+app.get('/api/soundcloud-app-config', (req, res) => {
+  res.json(soundcloud.getAppConfigStatus());
+});
+
+// Saves the Client ID/Secret entered in the app's own setup panel - same point as Vimeo's
+// equivalent: nobody has to find, open, or edit .env for this.
+app.post('/api/soundcloud-app-config', (req, res) => {
+  try {
+    const { clientId, clientSecret } = req.body || {};
+    const playlistIds = req.body && req.body.playlistIds !== undefined
+      ? String(req.body.playlistIds).split(',').map((s) => s.trim()).filter(Boolean)
+      : undefined;
+    soundcloud.saveAppConfig({ clientId, clientSecret, playlistIds });
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(400).json({ error: err.message || 'Could not save SoundCloud settings.' });
+  }
+});
+
+// Full reset - clears the saved Client ID/Secret AND any connected account token, so someone
+// can switch SoundCloud accounts or start over after entering the wrong values.
+app.delete('/api/soundcloud-app-config', (req, res) => {
+  soundcloud.clearAppConfig();
+  res.json({ ok: true });
+});
+
+// Signs out of the connected SoundCloud account without clearing the Client ID/Secret - works
+// regardless of whether those came from the saved file or env vars, so Connect SoundCloud can
+// be redone without re-entering app credentials. Unlike Vimeo, there's no legacy-token restart
+// case here - SoundCloud is always OAuth, so a plain token clear is always enough.
+app.post('/api/soundcloud/disconnect', (req, res) => {
+  soundcloud.disconnect();
+  res.json({ ok: true });
+});
+
 // Full-page redirect (not fetched) - SoundCloud needs the browser itself to navigate there so
 // the FF account can log in and approve access, then it bounces back to oauth-callback below.
 app.get('/api/soundcloud/connect', (req, res) => {
-  if (!soundcloud.isConfigured()) {
-    return res.status(400).send('SoundCloud is not configured - set SOUNDCLOUD_CLIENT_ID/SOUNDCLOUD_CLIENT_SECRET in .env first.');
+  try {
+    res.redirect(soundcloud.getAuthorizeUrl());
+  } catch (err) {
+    res.status(400).send(err.message || 'SoundCloud OAuth is not configured.');
   }
-  res.redirect(soundcloud.getAuthorizeUrl());
 });
 
 app.get('/api/soundcloud/oauth-callback', async (req, res) => {

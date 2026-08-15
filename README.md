@@ -79,18 +79,15 @@ Everything entered in the Vimeo setup panel is saved locally to `data/vimeo-app-
 
 Optional, off by default, and needs a SoundCloud **Artist-Pro** subscription - SoundCloud only opened up self-serve API access to Artist-Pro accounts in 2026, and there's no automated path for accounts below that tier.
 
-1. Register an app at https://developers.soundcloud.com (requires Artist-Pro on the SoundCloud account you're registering under) to get a Client ID and Client Secret.
-2. Copy `.env.example` to `.env` (if you haven't already for Vimeo) and fill in:
-   - `SOUNDCLOUD_CLIENT_ID` / `SOUNDCLOUD_CLIENT_SECRET`: from the app you just registered.
-   - `SOUNDCLOUD_REDIRECT_URI`: only needed if this app isn't reachable at `http://localhost:3000` - must exactly match what you registered.
-   - `SOUNDCLOUD_PLAYLIST_IDS`: comma-separated playlist IDs every published track gets added to (e.g. the current year's sermons and the current series) - find an ID in the playlist's URL. Update this whenever the year or series changes.
-3. Restart the app (`npm start`) so it picks up `.env`.
+1. Open the app, and next to **Save the MP3 to this folder...** find the **Set up SoundCloud publishing…** link and click it. It opens a short numbered walkthrough right there - go to developers.soundcloud.com, register a free "app" (requires Artist-Pro on the SoundCloud account you're registering under; any name works, it's just for your own use), add `http://localhost:3000/api/soundcloud/oauth-callback` as its redirect URI, then copy its **Client ID** and **Client Secret** into the two boxes shown and click **Save**.
+2. The same click also kicks off the one-time sign-in: it saves the credentials, then opens SoundCloud in the browser to log into the FF SoundCloud account and approve access (tokens refresh themselves silently afterward; you'll only need to reconnect if access is ever revoked from SoundCloud's side).
+3. Optionally, in that same panel, paste in comma-separated playlist IDs every published track should get added to automatically - find one in a playlist's URL. Can be left blank, or added/changed later via the same panel (now labeled **SoundCloud settings…**).
 
-Unlike Vimeo's single access token, SoundCloud needs an actual sign-in: once configured, a **Connect SoundCloud** link appears above the Render button. Click it, log into the FF SoundCloud account in the browser tab that opens, and approve access - that's a one-time step (tokens refresh themselves silently afterward; you'll only need to reconnect if access is ever revoked from SoundCloud's side).
+That's the whole setup, and it only needs doing once per machine - reopen the panel any time to change the playlists, or click **Disconnect SoundCloud** to sign out (keeping the saved Client ID/Secret) or **Forget these credentials** to clear everything and start over. (Advanced/scripted installs can instead set `SOUNDCLOUD_CLIENT_ID`/`SOUNDCLOUD_CLIENT_SECRET`/`SOUNDCLOUD_PLAYLIST_IDS` as environment variables in `.env` - see `.env.example` - which take priority over the in-app panel and lock its fields; this isn't needed for normal use.)
 
-With that done, clicking **Render Video** shows a **"Publish to SoundCloud?"** dialog - separately from Vimeo's, right after it, and only when **Also render an MP3** is checked (SoundCloud is audio-only, so there's nothing to offer otherwise). Same shape as Vimeo's dialog: a Private/Public privacy choice (defaults to Private), checkboxes for which configured playlists to add it to, and **Cancel** / **Render Only** / **Render & Publish to SoundCloud** buttons that behave exactly like Vimeo's equivalents. A results panel shows the track link and which playlists succeeded or failed.
+With SoundCloud connected, clicking **Render Video** shows a **"Publish to SoundCloud?"** dialog - separately from Vimeo's, right after it, and only when **Also render an MP3** is checked (SoundCloud is audio-only, so there's nothing to offer otherwise). Same shape as Vimeo's dialog: a Private/Public privacy choice (defaults to Private), checkboxes for which configured playlists to add it to, and **Cancel** / **Render Only** / **Render & Publish to SoundCloud** buttons that behave exactly like Vimeo's equivalents. A results panel shows the track link and which playlists succeeded or failed.
 
-`.env` is gitignored, same as the Vimeo token; the OAuth tokens themselves live in `data/soundcloud-tokens.json`, also gitignored.
+Everything entered in the SoundCloud setup panel is saved locally to `data/soundcloud-app-config.json` and `data/soundcloud-tokens.json` (both gitignored, never committed) - never to `.env`, and never anywhere that gets copied to GitHub.
 
 ## Render settings are remembered
 

@@ -4,10 +4,18 @@ const crypto = require('crypto');
 
 /**
  * SoundCloud publishing: upload the rendered MP3 and add it to a fixed set of playlists.
- * Unlike Vimeo (a single static access token), SoundCloud's API requires real OAuth2
- * (Authorization Code + PKCE) - the FF SoundCloud account has to log in once via
- * /api/soundcloud/connect, after which the refresh token is kept locally (data/, gitignored,
- * same as everything else under here) and silently renewed before each upload.
+ * Unlike Vimeo's legacy-token option, SoundCloud's API always requires real OAuth2
+ * (Authorization Code + PKCE) - there's no equivalent of a single pasted-in access token, so
+ * every install needs a Client ID/Secret one way or another.
+ *
+ * Two ways to provide that Client ID/Secret, same shape as vimeo.js:
+ *  - The normal path: entered right in the app via the SoundCloud setup panel (see
+ *    /api/soundcloud-app-config below), saved to data/soundcloud-app-config.json (gitignored).
+ *  - SOUNDCLOUD_CLIENT_ID/SOUNDCLOUD_CLIENT_SECRET env vars, for anyone who'd rather manage it
+ *    that way - these take priority over the saved file when set.
+ * Once either is in place, "Connect SoundCloud" does the actual account authorization, and the
+ * resulting refresh token is kept in data/soundcloud-tokens.json (gitignored), silently renewed
+ * before each upload.
  *
  * Endpoints/behavior below are taken directly from SoundCloud's public OpenAPI spec
  * (github.com/soundcloud/api) as of mid-2026, not verified against the live API from this
@@ -16,13 +24,56 @@ const crypto = require('crypto');
 
 const DATA_DIR = path.join(__dirname, '..', 'data');
 const TOKENS_PATH = path.join(DATA_DIR, 'soundcloud-tokens.json');
+const APP_CONFIG_PATH = path.join(DATA_DIR, 'soundcloud-app-config.json');
 
 const AUTHORIZE_URL = 'https://secure.soundcloud.com/authorize';
 const TOKEN_URL = 'https://secure.soundcloud.com/oauth/token';
 const API_BASE = 'https://api.soundcloud.com';
 
+function loadAppConfig() {
+  try {
+    return JSON.parse(fs.readFileSync(APP_CONFIG_PATH, 'utf8'));
+  } catch {
+    return null;
+  }
+}
+
+function saveAppConfig({ clientId, clientSecret, playlistIds }) {
+  const existing = loadAppConfig() || {};
+  const next = {
+    clientId: clientId !== undefined ? String(clientId).trim() : existing.clientId || '',
+    clientSecret: clientSecret !== undefined ? String(clientSecret).trim() : existing.clientSecret || '',
+    playlistIds: playlistIds !== undefined ? playlistIds : existing.playlistIds || [],
+  };
+  if (!next.clientId || !next.clientSecret) {
+    throw new Error('Both the Client ID and Client Secret are required.');
+  }
+  fs.mkdirSync(DATA_DIR, { recursive: true });
+  fs.writeFileSync(APP_CONFIG_PATH, JSON.stringify(next, null, 2));
+  return next;
+}
+
+// Clears the saved app credentials AND any connected account token - a full reset, for
+// switching SoundCloud accounts or starting over after a mistake.
+function clearAppConfig() {
+  fs.rmSync(APP_CONFIG_PATH, { force: true });
+  fs.rmSync(TOKENS_PATH, { force: true });
+}
+
+function getClientId() {
+  return process.env.SOUNDCLOUD_CLIENT_ID || (loadAppConfig() || {}).clientId || null;
+}
+
+function getClientSecret() {
+  return process.env.SOUNDCLOUD_CLIENT_SECRET || (loadAppConfig() || {}).clientSecret || null;
+}
+
+function hasOAuthApp() {
+  return !!(getClientId() && getClientSecret());
+}
+
 function isConfigured() {
-  return !!(process.env.SOUNDCLOUD_CLIENT_ID && process.env.SOUNDCLOUD_CLIENT_SECRET);
+  return hasOAuthApp();
 }
 
 function getRedirectUri() {
@@ -30,10 +81,22 @@ function getRedirectUri() {
 }
 
 function getPlaylistIds() {
-  return (process.env.SOUNDCLOUD_PLAYLIST_IDS || '')
-    .split(',')
-    .map((s) => s.trim())
-    .filter(Boolean);
+  if (process.env.SOUNDCLOUD_PLAYLIST_IDS) {
+    return process.env.SOUNDCLOUD_PLAYLIST_IDS.split(',').map((s) => s.trim()).filter(Boolean);
+  }
+  return (loadAppConfig() || {}).playlistIds || [];
+}
+
+// Status for the client's setup panel - never includes the client secret itself, just whether
+// one's been saved, so the UI can show "already saved" without round-tripping the actual value.
+function getAppConfigStatus() {
+  const config = loadAppConfig();
+  return {
+    clientId: process.env.SOUNDCLOUD_CLIENT_ID || (config && config.clientId) || '',
+    hasSecret: !!(process.env.SOUNDCLOUD_CLIENT_SECRET || (config && config.clientSecret)),
+    playlistIds: getPlaylistIds(),
+    lockedByEnv: !!(process.env.SOUNDCLOUD_CLIENT_ID || process.env.SOUNDCLOUD_CLIENT_SECRET),
+  };
 }
 
 function loadTokens() {
@@ -54,6 +117,14 @@ function isConnected() {
   return !!(tokens && tokens.refresh_token);
 }
 
+// Signs out of the connected SoundCloud account without touching the saved (or env-provided)
+// Client ID/Secret - lets Connect SoundCloud be done again without re-entering app credentials.
+// Unlike Vimeo's legacy-token path, there's no env-var-only "already connected" case here to
+// worry about - SoundCloud always has a real, clearable stored token once connected at all.
+function disconnect() {
+  fs.rmSync(TOKENS_PATH, { force: true });
+}
+
 // Single-user local app - an in-memory map keyed by `state` is plenty for matching a PKCE
 // code_verifier back up when the OAuth redirect returns seconds later, no real security
 // boundary being crossed here, just plumbing.
@@ -64,6 +135,9 @@ function base64url(buffer) {
 }
 
 function getAuthorizeUrl() {
+  if (!hasOAuthApp()) {
+    throw new Error('SoundCloud is not set up yet - fill in the SoundCloud setup panel in the app first.');
+  }
   const codeVerifier = base64url(crypto.randomBytes(32));
   const codeChallenge = base64url(crypto.createHash('sha256').update(codeVerifier).digest());
   const state = base64url(crypto.randomBytes(16));
@@ -71,7 +145,7 @@ function getAuthorizeUrl() {
   setTimeout(() => pendingAuth.delete(state), 10 * 60 * 1000).unref();
 
   const params = new URLSearchParams({
-    client_id: process.env.SOUNDCLOUD_CLIENT_ID,
+    client_id: getClientId(),
     redirect_uri: getRedirectUri(),
     response_type: 'code',
     code_challenge: codeChallenge,
@@ -102,8 +176,8 @@ async function handleOAuthCallback(code, state) {
   const tokens = await tokenRequest(
     new URLSearchParams({
       grant_type: 'authorization_code',
-      client_id: process.env.SOUNDCLOUD_CLIENT_ID,
-      client_secret: process.env.SOUNDCLOUD_CLIENT_SECRET,
+      client_id: getClientId(),
+      client_secret: getClientSecret(),
       redirect_uri: getRedirectUri(),
       code,
       code_verifier: codeVerifier,
@@ -120,8 +194,8 @@ async function refreshAccessToken() {
   const fresh = await tokenRequest(
     new URLSearchParams({
       grant_type: 'refresh_token',
-      client_id: process.env.SOUNDCLOUD_CLIENT_ID,
-      client_secret: process.env.SOUNDCLOUD_CLIENT_SECRET,
+      client_id: getClientId(),
+      client_secret: getClientSecret(),
       refresh_token: tokens.refresh_token,
     })
   );
@@ -236,9 +310,14 @@ async function uploadAndPublish({ filePath, title, description, privacy, playlis
 module.exports = {
   isConfigured,
   isConnected,
+  hasOAuthApp,
   getPlaylistIds,
   getPlaylistDetails,
   getAuthorizeUrl,
   handleOAuthCallback,
+  getAppConfigStatus,
+  saveAppConfig,
+  clearAppConfig,
+  disconnect,
   uploadAndPublish,
 };

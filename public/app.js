@@ -110,9 +110,19 @@
   const soundcloudRenderOnlyBtn = document.getElementById('soundcloud-render-only-btn');
   const soundcloudRenderPublishBtn = document.getElementById('soundcloud-render-publish-btn');
 
-  const soundcloudConnectSection = document.getElementById('soundcloud-connect-section');
   const soundcloudConnectStatus = document.getElementById('soundcloud-connect-status');
   const soundcloudConnectBtn = document.getElementById('soundcloud-connect-btn');
+  const soundcloudToggleSetupBtn = document.getElementById('soundcloud-toggle-setup-btn');
+  const soundcloudSetupForm = document.getElementById('soundcloud-setup-form');
+  const soundcloudClientIdInput = document.getElementById('soundcloud-client-id-input');
+  const soundcloudClientSecretInput = document.getElementById('soundcloud-client-secret-input');
+  const soundcloudPlaylistIdsInput = document.getElementById('soundcloud-playlist-ids-input');
+  const soundcloudSetupLockedNote = document.getElementById('soundcloud-setup-locked-note');
+  const soundcloudSetupError = document.getElementById('soundcloud-setup-error');
+  const soundcloudSetupResetBtn = document.getElementById('soundcloud-setup-reset-btn');
+  const soundcloudSetupDisconnectBtn = document.getElementById('soundcloud-setup-disconnect-btn');
+  const soundcloudSetupCancelBtn = document.getElementById('soundcloud-setup-cancel-btn');
+  const soundcloudSetupSaveBtn = document.getElementById('soundcloud-setup-save-btn');
 
   const vimeoConnectStatus = document.getElementById('vimeo-connect-status');
   const vimeoConnectBtn = document.getElementById('vimeo-connect-btn');
@@ -336,31 +346,170 @@
 
   state.soundcloudConfigured = false;
   state.soundcloudConnected = false;
+  state.soundcloudHasOAuthApp = false;
+  let soundcloudSetupOpen = false;
+
+  // Mirrors refreshVimeoConnectUI() - SoundCloud has no legacy-token equivalent (it's always
+  // real OAuth), so there's no "hide the settings toggle entirely" case to account for here.
   function refreshSoundCloudConnectUI() {
-    soundcloudConnectSection.hidden = !state.soundcloudConfigured;
+    const readyToConnect = !state.soundcloudConnected && state.soundcloudHasOAuthApp;
     if (state.soundcloudConnected) {
+      soundcloudConnectStatus.hidden = false;
       soundcloudConnectStatus.textContent = 'SoundCloud: connected';
       soundcloudConnectStatus.classList.add('connected');
       soundcloudConnectBtn.hidden = true;
     } else {
-      soundcloudConnectStatus.textContent = 'SoundCloud: not connected';
+      soundcloudConnectStatus.hidden = true;
       soundcloudConnectStatus.classList.remove('connected');
-      soundcloudConnectBtn.hidden = false;
+      soundcloudConnectBtn.hidden = !readyToConnect;
+    }
+    if (state.soundcloudHasOAuthApp) {
+      soundcloudToggleSetupBtn.textContent = readyToConnect ? 'Edit SoundCloud Connection' : 'SoundCloud settings…';
+      soundcloudToggleSetupBtn.classList.remove('vimeo-rect-btn');
+      soundcloudToggleSetupBtn.classList.add('soundcloud-connect-link');
+    } else {
+      soundcloudToggleSetupBtn.textContent = 'Set up SoundCloud publishing…';
+      soundcloudToggleSetupBtn.classList.remove('soundcloud-connect-link');
+      soundcloudToggleSetupBtn.classList.add('vimeo-rect-btn');
     }
   }
+
   function loadSoundCloudStatus() {
     return fetch('/api/soundcloud-status')
       .then((res) => res.json())
       .then((data) => {
         state.soundcloudConfigured = !!data.configured;
         state.soundcloudConnected = !!data.connected;
+        state.soundcloudHasOAuthApp = !!data.hasOAuthApp;
         refreshSoundCloudConnectUI();
       })
       .catch(() => {
         state.soundcloudConfigured = false;
         state.soundcloudConnected = false;
+        state.soundcloudHasOAuthApp = false;
       });
   }
+
+  // Mirrors updateVimeoSetupDialogActions() - one button does double duty: "Connect to
+  // SoundCloud" while not yet connected (saves + redirects in one click), "Save" once connected
+  // (just persists edits, no redirect needed).
+  function updateSoundCloudSetupDialogActions(lockedByEnv) {
+    soundcloudSetupSaveBtn.textContent = state.soundcloudConnected ? 'Save' : 'Connect to SoundCloud';
+    soundcloudSetupSaveBtn.hidden = lockedByEnv;
+    soundcloudSetupDisconnectBtn.hidden = !state.soundcloudConnected;
+  }
+
+  function openSoundCloudSetupForm() {
+    soundcloudSetupError.hidden = true;
+    fetch('/api/soundcloud-app-config')
+      .then((res) => res.json())
+      .then((data) => {
+        soundcloudClientIdInput.value = data.clientId || '';
+        soundcloudClientSecretInput.value = '';
+        soundcloudClientSecretInput.placeholder = data.hasSecret ? 'Already saved - leave blank to keep it' : 'Paste it here';
+        soundcloudPlaylistIdsInput.value = (data.playlistIds || []).join(', ');
+        soundcloudSetupLockedNote.hidden = !data.lockedByEnv;
+        soundcloudClientIdInput.disabled = data.lockedByEnv;
+        soundcloudClientSecretInput.disabled = data.lockedByEnv;
+        updateSoundCloudSetupDialogActions(data.lockedByEnv);
+        soundcloudSetupResetBtn.hidden = data.lockedByEnv || !state.soundcloudHasOAuthApp;
+      })
+      .catch(() => {});
+    soundcloudSetupForm.hidden = false;
+    soundcloudSetupOpen = true;
+  }
+
+  function closeSoundCloudSetupForm() {
+    soundcloudSetupForm.hidden = true;
+    soundcloudSetupOpen = false;
+  }
+
+  soundcloudToggleSetupBtn.addEventListener('click', () => {
+    if (soundcloudSetupOpen) closeSoundCloudSetupForm();
+    else openSoundCloudSetupForm();
+  });
+  soundcloudSetupCancelBtn.addEventListener('click', closeSoundCloudSetupForm);
+  soundcloudSetupForm.addEventListener('click', (e) => {
+    if (e.target === soundcloudSetupForm) closeSoundCloudSetupForm();
+  });
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && soundcloudSetupOpen) closeSoundCloudSetupForm();
+  });
+
+  soundcloudSetupSaveBtn.addEventListener('click', async () => {
+    soundcloudSetupError.hidden = true;
+    const clientId = soundcloudClientIdInput.value.trim();
+    const clientSecret = soundcloudClientSecretInput.value.trim();
+    const playlistIds = soundcloudPlaylistIdsInput.value.trim();
+    if (!clientId) {
+      soundcloudSetupError.hidden = false;
+      soundcloudSetupError.textContent = 'Paste in the Client ID from the SoundCloud app page first.';
+      return;
+    }
+    const body = { clientId, playlistIds };
+    if (clientSecret) {
+      body.clientSecret = clientSecret;
+    } else if (!soundcloudClientSecretInput.placeholder.startsWith('Already saved')) {
+      soundcloudSetupError.hidden = false;
+      soundcloudSetupError.textContent = 'Paste in the Client Secret from the SoundCloud app page too.';
+      return;
+    }
+    const shouldConnectAfterSave = !state.soundcloudConnected;
+    soundcloudSetupSaveBtn.disabled = true;
+    try {
+      const res = await fetch('/api/soundcloud-app-config', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Could not save SoundCloud settings.');
+      if (shouldConnectAfterSave) {
+        window.location.href = '/api/soundcloud/connect';
+        return;
+      }
+      await loadSoundCloudStatus();
+      const playlistsRes = await fetch('/api/soundcloud-playlists');
+      const playlistsData = await playlistsRes.json().catch(() => ({}));
+      state.soundcloudPlaylists = playlistsData.playlists || [];
+      updateSoundCloudSetupDialogActions(false);
+      soundcloudSetupResetBtn.hidden = false;
+    } catch (err) {
+      soundcloudSetupError.hidden = false;
+      soundcloudSetupError.textContent = err.message;
+    } finally {
+      soundcloudSetupSaveBtn.disabled = false;
+    }
+  });
+
+  soundcloudSetupResetBtn.addEventListener('click', async () => {
+    if (!window.confirm('Forget the saved SoundCloud Client ID/Secret and sign out? You can set it up again any time.')) return;
+    soundcloudSetupResetBtn.disabled = true;
+    try {
+      await fetch('/api/soundcloud-app-config', { method: 'DELETE' });
+      await loadSoundCloudStatus();
+      closeSoundCloudSetupForm();
+    } catch {
+      // Non-critical - worst case they just try again.
+    } finally {
+      soundcloudSetupResetBtn.disabled = false;
+    }
+  });
+
+  soundcloudSetupDisconnectBtn.addEventListener('click', async () => {
+    if (!window.confirm('Sign out of the connected SoundCloud account? Your saved Client ID/Secret stay put - click Connect to SoundCloud any time to sign back in.')) return;
+    soundcloudSetupDisconnectBtn.disabled = true;
+    try {
+      await fetch('/api/soundcloud/disconnect', { method: 'POST' });
+      await loadSoundCloudStatus();
+      closeSoundCloudSetupForm();
+    } catch {
+      // Non-critical - worst case they just try again.
+    } finally {
+      soundcloudSetupDisconnectBtn.disabled = false;
+    }
+  });
+
   loadSoundCloudStatus();
 
   // Fetched once, up front, same as Vimeo's showcases - only returns anything once actually

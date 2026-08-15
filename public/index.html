@@ -280,9 +280,52 @@
         </div>
       </div>
 
-      <div id="soundcloud-connect-section" class="soundcloud-connect-section" hidden>
-        <span id="soundcloud-connect-status"></span>
-        <a id="soundcloud-connect-btn" href="/api/soundcloud/connect" class="soundcloud-connect-link" hidden>Connect SoundCloud</a>
+      <div id="soundcloud-setup-section" class="vimeo-setup-section">
+        <div id="soundcloud-status-row" class="soundcloud-connect-section">
+          <span id="soundcloud-connect-status"></span>
+          <a id="soundcloud-connect-btn" href="/api/soundcloud/connect" class="vimeo-rect-btn" hidden>Connect to SoundCloud</a>
+          <button type="button" id="soundcloud-toggle-setup-btn" class="vimeo-rect-btn">Set up SoundCloud publishing…</button>
+        </div>
+
+        <div id="soundcloud-setup-form" class="modal-overlay" hidden>
+          <div class="modal-dialog vimeo-setup-dialog">
+            <h3>Set up SoundCloud publishing</h3>
+            <p class="vimeo-setup-intro">To let this app upload directly to SoundCloud, create a small (free) "app" on SoundCloud's site - a one-time step. This is just how SoundCloud lets an outside program connect to an account; you won't need to come back to SoundCloud's site again once it's done. Requires an <strong>Artist Pro</strong> SoundCloud account - lower tiers don't allow this kind of connection.</p>
+            <ol class="vimeo-setup-steps">
+              <li>Go to <a href="https://developers.soundcloud.com" target="_blank" rel="noopener">developers.soundcloud.com</a> and log in with the SoundCloud account you want to publish to.</li>
+              <li>Register a new app. Give it any name (e.g. "Sermon Video Editor") - the details don't matter, it's just for your own use.</li>
+              <li>On the app's page, find <strong>Redirect URI</strong> (or "Callback URL") and add exactly this, then save: <code>http://localhost:3000/api/soundcloud/oauth-callback</code></li>
+              <li>Still on that page, copy the <strong>Client ID</strong> and <strong>Client Secret</strong> into the two boxes below.</li>
+              <li>Click <strong>Connect to SoundCloud</strong> below and log in with your SoundCloud account when it asks - that saves what you entered and finishes the connection in one step.</li>
+            </ol>
+
+            <div class="field">
+              <label for="soundcloud-client-id-input">Client ID</label>
+              <input type="text" id="soundcloud-client-id-input" autocomplete="off" placeholder="Paste it here" />
+            </div>
+            <div class="field">
+              <label for="soundcloud-client-secret-input">Client Secret</label>
+              <input type="password" id="soundcloud-client-secret-input" autocomplete="off" placeholder="Paste it here" />
+            </div>
+            <div class="field">
+              <label for="soundcloud-playlist-ids-input">
+                Playlists <span class="field-optional">(optional - every published track gets added to these automatically)</span>
+              </label>
+              <input type="text" id="soundcloud-playlist-ids-input" autocomplete="off" placeholder="e.g. 1234567, 9876543" />
+              <div class="vimeo-setup-hint">Comma-separated. Find an ID in the playlist's URL. Can be left blank, or added later.</div>
+            </div>
+
+            <div id="soundcloud-setup-locked-note" class="vimeo-setup-hint" hidden>The Client ID and Secret are set on this machine outside the app and can't be edited here.</div>
+            <div id="soundcloud-setup-error" class="error-box" hidden></div>
+
+            <div class="vimeo-setup-actions">
+              <button type="button" id="soundcloud-setup-reset-btn" class="modal-btn-ghost" hidden>Forget these credentials</button>
+              <button type="button" id="soundcloud-setup-disconnect-btn" class="modal-btn-ghost" hidden>Disconnect SoundCloud</button>
+              <button type="button" id="soundcloud-setup-cancel-btn" class="modal-btn-ghost">Cancel</button>
+              <button type="button" id="soundcloud-setup-save-btn" class="modal-btn-primary">Connect to SoundCloud</button>
+            </div>
+          </div>
+        </div>
       </div>
 
       <div id="render-requirements" class="render-requirements" hidden></div>

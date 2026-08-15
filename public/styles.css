@@ -453,10 +453,7 @@ label.core-text-label {
   color: var(--muted);
 }
 
-#soundcloud-connect-status.connected {
-  color: var(--success);
-}
-
+#soundcloud-connect-status.connected,
 #vimeo-connect-status.connected {
   display: inline-block;
   color: var(--success);
