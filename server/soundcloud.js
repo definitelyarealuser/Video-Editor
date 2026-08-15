@@ -30,12 +30,19 @@ const AUTHORIZE_URL = 'https://secure.soundcloud.com/authorize';
 const TOKEN_URL = 'https://secure.soundcloud.com/oauth/token';
 const API_BASE = 'https://api.soundcloud.com';
 
+// Cached in memory after the first read - this app is the only writer of APP_CONFIG_PATH (both
+// below), so there's no need to hit disk again on every getClientId()/getClientSecret()/etc.
+// call. `undefined` means "not loaded yet"; `null` means "loaded, no file on disk".
+let appConfigCache;
+
 function loadAppConfig() {
+  if (appConfigCache !== undefined) return appConfigCache;
   try {
-    return JSON.parse(fs.readFileSync(APP_CONFIG_PATH, 'utf8'));
+    appConfigCache = JSON.parse(fs.readFileSync(APP_CONFIG_PATH, 'utf8'));
   } catch {
-    return null;
+    appConfigCache = null;
   }
+  return appConfigCache;
 }
 
 function saveAppConfig({ clientId, clientSecret, playlistIds }) {
@@ -50,6 +57,7 @@ function saveAppConfig({ clientId, clientSecret, playlistIds }) {
   }
   fs.mkdirSync(DATA_DIR, { recursive: true });
   fs.writeFileSync(APP_CONFIG_PATH, JSON.stringify(next, null, 2));
+  appConfigCache = next;
   return next;
 }
 
@@ -58,6 +66,7 @@ function saveAppConfig({ clientId, clientSecret, playlistIds }) {
 function clearAppConfig() {
   fs.rmSync(APP_CONFIG_PATH, { force: true });
   fs.rmSync(TOKENS_PATH, { force: true });
+  appConfigCache = null;
 }
 
 function getClientId() {

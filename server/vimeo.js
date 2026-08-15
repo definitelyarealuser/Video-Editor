@@ -34,12 +34,19 @@ function hasLegacyToken() {
   return !!process.env.VIMEO_ACCESS_TOKEN;
 }
 
+// Cached in memory after the first read - this app is the only writer of APP_CONFIG_PATH (both
+// below), so there's no need to hit disk again on every getClientId()/getClientSecret()/etc.
+// call. `undefined` means "not loaded yet"; `null` means "loaded, no file on disk".
+let appConfigCache;
+
 function loadAppConfig() {
+  if (appConfigCache !== undefined) return appConfigCache;
   try {
-    return JSON.parse(fs.readFileSync(APP_CONFIG_PATH, 'utf8'));
+    appConfigCache = JSON.parse(fs.readFileSync(APP_CONFIG_PATH, 'utf8'));
   } catch {
-    return null;
+    appConfigCache = null;
   }
+  return appConfigCache;
 }
 
 function saveAppConfig({ clientId, clientSecret, showcaseIds }) {
@@ -54,6 +61,7 @@ function saveAppConfig({ clientId, clientSecret, showcaseIds }) {
   }
   fs.mkdirSync(DATA_DIR, { recursive: true });
   fs.writeFileSync(APP_CONFIG_PATH, JSON.stringify(next, null, 2));
+  appConfigCache = next;
   return next;
 }
 
@@ -62,6 +70,7 @@ function saveAppConfig({ clientId, clientSecret, showcaseIds }) {
 function clearAppConfig() {
   fs.rmSync(APP_CONFIG_PATH, { force: true });
   fs.rmSync(TOKENS_PATH, { force: true });
+  appConfigCache = null;
 }
 
 // A bare VIMEO_ACCESS_TOKEN has no separate stored connection to clear - the env var the process
@@ -103,10 +112,6 @@ function getClientSecret() {
 
 function hasOAuthApp() {
   return !!(getClientId() && getClientSecret());
-}
-
-function isConfigured() {
-  return hasLegacyToken() || hasOAuthApp();
 }
 
 function getRedirectUri() {
@@ -263,7 +268,6 @@ async function uploadAndPublish({ filePath, name, description, showcaseIds, priv
 }
 
 module.exports = {
-  isConfigured,
   isConnected,
   hasOAuthApp,
   getShowcaseIds,

@@ -3,7 +3,6 @@
     png: null,
     videoJobId: null,
     videoDuration: 0,
-    vimeoConfigured: false,
   };
 
   const dzPng = document.getElementById('dz-png');
@@ -197,13 +196,11 @@
     return fetch('/api/vimeo-status')
       .then((res) => res.json())
       .then((data) => {
-        state.vimeoConfigured = !!data.configured;
         state.vimeoConnected = !!data.connected;
         state.vimeoHasOAuthApp = !!data.hasOAuthApp;
         refreshVimeoConnectUI();
       })
       .catch(() => {
-        state.vimeoConfigured = false;
         state.vimeoConnected = false;
         state.vimeoHasOAuthApp = false;
       });

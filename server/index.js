@@ -631,13 +631,12 @@ app.post('/api/save-paths', (req, res) => {
   res.json(savePaths.setSavePaths(req.body || {}));
 });
 
-// Whether Vimeo publishing is set up (a legacy token, or an OAuth app's client id/secret) and
+// Whether Vimeo publishing has a legacy token or an OAuth app's client id/secret set up, and is
 // connected (a usable access token actually exists) - these are separate because setting up an
 // OAuth app doesn't mean Connect Vimeo has actually been clicked yet, same distinction as
 // SoundCloud's status below.
 app.get('/api/vimeo-status', (req, res) => {
   res.json({
-    configured: vimeo.isConfigured(),
     connected: vimeo.isConnected(),
     hasOAuthApp: vimeo.hasOAuthApp(),
     showcaseCount: vimeo.getShowcaseIds().length,
