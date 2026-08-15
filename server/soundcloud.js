@@ -72,10 +72,6 @@ function hasOAuthApp() {
   return !!(getClientId() && getClientSecret());
 }
 
-function isConfigured() {
-  return hasOAuthApp();
-}
-
 function getRedirectUri() {
   return process.env.SOUNDCLOUD_REDIRECT_URI || 'http://localhost:3000/api/soundcloud/oauth-callback';
 }
@@ -328,7 +324,6 @@ async function uploadAndPublish({ filePath, title, description, privacy, playlis
 }
 
 module.exports = {
-  isConfigured,
   isConnected,
   hasOAuthApp,
   getPlaylistIds,

@@ -347,7 +347,6 @@
 
   loadVimeoStatus();
 
-  state.soundcloudConfigured = false;
   state.soundcloudConnected = false;
   state.soundcloudHasOAuthApp = false;
   let soundcloudSetupOpen = false;
@@ -381,13 +380,11 @@
     return fetch('/api/soundcloud-status')
       .then((res) => res.json())
       .then((data) => {
-        state.soundcloudConfigured = !!data.configured;
         state.soundcloudConnected = !!data.connected;
         state.soundcloudHasOAuthApp = !!data.hasOAuthApp;
         refreshSoundCloudConnectUI();
       })
       .catch(() => {
-        state.soundcloudConfigured = false;
         state.soundcloudConnected = false;
         state.soundcloudHasOAuthApp = false;
       });

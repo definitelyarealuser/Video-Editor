@@ -720,13 +720,12 @@ app.get('/api/vimeo/oauth-callback', async (req, res) => {
   }
 });
 
-// Whether SoundCloud publishing is set up (an OAuth app's client id/secret, from the saved file
-// or env vars) and connected (a usable refresh token actually exists) - these are separate
-// because setting up an OAuth app doesn't mean Connect SoundCloud has actually been clicked yet,
-// same distinction as Vimeo's status above.
+// Whether SoundCloud publishing has an OAuth app's client id/secret saved (from the saved file
+// or env vars) and is connected (a usable refresh token actually exists) - these are separate
+// because setting up an OAuth app doesn't mean Connect SoundCloud has actually been clicked yet.
+// Unlike Vimeo, there's no legacy-token case, so hasOAuthApp is the only "is this set up" flag.
 app.get('/api/soundcloud-status', (req, res) => {
   res.json({
-    configured: soundcloud.isConfigured(),
     connected: soundcloud.isConnected(),
     hasOAuthApp: soundcloud.hasOAuthApp(),
     playlistCount: soundcloud.getPlaylistIds().length,
