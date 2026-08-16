@@ -51,6 +51,27 @@ header h1 {
   .dropzones { grid-template-columns: 1fr; }
 }
 
+.square-art-block {
+  margin-bottom: 36px;
+}
+
+.square-art-label {
+  font-size: 0.85rem;
+  color: var(--muted);
+  margin-bottom: 8px;
+}
+
+.dropzone-compact {
+  min-height: 120px;
+  max-width: 260px;
+  padding: 14px;
+}
+
+.dropzone-compact .dz-icon {
+  font-size: 1.6rem;
+  margin-bottom: 4px;
+}
+
 .dropzone {
   border: 2px dashed var(--border);
   border-radius: 12px;

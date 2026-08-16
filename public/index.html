@@ -56,6 +56,25 @@
         </div>
       </div>
 
+      <div class="square-art-block">
+        <div class="square-art-label">
+          Square graphic for SoundCloud <span class="field-optional">(optional — used as the track artwork when you publish to SoundCloud; the rectangular bookend image above is used as the Vimeo thumbnail)</span>
+        </div>
+        <div class="dropzone dropzone-compact" id="dz-square-art" data-kind="squareArt">
+          <input type="file" id="input-square-art" accept="image/*" hidden />
+          <div class="dz-empty">
+            <div class="dz-icon">🖼️</div>
+            <div class="dz-label">Drop square graphic here</div>
+            <div class="dz-sub">or click to browse</div>
+          </div>
+          <div class="dz-filled" hidden>
+            <img id="square-art-preview" alt="Square graphic preview" />
+            <div class="dz-filename" id="square-art-filename"></div>
+            <button type="button" class="dz-clear" data-target="squareArt">Remove</button>
+          </div>
+        </div>
+      </div>
+
       <section class="trim-panel" id="trim-panel" hidden>
         <h3>Trim to just the sermon <span class="trim-panel-hint">(optional — leave as-is to use the whole file)</span></h3>
 

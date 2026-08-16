@@ -291,8 +291,11 @@ async function resolvePlaylistUrl(url) {
  * Playlist updates replace the whole track list, so each one is read-modify-write: fetch the
  * current tracks, append the new one, PUT the full list back. A failure adding to one playlist
  * doesn't abort the others - same per-item result reporting as Vimeo's showcase adds.
+ * `artworkPath`, if given, is sent as the track's cover art in the same request - unlike Vimeo's
+ * thumbnail (a separate follow-up call), SoundCloud accepts artwork right alongside the audio on
+ * track creation, so a bad image just fails the one upload rather than needing its own handling.
  */
-async function uploadAndPublish({ filePath, title, description, privacy, playlistIds, onProgress }) {
+async function uploadAndPublish({ filePath, title, description, privacy, playlistIds, artworkPath, onProgress }) {
   if (onProgress) onProgress(0.1);
   const fileBuffer = await fs.promises.readFile(filePath);
   const blob = new Blob([fileBuffer], { type: 'audio/mpeg' });
@@ -302,6 +305,16 @@ async function uploadAndPublish({ filePath, title, description, privacy, playlis
   formData.append('track[description]', description || '');
   formData.append('track[sharing]', privacy === 'public' ? 'public' : 'private');
   formData.append('track[asset_data]', blob, path.basename(filePath));
+
+  if (artworkPath) {
+    try {
+      const artworkBuffer = await fs.promises.readFile(artworkPath);
+      const artworkBlob = new Blob([artworkBuffer], { type: 'image/png' });
+      formData.append('track[artwork_data]', artworkBlob, path.basename(artworkPath));
+    } catch {
+      // Non-critical - the track still uploads fine without custom artwork.
+    }
+  }
 
   if (onProgress) onProgress(0.4);
   const track = await apiRequest('/tracks', { method: 'POST', body: formData });

@@ -50,6 +50,9 @@ const upload = multer({
     if (file.fieldname === 'png' || file.fieldname === 'image') {
       if (!/^image\//.test(file.mimetype)) return cb(new Error('The bookend graphic must be an image file (PNG recommended).'));
     }
+    if (file.fieldname === 'squareArt') {
+      if (!/^image\//.test(file.mimetype)) return cb(new Error('The square SoundCloud graphic must be an image file (PNG recommended).'));
+    }
     if (file.fieldname === 'video') {
       if (!/^video\//.test(file.mimetype)) return cb(new Error('The video file must be a video file.'));
     }
@@ -154,38 +157,51 @@ app.post('/api/upload-video', assignJobId, upload.single('video'), async (req, r
   }
 });
 
+const renderUpload = upload.fields([
+  { name: 'png', maxCount: 1 },
+  { name: 'squareArt', maxCount: 1 },
+]);
+
 // --- Step 2: render, using the already-uploaded (and optionally trimmed) video ---
-app.post('/api/render/:jobId', useJobIdFromParams, upload.single('png'), async (req, res) => {
+app.post('/api/render/:jobId', useJobIdFromParams, renderUpload, async (req, res) => {
   const jobId = req.jobId;
   const job = jobs.get(jobId);
 
-  const cleanupPng = () => (req.file ? fs.promises.rm(req.file.path, { force: true }).catch(() => {}) : Promise.resolve());
+  const pngFile = req.files && req.files.png ? req.files.png[0] : null;
+  const squareArtFile = req.files && req.files.squareArt ? req.files.squareArt[0] : null;
+  const cleanupUploadedExtras = () =>
+    Promise.all(
+      [pngFile, squareArtFile]
+        .filter(Boolean)
+        .map((f) => fs.promises.rm(f.path, { force: true }).catch(() => {}))
+    );
 
   try {
     if (!job || !job.videoPath) {
-      await cleanupPng();
+      await cleanupUploadedExtras();
       return res.status(404).json({ error: 'Upload a video first (this session may have expired - try re-uploading).' });
     }
     if (!(await checkFfmpegAvailable())) {
-      await cleanupPng();
+      await cleanupUploadedExtras();
       return res.status(500).json({ error: 'ffmpeg/ffprobe is not installed on the server. Install ffmpeg and restart the app.' });
     }
-    let pngPath = req.file ? req.file.path : null;
+    let pngPath = pngFile ? pngFile.path : null;
     if (!pngPath && req.body.pngImageId) {
       const libraryImage = bookendImages.getImage(req.body.pngImageId);
       if (libraryImage) pngPath = path.join(bookendImages.IMAGES_DIR, libraryImage.storedFilename);
     }
     if (!pngPath) {
-      await cleanupPng();
+      await cleanupUploadedExtras();
       return res.status(400).json({ error: 'A bookend graphic is required.' });
     }
+    const squareArtPath = squareArtFile ? squareArtFile.path : null;
 
     // Whichever way the graphic arrived, make sure it's in the library so it can be picked
     // again next time without re-uploading - saveImage/touchImage both dedupe/no-op safely if
     // it's already there (e.g. the client's own background save-on-drop already handled it).
-    if (req.file) {
+    if (pngFile) {
       try {
-        bookendImages.saveImage({ sourcePath: req.file.path, originalName: req.file.originalname, mimetype: req.file.mimetype });
+        bookendImages.saveImage({ sourcePath: pngFile.path, originalName: pngFile.originalname, mimetype: pngFile.mimetype });
       } catch {
         // Non-critical - rendering itself doesn't depend on the library save succeeding.
       }
@@ -198,7 +214,7 @@ app.post('/api/render/:jobId', useJobIdFromParams, upload.single('png'), async (
     const trimEnd = toPositiveFloat(req.body.trimEnd, fullDuration);
     const isTrimmed = trimStart > 0.001 || trimEnd < fullDuration - 0.001;
     if (isTrimmed && trimEnd - trimStart < 1) {
-      await cleanupPng();
+      await cleanupUploadedExtras();
       return res.status(400).json({ error: 'The trimmed range is too short.' });
     }
     const effectiveDuration = isTrimmed ? trimEnd - trimStart : fullDuration;
@@ -237,16 +253,16 @@ app.post('/api/render/:jobId', useJobIdFromParams, upload.single('png'), async (
     const videoSavePath = String(req.body.videoSavePath || '').trim();
     const audioSavePath = String(req.body.audioSavePath || '').trim();
     if (!videoSavePath) {
-      await cleanupPng();
+      await cleanupUploadedExtras();
       return res.status(400).json({ error: 'A local folder to save the MP4 to is required.' });
     }
     if (exportMp3 && !audioSavePath) {
-      await cleanupPng();
+      await cleanupUploadedExtras();
       return res.status(400).json({ error: 'A local folder to save the MP3 to is required when rendering an MP3.' });
     }
 
     if (transition >= startDuration || transition >= endDuration || transition >= effectiveDuration) {
-      await cleanupPng();
+      await cleanupUploadedExtras();
       return res.status(400).json({
         error: `The crossfade duration (${transition}s) must be shorter than the start image duration, end image duration, and the (trimmed) video itself.`,
       });
@@ -254,7 +270,7 @@ app.post('/api/render/:jobId', useJobIdFromParams, upload.single('png'), async (
 
     const totalDuration = startDuration + endDuration + effectiveDuration - 2 * transition;
     if (fadeOut >= totalDuration) {
-      await cleanupPng();
+      await cleanupUploadedExtras();
       return res.status(400).json({ error: `The fade-to-black duration (${fadeOut}s) is longer than the whole rendered video.` });
     }
 
@@ -329,6 +345,7 @@ app.post('/api/render/:jobId', useJobIdFromParams, upload.single('png'), async (
                 description: vimeoDescription, // same Core Text, sent to both platforms
                 privacy: soundcloudPrivacy,
                 playlistIds: soundcloudPlaylistIds,
+                artworkPath: squareArtPath,
                 onProgress: (fraction) => jobs.update(jobId, { scProgress: fraction }),
               })
               .then(({ trackUrl, playlistResults }) => {
@@ -395,10 +412,17 @@ app.post('/api/render/:jobId', useJobIdFromParams, upload.single('png'), async (
             description: vimeoDescription,
             showcaseIds: vimeoShowcaseIds,
             privacy: vimeoPrivacy,
+            thumbnailPath: pngPath,
             onProgress: (fraction) => jobs.update(jobId, { progress: fraction }),
           })
-          .then(({ videoUrl, showcaseResults }) => {
-            jobs.update(jobId, { status: 'published', progress: 1, vimeoUrl: videoUrl, vimeoShowcaseResults: showcaseResults });
+          .then(({ videoUrl, showcaseResults, thumbnailError }) => {
+            jobs.update(jobId, {
+              status: 'published',
+              progress: 1,
+              vimeoUrl: videoUrl,
+              vimeoShowcaseResults: showcaseResults,
+              vimeoThumbnailError: thumbnailError,
+            });
           })
           .catch((err) => {
             jobs.update(jobId, { status: 'publish-error', error: err.message });
@@ -406,10 +430,10 @@ app.post('/api/render/:jobId', useJobIdFromParams, upload.single('png'), async (
       }
     })().catch((err) => {
       jobs.update(jobId, { status: 'error', error: err.message, errorDetail: err.detail || null });
-      cleanupPng();
+      cleanupUploadedExtras();
     });
   } catch (err) {
-    await cleanupPng();
+    await cleanupUploadedExtras();
     if (!res.headersSent) {
       res.status(500).json({ error: err.message || 'Unexpected server error.', errorDetail: err.detail });
     }
@@ -482,6 +506,7 @@ app.get('/api/progress/:jobId', (req, res) => {
         mp3ErrorDetail: j.mp3ErrorDetail || undefined,
         vimeoUrl: j.vimeoUrl || undefined,
         vimeoShowcaseResults: j.vimeoShowcaseResults || undefined,
+        vimeoThumbnailError: j.vimeoThumbnailError || undefined,
         scStatus: j.scStatus || undefined,
         scProgress: j.scProgress,
         scError: j.scError || undefined,

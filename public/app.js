@@ -1,14 +1,17 @@
 (() => {
   const state = {
     png: null,
+    squareArt: null,
     videoJobId: null,
     videoDuration: 0,
   };
 
   const dzPng = document.getElementById('dz-png');
   const dzVideo = document.getElementById('dz-video');
+  const dzSquareArt = document.getElementById('dz-square-art');
   const inputPng = document.getElementById('input-png');
   const inputVideo = document.getElementById('input-video');
+  const inputSquareArt = document.getElementById('input-square-art');
   const renderBtn = document.getElementById('render-btn');
   const renderRequirements = document.getElementById('render-requirements');
   const form = document.getElementById('render-form');
@@ -1189,6 +1192,21 @@
     updateRenderButton();
   });
 
+  // Square SoundCloud artwork (client-side only, uploaded together with the render request,
+  // same as the rectangular bookend PNG above) - optional, and has no library of its own since
+  // it's a single-purpose image rather than something reused render after render like a bookend.
+  setupDropzone(dzSquareArt, inputSquareArt, (file) => {
+    state.squareArt = file;
+    showDzState(dzSquareArt, 'dz-filled');
+    document.getElementById('square-art-preview').src = URL.createObjectURL(file);
+    document.getElementById('square-art-filename').textContent = file.name;
+  });
+  dzSquareArt.querySelector('.dz-clear').addEventListener('dz-clear-click', () => {
+    state.squareArt = null;
+    showDzState(dzSquareArt, 'dz-empty');
+    inputSquareArt.value = '';
+  });
+
   // Bookend image library: every PNG dropped in gets saved here (deduped server-side by
   // content, so re-using the same one repeatedly doesn't pile up duplicates) so it can be
   // picked again later without re-uploading.
@@ -1747,6 +1765,9 @@
     } else {
       formData.append('png', state.png);
     }
+    if (state.squareArt) {
+      formData.append('squareArt', state.squareArt);
+    }
     formData.append('startDuration', document.getElementById('startDuration').value);
     formData.append('endDuration', document.getElementById('endDuration').value);
     formData.append('transition', document.getElementById('transition').value);
@@ -1885,6 +1906,12 @@
         vimeoResultLink.href = data.vimeoUrl;
         vimeoResultLink.textContent = data.vimeoUrl;
         vimeoShowcaseList.innerHTML = '';
+        if (data.vimeoThumbnailError) {
+          const li = document.createElement('li');
+          li.className = 'showcase-failed';
+          li.textContent = `Custom thumbnail failed: ${data.vimeoThumbnailError}`;
+          vimeoShowcaseList.appendChild(li);
+        }
         (data.vimeoShowcaseResults || []).forEach((r) => {
           const showcase = state.vimeoShowcases.find((s) => String(s.id) === String(r.showcaseId));
           const label = showcase ? showcase.name : r.showcaseId;

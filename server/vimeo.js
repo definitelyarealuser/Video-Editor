@@ -228,13 +228,52 @@ async function getShowcaseDetails() {
 
 const VALID_PRIVACY_VIEWS = ['anybody', 'unlisted', 'nobody'];
 
+function guessImageContentType(filePath) {
+  const ext = path.extname(filePath).toLowerCase();
+  if (ext === '.jpg' || ext === '.jpeg') return 'image/jpeg';
+  if (ext === '.gif') return 'image/gif';
+  if (ext === '.webp') return 'image/webp';
+  return 'image/png';
+}
+
+/**
+ * Uploads `imagePath` as a custom thumbnail for the video at `videoUri` and makes it the active
+ * one - Vimeo's Pictures API: create a picture resource (which hands back a one-time upload
+ * link), PUT the raw image bytes there, then PATCH that picture to `active: true`. The upload
+ * link points at Vimeo's storage host, not api.vimeo.com, so it's a plain fetch() rather than
+ * client.request() (which always targets the API host).
+ */
+async function setThumbnail(videoUri, imagePath) {
+  const client = getClient();
+  const created = await client.request({ method: 'POST', path: `${videoUri}/pictures` });
+  const uploadLink = created.body && created.body.upload && created.body.upload.upload_link;
+  const pictureUri = created.body && created.body.uri;
+  if (!uploadLink || !pictureUri) {
+    throw new Error('Vimeo did not return an upload link for the thumbnail.');
+  }
+
+  const imageBuffer = await fs.promises.readFile(imagePath);
+  const putRes = await fetch(uploadLink, {
+    method: 'PUT',
+    headers: { 'Content-Type': guessImageContentType(imagePath) },
+    body: imageBuffer,
+  });
+  if (!putRes.ok) {
+    throw new Error(`Uploading the thumbnail image to Vimeo failed (${putRes.status}).`);
+  }
+
+  await client.request({ method: 'PATCH', path: pictureUri, query: { active: true } });
+}
+
 /**
  * Uploads `filePath` to Vimeo with the given title/description/privacy, then adds it to
  * `showcaseIds` (defaults to every ID in VIMEO_SHOWCASE_IDS if not given - e.g. a caller that
  * never offered a choice). A failure adding to one showcase doesn't abort the others - the
  * result reports per-showcase success/failure so the caller can surface exactly what happened.
+ * `thumbnailPath`, if given, is set as the video's custom thumbnail - best-effort, since a
+ * thumbnail failure shouldn't undo an otherwise-successful video upload.
  */
-async function uploadAndPublish({ filePath, name, description, showcaseIds, privacy, onProgress }) {
+async function uploadAndPublish({ filePath, name, description, showcaseIds, privacy, thumbnailPath, onProgress }) {
   const client = getClient();
   const privacyView = VALID_PRIVACY_VIEWS.includes(privacy) ? privacy : 'anybody';
 
@@ -253,6 +292,15 @@ async function uploadAndPublish({ filePath, name, description, showcaseIds, priv
   const videoId = videoUri.split('/').pop();
   const videoUrl = `https://vimeo.com/${videoId}`;
 
+  let thumbnailError = null;
+  if (thumbnailPath) {
+    try {
+      await setThumbnail(videoUri, thumbnailPath);
+    } catch (err) {
+      thumbnailError = err.message || String(err);
+    }
+  }
+
   const targetShowcaseIds = showcaseIds || getShowcaseIds();
   const showcaseResults = [];
   for (const showcaseId of targetShowcaseIds) {
@@ -264,7 +312,7 @@ async function uploadAndPublish({ filePath, name, description, showcaseIds, priv
     }
   }
 
-  return { videoUri, videoUrl, showcaseResults };
+  return { videoUri, videoUrl, showcaseResults, thumbnailError };
 }
 
 module.exports = {
