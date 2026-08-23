@@ -51,8 +51,13 @@ header h1 {
   .dropzones { grid-template-columns: 1fr; }
 }
 
-.square-art-block {
-  margin-bottom: 36px;
+/* Stacks the bookend and square-art dropzones in the left column; the right column's video
+   dropzone has no explicit height of its own, so CSS Grid's default item stretch makes it match
+   this column's combined (taller) height automatically - it grows, this doesn't shrink to fit. */
+.image-uploads-column {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
 }
 
 .square-art-label {
@@ -61,9 +66,11 @@ header h1 {
   margin-bottom: 8px;
 }
 
-.dropzone-compact {
+/* Compound selector, not just .dropzone-compact - same specificity as bare .dropzone below, and
+   this rule comes first in the file, so without the extra class the base min-height would win by
+   source order instead of this override (a real bug this fixed - see git history). */
+.dropzone.dropzone-compact {
   min-height: 120px;
-  max-width: 260px;
   padding: 14px;
 }
 

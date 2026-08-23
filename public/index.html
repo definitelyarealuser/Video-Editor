@@ -15,24 +15,45 @@
 
     <form id="render-form">
       <div class="dropzones">
-        <div class="dropzone" id="dz-png" data-kind="png">
-          <input type="file" id="input-png" accept="image/*" hidden />
-          <div class="dz-empty">
-            <div class="dz-icon">🖼️</div>
-            <div class="dz-label">Drop bookend image here</div>
-            <div class="dz-sub">or click to browse</div>
-            <div class="dz-library" id="png-library" hidden>
-              <div class="dz-library-header">
-                <div class="dz-library-label">Or choose from your library:</div>
-                <button type="button" id="png-library-edit-btn" class="dz-library-edit-btn">Edit…</button>
+        <div class="image-uploads-column">
+          <div class="dropzone" id="dz-png" data-kind="png">
+            <input type="file" id="input-png" accept="image/*" hidden />
+            <div class="dz-empty">
+              <div class="dz-icon">🖼️</div>
+              <div class="dz-label">Drop bookend image here</div>
+              <div class="dz-sub">or click to browse</div>
+              <div class="dz-library" id="png-library" hidden>
+                <div class="dz-library-header">
+                  <div class="dz-library-label">Or choose from your library:</div>
+                  <button type="button" id="png-library-edit-btn" class="dz-library-edit-btn">Edit…</button>
+                </div>
+                <div class="dz-library-thumbs" id="png-library-thumbs"></div>
               </div>
-              <div class="dz-library-thumbs" id="png-library-thumbs"></div>
+            </div>
+            <div class="dz-filled" hidden>
+              <img id="png-preview" alt="PNG preview" />
+              <div class="dz-filename" id="png-filename"></div>
+              <button type="button" class="dz-clear" data-target="png">Remove</button>
             </div>
           </div>
-          <div class="dz-filled" hidden>
-            <img id="png-preview" alt="PNG preview" />
-            <div class="dz-filename" id="png-filename"></div>
-            <button type="button" class="dz-clear" data-target="png">Remove</button>
+
+          <div class="square-art-block">
+            <div class="square-art-label">
+              Square graphic for SoundCloud <span class="field-optional">(optional — used as the track artwork when you publish to SoundCloud; the bookend image above is used as the Vimeo thumbnail)</span>
+            </div>
+            <div class="dropzone dropzone-compact" id="dz-square-art" data-kind="squareArt">
+              <input type="file" id="input-square-art" accept="image/*" hidden />
+              <div class="dz-empty">
+                <div class="dz-icon">🖼️</div>
+                <div class="dz-label">Drop square graphic here</div>
+                <div class="dz-sub">or click to browse</div>
+              </div>
+              <div class="dz-filled" hidden>
+                <img id="square-art-preview" alt="Square graphic preview" />
+                <div class="dz-filename" id="square-art-filename"></div>
+                <button type="button" class="dz-clear" data-target="squareArt">Remove</button>
+              </div>
+            </div>
           </div>
         </div>
 
@@ -52,25 +73,6 @@
             <div class="dz-current-file-label">Current file:</div>
             <div class="dz-filename dz-filename-current" id="video-filename"></div>
             <button type="button" class="dz-clear" data-target="video">Remove</button>
-          </div>
-        </div>
-      </div>
-
-      <div class="square-art-block">
-        <div class="square-art-label">
-          Square graphic for SoundCloud <span class="field-optional">(optional — used as the track artwork when you publish to SoundCloud; the rectangular bookend image above is used as the Vimeo thumbnail)</span>
-        </div>
-        <div class="dropzone dropzone-compact" id="dz-square-art" data-kind="squareArt">
-          <input type="file" id="input-square-art" accept="image/*" hidden />
-          <div class="dz-empty">
-            <div class="dz-icon">🖼️</div>
-            <div class="dz-label">Drop square graphic here</div>
-            <div class="dz-sub">or click to browse</div>
-          </div>
-          <div class="dz-filled" hidden>
-            <img id="square-art-preview" alt="Square graphic preview" />
-            <div class="dz-filename" id="square-art-filename"></div>
-            <button type="button" class="dz-clear" data-target="squareArt">Remove</button>
           </div>
         </div>
       </div>
