@@ -767,13 +767,19 @@
   exportMp3Checkbox.addEventListener('change', refreshIdleRenderLabel);
   refreshIdleRenderLabel();
 
-  // Saving the MP4 locally is mandatory (its path field is always shown/required), since the
-  // MP4 always renders regardless. The MP3's path field only matters - and is only required -
-  // when "Render MP3" is actually checked, since there's nothing to save otherwise.
+  // Saving locally is entirely optional (unchecked by default - Vimeo/SoundCloud publishing
+  // covers most people's needs now) - checking it reveals the video path field, and the audio
+  // path field on top of that only when "Render MP3" is actually checked too, since there's
+  // nothing to save otherwise.
+  const saveLocallyCheckbox = document.getElementById('saveLocally');
+  const videoSavePathBlock = document.getElementById('videoSavePathBlock');
   const audioSavePathBlock = document.getElementById('audioSavePathBlock');
   function updateSavePathVisibility() {
-    audioSavePathBlock.hidden = !exportMp3Checkbox.checked;
+    videoSavePathBlock.hidden = !saveLocallyCheckbox.checked;
+    audioSavePathBlock.hidden = !saveLocallyCheckbox.checked || !exportMp3Checkbox.checked;
   }
+  saveLocallyCheckbox.addEventListener('change', updateSavePathVisibility);
+  saveLocallyCheckbox.addEventListener('change', () => updateRenderButton());
   exportMp3Checkbox.addEventListener('change', updateSavePathVisibility);
   exportMp3Checkbox.addEventListener('change', () => updateRenderButton());
   updateSavePathVisibility();
@@ -794,8 +800,8 @@
   }
   videoSavePathInput.addEventListener('change', saveSavePaths);
   audioSavePathInput.addEventListener('change', saveSavePaths);
-  // Both are required fields (the video path always, the audio path only when "Render MP3"
-  // is checked) - keep the Render button's enabled state current as either is typed into.
+  // Only required (when visible at all) once "save locally" is checked - keep the Render
+  // button's enabled state current as either is typed into.
   videoSavePathInput.addEventListener('input', () => updateRenderButton());
   audioSavePathInput.addEventListener('input', () => updateRenderButton());
 
@@ -1617,11 +1623,13 @@
     // Series/Sermon Title/Speaker's Name/Sermon Date/Core Text are all optional -
     // computeOutputName() and the server's own filename sanitizer both already handle any
     // subset of the name fields being blank, and an empty description is a valid choice too.
-    if (!document.getElementById('videoSavePath').value.trim()) missing.push('a folder to save the MP4 to');
-    // The audio save path only matters - and is only required - when there'll actually be an
-    // MP3 to save.
-    if (document.getElementById('exportMp3').checked && !document.getElementById('audioSavePath').value.trim()) {
-      missing.push('a folder to save the MP3 to');
+    // Both paths only matter - and are only required - once "save locally" is checked; the
+    // audio one additionally only when there'll actually be an MP3 to save.
+    if (saveLocallyCheckbox.checked) {
+      if (!document.getElementById('videoSavePath').value.trim()) missing.push('a folder to save the MP4 to');
+      if (document.getElementById('exportMp3').checked && !document.getElementById('audioSavePath').value.trim()) {
+        missing.push('a folder to save the MP3 to');
+      }
     }
 
     renderBtn.disabled = missing.length > 0;
@@ -1786,8 +1794,10 @@
     formData.append('publishToSoundCloud', publishToSoundCloud);
     formData.append('soundcloudPlaylistIds', soundcloudPlaylistIds.join(','));
     formData.append('soundcloudPrivacy', soundcloudPrivacy || 'private');
-    formData.append('videoSavePath', document.getElementById('videoSavePath').value.trim());
-    formData.append('audioSavePath', document.getElementById('audioSavePath').value.trim());
+    // Sent as empty (rather than whatever's still typed in a now-hidden field) when "save
+    // locally" is unchecked, so the checkbox is the actual source of truth, not stale input.
+    formData.append('videoSavePath', saveLocallyCheckbox.checked ? document.getElementById('videoSavePath').value.trim() : '');
+    formData.append('audioSavePath', saveLocallyCheckbox.checked ? document.getElementById('audioSavePath').value.trim() : '');
     formData.append('videoQuality', videoQualitySelect.value);
     formData.append('mp3Bitrate', mp3BitrateSelect.value);
 
@@ -1846,9 +1856,9 @@
         if (data.hasMp3 && data.mp3Status === 'done') {
           downloadMp3Link.href = `/api/download/${jobId}/mp3`;
           downloadMp3Link.download = computeOutputName() + '.mp3';
-          // Saving locally is required, so this is only shown as a fallback if the save itself
-          // failed - same policy as the MP4 download button below.
-          downloadMp3Link.hidden = !data.audioSaveError;
+          // Same policy as the MP4 download button above - hidden only once an actual local
+          // save succeeded.
+          downloadMp3Link.hidden = !!data.audioSavedTo;
         }
       }
 
@@ -1871,10 +1881,10 @@
         resultPreview.src = url;
         downloadLink.href = url;
         downloadLink.download = outputName + '.mp4';
-        // Saving locally is now required, so the download button is redundant in the normal
-        // case - the confirmation text below covers it. It only reappears if the local save
-        // itself failed, since download is then the only way left to actually get the file.
-        downloadLink.hidden = !data.videoSaveError;
+        // Hidden only once an actual local save succeeded (the confirmation text below covers
+        // that case) - shown both when the save failed and when local save wasn't requested at
+        // all, since download is the only way left to get the file either way.
+        downloadLink.hidden = !!data.videoSavedTo;
 
         if (data.videoSavedTo) {
           videoSaveStatus.hidden = false;

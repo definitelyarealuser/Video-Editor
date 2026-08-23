@@ -246,20 +246,12 @@ app.post('/api/render/:jobId', useJobIdFromParams, renderUpload, async (req, res
       ? String(req.body.soundcloudPlaylistIds).split(',').map((s) => s.trim()).filter(Boolean)
       : undefined;
     const soundcloudPrivacy = String(req.body.soundcloudPrivacy || 'private');
-    // Local folders (on this same machine, since the server runs on your own computer) the
-    // finished files get copied into - required, not optional: the video path always, the
-    // audio path whenever an MP3 is actually being rendered. Checked here too, not just in the
-    // client's own gating, since this endpoint can be hit directly.
+    // Optional local folders (on this same machine, since the server runs on your own computer)
+    // to also copy the finished file(s) into, on top of whatever Vimeo/SoundCloud publishing was
+    // requested - copyToFolder() below is already a no-op when either is blank, so there's
+    // nothing to validate here beyond just trimming them.
     const videoSavePath = String(req.body.videoSavePath || '').trim();
     const audioSavePath = String(req.body.audioSavePath || '').trim();
-    if (!videoSavePath) {
-      await cleanupUploadedExtras();
-      return res.status(400).json({ error: 'A local folder to save the MP4 to is required.' });
-    }
-    if (exportMp3 && !audioSavePath) {
-      await cleanupUploadedExtras();
-      return res.status(400).json({ error: 'A local folder to save the MP3 to is required when rendering an MP3.' });
-    }
 
     if (transition >= startDuration || transition >= endDuration || transition >= effectiveDuration) {
       await cleanupUploadedExtras();
@@ -551,9 +543,18 @@ app.get('/api/progress/:jobId', (req, res) => {
 // can play it in place - some browsers (notably Safari) refuse to play media loaded from a
 // URL the server marked as an attachment. The download buttons still save with the right
 // file name via the anchor tag's own `download` attribute, entirely client-side.
+// The video file itself is fully written and safe to serve as soon as status reaches 'done' -
+// everything after that ('publishing'/'published'/'publish-error') is just the optional Vimeo
+// step running on top of an already-finished file, so all of those still count as downloadable
+// (only 'rendering', still in progress, and 'error', a failed render, don't). This matters more
+// now that local save is optional - download is often the only way to get the file at all, and
+// needs to keep working for as long as the result page is showing it, not just the instant the
+// video first finishes.
+const DOWNLOADABLE_STATUSES = ['done', 'publishing', 'published', 'publish-error'];
+
 app.get('/api/download/:jobId', (req, res) => {
   const job = jobs.get(req.params.jobId);
-  if (!job || job.status !== 'done') return res.status(404).end();
+  if (!job || !DOWNLOADABLE_STATUSES.includes(job.status)) return res.status(404).end();
   res.sendFile(job.outputPath);
 });
 

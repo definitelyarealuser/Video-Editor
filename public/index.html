@@ -239,13 +239,19 @@
 
       <div class="settings">
         <div class="field field-wide">
+          <label class="inline-check">
+            <input type="checkbox" id="saveLocally" />
+            Also save a copy to a folder on this computer
+          </label>
+        </div>
+        <div class="field field-wide save-path-block" id="videoSavePathBlock" hidden>
           <label for="videoSavePath">Save the MP4 to this folder on this computer</label>
           <div class="path-input">
-            <input type="text" id="videoSavePath" name="videoSavePath" placeholder="Click Browse… to choose, or type a folder path" required />
+            <input type="text" id="videoSavePath" name="videoSavePath" placeholder="Click Browse… to choose, or type a folder path" />
             <button type="button" class="browse-btn" data-target="videoSavePath">Browse…</button>
           </div>
         </div>
-        <div class="field field-wide save-path-block" id="audioSavePathBlock">
+        <div class="field field-wide save-path-block" id="audioSavePathBlock" hidden>
           <label for="audioSavePath">Save the MP3 to this folder on this computer</label>
           <div class="path-input">
             <input type="text" id="audioSavePath" name="audioSavePath" placeholder="Click Browse… to choose, or type a folder path" />
