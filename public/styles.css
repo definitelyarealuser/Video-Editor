@@ -60,10 +60,16 @@ header h1 {
   gap: 16px;
 }
 
-.square-art-label {
-  font-size: 0.85rem;
+.image-upload-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.image-upload-caption {
+  font-size: 0.8rem;
   color: var(--muted);
-  margin-bottom: 8px;
+  text-align: center;
 }
 
 /* Compound selector, not just .dropzone-compact - same specificity as bare .dropzone below, and
