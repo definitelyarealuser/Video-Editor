@@ -237,29 +237,6 @@
         </div>
       </div>
 
-      <div class="settings">
-        <div class="field field-wide">
-          <label class="inline-check">
-            <input type="checkbox" id="saveLocally" />
-            Also save a copy to a folder on this computer
-          </label>
-        </div>
-        <div class="field field-wide save-path-block" id="videoSavePathBlock" hidden>
-          <label for="videoSavePath">Save the MP4 to this folder on this computer</label>
-          <div class="path-input">
-            <input type="text" id="videoSavePath" name="videoSavePath" placeholder="Click Browse… to choose, or type a folder path" />
-            <button type="button" class="browse-btn" data-target="videoSavePath">Browse…</button>
-          </div>
-        </div>
-        <div class="field field-wide save-path-block" id="audioSavePathBlock" hidden>
-          <label for="audioSavePath">Save the MP3 to this folder on this computer</label>
-          <div class="path-input">
-            <input type="text" id="audioSavePath" name="audioSavePath" placeholder="Click Browse… to choose, or type a folder path" />
-            <button type="button" class="browse-btn" data-target="audioSavePath">Browse…</button>
-          </div>
-        </div>
-      </div>
-
       <div id="vimeo-setup-section" class="vimeo-setup-section">
         <div id="vimeo-status-row" class="soundcloud-connect-section">
           <span id="vimeo-connect-status"></span>
@@ -357,6 +334,29 @@
               <button type="button" id="soundcloud-setup-cancel-btn" class="modal-btn-ghost">Cancel</button>
               <button type="button" id="soundcloud-setup-save-btn" class="modal-btn-primary">Connect to SoundCloud</button>
             </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="settings">
+        <div class="field field-wide">
+          <label class="inline-check">
+            <input type="checkbox" id="saveLocally" />
+            Also save a copy to a folder on this computer
+          </label>
+        </div>
+        <div class="field field-wide save-path-block" id="videoSavePathBlock" hidden>
+          <label for="videoSavePath">Save the MP4 to this folder on this computer</label>
+          <div class="path-input">
+            <input type="text" id="videoSavePath" name="videoSavePath" placeholder="Click Browse… to choose, or type a folder path" />
+            <button type="button" class="browse-btn" data-target="videoSavePath">Browse…</button>
+          </div>
+        </div>
+        <div class="field field-wide save-path-block" id="audioSavePathBlock" hidden>
+          <label for="audioSavePath">Save the MP3 to this folder on this computer</label>
+          <div class="path-input">
+            <input type="text" id="audioSavePath" name="audioSavePath" placeholder="Click Browse… to choose, or type a folder path" />
+            <button type="button" class="browse-btn" data-target="audioSavePath">Browse…</button>
           </div>
         </div>
       </div>
