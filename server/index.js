@@ -22,7 +22,6 @@ const PORT = process.env.PORT || 3000;
 const ROOT = path.join(__dirname, '..');
 const UPLOAD_DIR = path.join(ROOT, 'uploads');
 const OUTPUT_DIR = path.join(ROOT, 'output');
-const MAX_UPLOAD_BYTES = 8 * 1024 * 1024 * 1024; // 8GB, generous for full-service-length video files
 
 for (const dir of [UPLOAD_DIR, OUTPUT_DIR]) {
   fs.mkdirSync(dir, { recursive: true });
@@ -47,7 +46,9 @@ const storage = multer.diskStorage({
 
 const upload = multer({
   storage,
-  limits: { fileSize: MAX_UPLOAD_BYTES },
+  // No fileSize limit - multer defaults to Infinity when this is omitted. The only real ceiling
+  // left is disk space on whatever machine is running the app (uploads/ and output/ both hold
+  // full-size files, if briefly), not anything this app enforces itself.
   fileFilter: (req, file, cb) => {
     if (file.fieldname === 'png' || file.fieldname === 'image') {
       if (!/^image\//.test(file.mimetype)) return cb(new Error('The bookend graphic must be an image file (PNG recommended).'));
