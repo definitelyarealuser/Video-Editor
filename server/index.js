@@ -13,6 +13,7 @@ const { recordRender, getLastRenderSettings } = require('./history');
 const vimeo = require('./vimeo');
 const soundcloud = require('./soundcloud');
 const bookendImages = require('./bookendImages');
+const squareArtImages = require('./squareArtImages');
 const savePaths = require('./savePaths');
 const nativeFolderPicker = require('./nativeFolderPicker');
 const gitUpdate = require('./gitUpdate');
@@ -30,6 +31,7 @@ for (const dir of [UPLOAD_DIR, OUTPUT_DIR]) {
 const app = express();
 app.use(express.static(path.join(ROOT, 'public')));
 app.use('/bookend-images', express.static(bookendImages.IMAGES_DIR));
+app.use('/square-art-images', express.static(squareArtImages.IMAGES_DIR));
 app.use(express.json());
 
 const storage = multer.diskStorage({
@@ -194,9 +196,18 @@ app.post('/api/render/:jobId', useJobIdFromParams, renderUpload, async (req, res
       await cleanupUploadedExtras();
       return res.status(400).json({ error: 'A bookend graphic is required.' });
     }
-    const squareArtPath = squareArtFile ? squareArtFile.path : null;
 
-    // Whichever way the graphic arrived, make sure it's in the library so it can be picked
+    let squareArtPath = squareArtFile ? squareArtFile.path : null;
+    if (!squareArtPath && req.body.squareArtImageId) {
+      const libraryImage = squareArtImages.getImage(req.body.squareArtImageId);
+      if (libraryImage) squareArtPath = path.join(squareArtImages.IMAGES_DIR, libraryImage.storedFilename);
+    }
+    if (!squareArtPath) {
+      await cleanupUploadedExtras();
+      return res.status(400).json({ error: 'A square SoundCloud graphic is required.' });
+    }
+
+    // Whichever way each graphic arrived, make sure it's in its own library so it can be picked
     // again next time without re-uploading - saveImage/touchImage both dedupe/no-op safely if
     // it's already there (e.g. the client's own background save-on-drop already handled it).
     if (pngFile) {
@@ -207,6 +218,15 @@ app.post('/api/render/:jobId', useJobIdFromParams, renderUpload, async (req, res
       }
     } else if (req.body.pngImageId) {
       bookendImages.touchImage(req.body.pngImageId);
+    }
+    if (squareArtFile) {
+      try {
+        squareArtImages.saveImage({ sourcePath: squareArtFile.path, originalName: squareArtFile.originalname, mimetype: squareArtFile.mimetype });
+      } catch {
+        // Non-critical - rendering itself doesn't depend on the library save succeeding.
+      }
+    } else if (req.body.squareArtImageId) {
+      squareArtImages.touchImage(req.body.squareArtImageId);
     }
 
     const fullDuration = job.videoInfo.duration;
@@ -566,8 +586,8 @@ app.get('/api/download/:jobId/mp3', (req, res) => {
   res.sendFile(job.mp3OutputPath);
 });
 
-function toClientImage(entry) {
-  return { id: entry.id, name: entry.name, url: `/bookend-images/${entry.storedFilename}`, uploadedAt: entry.uploadedAt };
+function toClientImage(entry, urlPrefix) {
+  return { id: entry.id, name: entry.name, url: `${urlPrefix}/${entry.storedFilename}`, uploadedAt: entry.uploadedAt };
 }
 
 // The bookend image library: saved automatically whenever a PNG is dropped in (see
@@ -584,7 +604,7 @@ app.post('/api/bookend-images', assignJobId, upload.single('image'), async (req,
       originalName: req.file.originalname,
       mimetype: req.file.mimetype,
     });
-    res.json({ image: toClientImage(entry) });
+    res.json({ image: toClientImage(entry, '/bookend-images') });
   } catch (err) {
     res.status(500).json({ error: err.message || 'Failed to save image.' });
   } finally {
@@ -593,11 +613,43 @@ app.post('/api/bookend-images', assignJobId, upload.single('image'), async (req,
 });
 
 app.get('/api/bookend-images', (req, res) => {
-  res.json({ images: bookendImages.listImages().map(toClientImage) });
+  res.json({ images: bookendImages.listImages().map((entry) => toClientImage(entry, '/bookend-images')) });
 });
 
 app.delete('/api/bookend-images/:id', (req, res) => {
   const ok = bookendImages.deleteImage(req.params.id);
+  if (!ok) return res.status(404).json({ error: 'Not found.' });
+  res.json({ ok: true });
+});
+
+// The square SoundCloud artwork library - same shape as the bookend image library above, kept
+// entirely separate (own index file, own image folder) since the two are unrelated images.
+app.post('/api/square-art-images', assignJobId, upload.single('image'), async (req, res) => {
+  const cleanup = () => fs.promises.rm(path.join(UPLOAD_DIR, req.jobId), { recursive: true, force: true }).catch(() => {});
+  if (!req.file) {
+    await cleanup();
+    return res.status(400).json({ error: 'No image provided.' });
+  }
+  try {
+    const entry = squareArtImages.saveImage({
+      sourcePath: req.file.path,
+      originalName: req.file.originalname,
+      mimetype: req.file.mimetype,
+    });
+    res.json({ image: toClientImage(entry, '/square-art-images') });
+  } catch (err) {
+    res.status(500).json({ error: err.message || 'Failed to save image.' });
+  } finally {
+    await cleanup();
+  }
+});
+
+app.get('/api/square-art-images', (req, res) => {
+  res.json({ images: squareArtImages.listImages().map((entry) => toClientImage(entry, '/square-art-images')) });
+});
+
+app.delete('/api/square-art-images/:id', (req, res) => {
+  const ok = squareArtImages.deleteImage(req.params.id);
   if (!ok) return res.status(404).json({ error: 'Not found.' });
   res.json({ ok: true });
 });

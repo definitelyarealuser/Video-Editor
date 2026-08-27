@@ -47,6 +47,13 @@
                 <div class="dz-icon">🖼️</div>
                 <div class="dz-label">Drop square graphic here</div>
                 <div class="dz-sub">or click to browse</div>
+                <div class="dz-library" id="square-art-library" hidden>
+                  <div class="dz-library-header">
+                    <div class="dz-library-label">Or choose from your library:</div>
+                    <button type="button" id="square-art-library-edit-btn" class="dz-library-edit-btn">Edit…</button>
+                  </div>
+                  <div class="dz-library-thumbs" id="square-art-library-thumbs"></div>
+                </div>
               </div>
               <div class="dz-filled" hidden>
                 <img id="square-art-preview" alt="Square graphic preview" />
@@ -486,6 +493,28 @@
       <div class="modal-actions">
         <button type="button" id="library-delete-cancel-btn" class="modal-btn-secondary">Cancel</button>
         <button type="button" id="library-delete-confirm-btn" class="modal-btn-primary modal-btn-danger">Delete</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal-overlay" id="square-art-library-edit-overlay" hidden>
+    <div class="modal-dialog">
+      <h3>Square Graphic Library</h3>
+      <p class="modal-hint">Delete images you no longer need. This doesn't affect anything already rendered.</p>
+      <div id="square-art-library-edit-list" class="library-edit-list"></div>
+      <div class="modal-actions">
+        <button type="button" id="square-art-library-edit-close-btn" class="modal-btn-secondary">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal-overlay" id="square-art-library-delete-confirm-overlay" hidden>
+    <div class="modal-dialog">
+      <h3>Delete this image?</h3>
+      <p class="modal-hint" id="square-art-library-delete-confirm-name"></p>
+      <div class="modal-actions">
+        <button type="button" id="square-art-library-delete-cancel-btn" class="modal-btn-secondary">Cancel</button>
+        <button type="button" id="square-art-library-delete-confirm-btn" class="modal-btn-primary modal-btn-danger">Delete</button>
       </div>
     </div>
   </div>
