@@ -946,3 +946,33 @@ setInterval(() => {
     }
   }
 }, 30 * 60 * 1000).unref();
+
+// Clears uploads/ (raw source videos/images for renders) the moment the app actually stops,
+// rather than waiting on the sweep above - a closed session shouldn't leave large files sitting
+// on disk until the next 2-hour-plus sweep gets to them. Deliberately NOT hooked into the
+// auto-update restart above (process.exit(42) calls) - that's this same process intentionally
+// exiting to relaunch itself with new code moments later, not a real stop, and an in-progress
+// Re-Edit needs its uploaded video to survive that. Only fires on an actual termination signal:
+// Ctrl+C (SIGINT), a kill/SIGTERM, or the Terminal window itself closing (SIGHUP).
+async function cleanupUploadsAndExit(signal) {
+  console.log(`\nReceived ${signal} - clearing uploads/ before exiting...`);
+  try {
+    // Clears the folder's contents, not the folder itself - UPLOAD_DIR also holds .gitkeep
+    // (tracked so the empty directory survives a fresh checkout), and deleting a tracked file
+    // would make git see a dirty working tree, which is exactly what the auto-update check
+    // above refuses to update over. Only the per-job subfolders (and any other real upload) are
+    // fair game here.
+    const entries = await fs.promises.readdir(UPLOAD_DIR);
+    await Promise.all(
+      entries
+        .filter((name) => name !== '.gitkeep')
+        .map((name) => fs.promises.rm(path.join(UPLOAD_DIR, name), { recursive: true, force: true }))
+    );
+  } catch {
+    // Non-critical - the app is exiting either way.
+  }
+  process.exit(0);
+}
+['SIGINT', 'SIGTERM', 'SIGHUP'].forEach((signal) => {
+  process.on(signal, () => cleanupUploadsAndExit(signal));
+});
