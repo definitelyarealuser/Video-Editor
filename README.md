@@ -48,6 +48,24 @@ Fully automatic - no button, no steps. Every time you start the app (via the Des
 
 `Sermon Video Editor Installer.app` (source in `installer/`, built as `dist/Sermon-Video-Editor-Installer.zip`) is a thin wrapper: double-clicking it just opens Terminal and runs `/bin/bash -c "$(curl -fsSL .../setup.command)"` for you, the same command as the Terminal option above. It fetches `setup.command` fresh from GitHub every time it runs rather than bundling a copy, so it doesn't need rebuilding when `setup.command`'s own logic changes - only rebuild and re-commit the zip if `installer/Sermon Video Editor Installer.app/Contents/{Info.plist,MacOS/run,Resources/bootstrap.command}` themselves change, or once this branch merges to `main` (`bootstrap.command` has the same branch-name `NOTE:` as `setup.command`). To rebuild: `cd installer && zip -r -X ../dist/Sermon-Video-Editor-Installer.zip "Sermon Video Editor Installer.app"`. It's unsigned/not notarized (no Apple Developer account involved), so macOS Gatekeeper blocks a plain double-click the first time - the right-click → Open step in the instructions above is how a user gets past that one-time warning.
 
+### Uninstalling
+
+Same shape as installing, in reverse:
+
+**On a Mac, no Terminal typing:** download [`Sermon-Video-Editor-Uninstaller.zip`](dist/Sermon-Video-Editor-Uninstaller.zip), open it, and double-click **Sermon Video Editor Uninstaller.app** (same one-time right-click → Open → Open Gatekeeper step as the installer, since it's also unsigned). A Terminal window opens, asks for confirmation, then removes `~/Video-Editor` (the app itself, along with all its local data - remembered render settings, the bookend/square-graphic libraries, and any saved Vimeo/SoundCloud connections) and the Desktop shortcut.
+
+**On a Mac, Terminal:**
+
+```bash
+/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/definitelyarealuser/Video-Editor/claude/sermon-video-editor-fa7r7w/uninstall.command)"
+```
+
+Either way, it deliberately leaves a few things alone:
+- **Homebrew, Node, ffmpeg, and git** - general-purpose tools this Mac may use for other things too, not something an app uninstaller should assume it's safe to remove. Uninstall those yourself (e.g. `brew uninstall node ffmpeg git`) if you're sure nothing else on the machine needs them.
+- **Any videos/audio already saved** to folders you chose while using the app (via "Also save a copy to a folder on this computer," or manually downloaded) - those are your files, living wherever you put them, not the app's.
+
+`uninstall.command` is fetched fresh from GitHub the same way `setup.command` is (see above) - the uninstaller app is a thin wrapper around it, built and rebuilt the same way (`Sermon Video Editor Uninstaller.app` instead of `Installer.app`, `dist/Sermon-Video-Editor-Uninstaller.zip` instead of `-Installer.zip`).
+
 1. Drop your video (a trimmed clip, or a full multi-hour service recording) into the video dropzone. It uploads right away.
 2. If it's a full service file, use the **Trim to just the sermon** panel: drag the two handles to select just the sermon - dragging seeks the preview to that exact frame live (muted), and letting go plays a short unmuted snippet right at the cut point, so you can confirm both picture and audio without a separate step. Once you're close (within a few seconds), use the **-5s/-1s/-0.1s/+0.1s/+1s/+5s** nudge buttons under the Start/End readout to fine-tune each handle precisely - each nudge gives the same live preview as dragging. Below that, **Preview Start** / **Preview End** play a short snippet right at the in- or out-point, and **Play** starts playback from wherever the preview is parked while **Stop** halts it and jumps back to the start of your selection.
 3. Drag your bookend PNG into its dropzone, or pick one you've used before from the **library** thumbnails that show up right in the dropzone once you've uploaded at least one - no need to browse for the same title graphic every week. Every graphic you drop in is saved there automatically (deduped by content, so re-uploading the same one doesn't create a duplicate entry). Click **Edit…** next to the thumbnails to delete ones you no longer need - each deletion asks for confirmation first. This rectangular graphic also becomes the custom thumbnail on the video once it's published to Vimeo. Directly below it, drop a square version of the same graphic into the **square graphic for SoundCloud** dropzone - it's used as the track artwork when publishing to SoundCloud, since SoundCloud artwork is expected to be square rather than the video's wide aspect ratio. It's required, same as the bookend graphic, and has its own separate library with the same drop-once-reuse-later/Edit…/delete behavior.
