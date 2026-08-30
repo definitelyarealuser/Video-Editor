@@ -204,8 +204,15 @@ async function refreshAccessToken() {
       refresh_token: tokens.refresh_token,
     })
   );
-  saveTokens(fresh);
-  return fresh;
+  // Merged over what's already stored rather than replacing it outright: SoundCloud rotates
+  // refresh tokens and returns the new one here, but if a response ever came back without that
+  // field, overwriting wholesale would drop the only credential capable of renewing this
+  // connection - silently turning a routine refresh into "you have to reconnect from scratch".
+  // Merging costs nothing when the field is present and is the difference between a working and
+  // a dead connection if it isn't.
+  const merged = { ...tokens, ...fresh };
+  saveTokens(merged);
+  return merged;
 }
 
 async function getValidAccessToken() {

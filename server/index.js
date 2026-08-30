@@ -458,7 +458,12 @@ app.post('/api/render/:jobId', useJobIdFromParams, renderUpload, async (req, res
       }
     })().catch((err) => {
       jobs.update(jobId, { status: 'error', error: err.message, errorDetail: err.detail || null });
-      cleanupUploadedExtras();
+      // Deliberately does NOT delete the uploaded graphics here, unlike the validation failures
+      // above. By this point a SoundCloud publish may still be running and holding onto the
+      // square graphic (the MP3 uploads before the video pass even starts, so a video failure
+      // says nothing about whether that's finished), and Re-Edit is the likely next step after
+      // a failed render. They're a couple of KB either way, and the periodic sweep and the
+      // shutdown handler both already reclaim the whole job folder.
     });
   } catch (err) {
     await cleanupUploadedExtras();
