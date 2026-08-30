@@ -326,13 +326,17 @@
     try {
       const res = await fetch('/api/vimeo/disconnect', { method: 'POST' });
       const data = await res.json().catch(() => ({}));
-      if (data.restarting) {
+      if (data.restarting || data.manualRestartNeeded) {
         // A legacy VIMEO_ACCESS_TOKEN needed an actual restart to clear (env vars only load at
-        // startup) - the server is about to exit and start.command's loop relaunches it, but
-        // this tab doesn't know to reload itself once that's done, so just say so plainly.
+        // startup). Normally the server exits and start.command's loop relaunches it, but this
+        // tab doesn't know to reload itself once that's done - and if the app wasn't started
+        // through that loop there's nothing to relaunch it at all, so it stays up and the
+        // restart is left to whoever's running it. Either way, say plainly what's needed.
         closeVimeoSetupForm();
         vimeoConnectStatus.hidden = false;
-        vimeoConnectStatus.textContent = 'Vimeo: signing out - restarting the app, give it a few seconds then refresh this page…';
+        vimeoConnectStatus.textContent = data.restarting
+          ? 'Vimeo: signing out - restarting the app, give it a few seconds then refresh this page…'
+          : 'Vimeo: signed out - restart the app for it to take effect, then refresh this page.';
         vimeoConnectStatus.classList.remove('connected');
         return;
       }

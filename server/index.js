@@ -72,7 +72,17 @@ function assignJobId(req, res, next) {
   next();
 }
 
+// Every job id this app issues is a crypto.randomUUID(), and the render route feeds it straight
+// into a path under uploads/ (via multer's destination) - so anything that isn't shaped like a
+// UUID is rejected outright rather than being allowed to steer where files get written. Nothing
+// legitimate is turned away by this, and it means a malformed id can't reach the filesystem at
+// all. (The read-only routes look their id up in a Map, which was never path-sensitive.)
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 function useJobIdFromParams(req, res, next) {
+  if (!UUID_RE.test(String(req.params.jobId || ''))) {
+    return res.status(400).json({ error: 'Invalid job id.' });
+  }
   req.jobId = req.params.jobId;
   next();
 }
@@ -80,9 +90,17 @@ function useJobIdFromParams(req, res, next) {
 function sanitizeFilename(name) {
   const cleaned = String(name || 'sermon-final')
     .trim()
-    .replace(/[^a-zA-Z0-9-_ ]/g, '')
+    // Periods are allowed through (a title like "Pt. 2" or a speaker like "Dr. Smith" shouldn't
+    // silently become "Pt 2" / "Dr Smith"), but runs of them collapse to one and any at the
+    // start or end are dropped - that keeps ".." out of the result, so this still can't produce
+    // anything that walks up a directory, and avoids a trailing dot colliding with the
+    // extension this gets appended to ("sermon." + ".mp4").
+    .replace(/[^a-zA-Z0-9-_ .]/g, '')
+    .replace(/\.{2,}/g, '.')
     .replace(/\s+/g, ' ')
-    .slice(0, 100);
+    .replace(/^[.\s]+|[.\s]+$/g, '')
+    .slice(0, 100)
+    .replace(/[.\s]+$/, '');
   return cleaned || 'sermon-final';
 }
 
@@ -525,6 +543,9 @@ app.get('/api/progress/:jobId', (req, res) => {
   const vimeoSettled = (j) => !j.willPublishToVimeo || j.status === 'published' || j.status === 'publish-error';
   const soundcloudSettled = (j) => !j.willPublishToSoundcloud || j.scStatus === 'published' || j.scStatus === 'error';
   const terminal = (j) => {
+    // Swept by the periodic cleanup below - the job and its files are gone, so there is nothing
+    // further to report no matter what else was still pending.
+    if (j.expired) return true;
     // A failed video render still lets an already-started SoundCloud publish finish reporting -
     // the MP3 renders (and uploads) first and is entirely independent of the video pass, so
     // closing the stream the instant the video fails would drop a publish still in flight.
@@ -781,8 +802,12 @@ app.delete('/api/vimeo-app-config', (req, res) => {
 // update mechanism uses, so start.command's wrapping loop picks it back up automatically.
 app.post('/api/vimeo/disconnect', (req, res) => {
   const { restartNeeded } = vimeo.disconnect();
-  res.json({ ok: true, restarting: restartNeeded });
-  if (restartNeeded) {
+  // Only actually exit when something is watching for code 42 to bring the app back. Started
+  // without that wrapper, exiting here would take the app down for good in the middle of a
+  // routine disconnect - so instead report that a manual restart is what's left to do.
+  const willRestart = restartNeeded && canSelfRestart();
+  res.json({ ok: true, restarting: willRestart, manualRestartNeeded: restartNeeded && !willRestart });
+  if (willRestart) {
     setTimeout(() => process.exit(42), 500);
   }
 });
@@ -942,17 +967,32 @@ app.use((err, req, res, next) => {
 // then re-runs this same check, finds nothing new, and proceeds to actually listen. A failed
 // check or apply (no network, dirty working tree, npm failure, etc.) must never block startup -
 // it just falls through and starts with whatever code is already on disk.
+// Exit code 42 only means "restart me" to start.command's wrapping loop, which sets the env var
+// below. Started any other way (a bare `npm start`, say) nothing is watching for that code, so
+// exiting would just kill the app instead of restarting it - which is why anything that wants a
+// restart has to check this first and degrade to asking for a manual one.
+function canSelfRestart() {
+  return process.env.SERMON_EDITOR_MANAGED === '1';
+}
+
 async function checkAndApplyUpdateThenListen() {
   try {
     const result = await gitUpdate.checkForUpdate();
     if (result.updateAvailable) {
       console.log(`Update available: "${result.latest.message}" (currently on "${result.current.message}") - applying...`);
       await gitUpdate.applyUpdate();
-      console.log('Update applied - restarting to load the new code...');
-      process.exit(42);
-      return;
+      if (canSelfRestart()) {
+        console.log('Update applied - restarting to load the new code...');
+        process.exit(42);
+        return;
+      }
+      // The new code is on disk but this process is still running the old one. Carrying on and
+      // serving is strictly better than exiting into nothing - the update lands on the next
+      // start either way, and the app stays usable in the meantime.
+      console.log('Update applied - it will take effect the next time the app is started.');
+    } else {
+      console.log(`Up to date (${result.current.hash.slice(0, 7)} - "${result.current.message}").`);
     }
-    console.log(`Up to date (${result.current.hash.slice(0, 7)} - "${result.current.message}").`);
   } catch (err) {
     console.log(`Skipping update check (${err.message}) - starting with the code already on disk.`);
   }
@@ -975,6 +1015,15 @@ setInterval(() => {
       fs.promises.rm(path.join(UPLOAD_DIR, job.id), { recursive: true, force: true }).catch(() => {});
       if (job.outputPath) fs.promises.rm(job.outputPath, { force: true }).catch(() => {});
       if (job.mp3OutputPath) fs.promises.rm(job.mp3OutputPath, { force: true }).catch(() => {});
+      // Tell any still-open progress stream the job is gone before dropping it, so the stream
+      // closes cleanly on both ends. Without this its listener would sit on the emitter with
+      // nothing left to emit to it, and the browser would hold a request that never completes.
+      jobs.update(job.id, {
+        expired: true,
+        status: 'error',
+        error: 'This render expired and was cleaned up (renders are kept for 2 hours).',
+      });
+      jobs.removeAllListeners(`update:${job.id}`);
       jobs.delete(job.id);
     }
   }

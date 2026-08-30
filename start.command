@@ -25,7 +25,9 @@ cd "$(dirname "$0")" || exit 1
 ) &
 
 while true; do
-  node server/index.js
+  # Tells the server it's running under this restart loop, so it knows an exit(42) will actually
+  # bring it back rather than just killing the app - see canSelfRestart() in server/index.js.
+  SERMON_EDITOR_MANAGED=1 node server/index.js
   code=$?
   if [ "$code" -eq 42 ]; then
     echo ""

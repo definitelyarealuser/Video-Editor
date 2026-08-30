@@ -42,7 +42,7 @@ Then open http://localhost:3000.
 
 ### Updating
 
-Fully automatic - no button, no steps. Every time you start the app (via the Desktop shortcut or `start.command`), it checks GitHub for a newer version before it even opens the browser tab. If one's available, it pulls it down, reinstalls dependencies if they changed, and restarts itself once to load the new code - you'll just see a few extra seconds of startup, then the app comes up already current. Works the same way on every machine you've installed it on. Requires the app to have been started via `start.command` (which the Desktop shortcut and manual double-click both use) - that's what relaunches the server process after it exits to apply an update.
+Fully automatic - no button, no steps. Every time you start the app (via the Desktop shortcut or `start.command`), it checks GitHub for a newer version before it even opens the browser tab. If one's available, it pulls it down, reinstalls dependencies if they changed, and restarts itself once to load the new code - you'll just see a few extra seconds of startup, then the app comes up already current. Works the same way on every machine you've installed it on. The self-restart needs the app to have been started via `start.command` (which the Desktop shortcut and manual double-click both use) - that's the loop that relaunches the server process after it exits to apply an update. Started some other way (a bare `npm start`, say), the update is still downloaded and applied, but the running process keeps serving the older code and says so - it takes effect the next time the app starts, rather than the app exiting into nothing.
 
 ### About the installer app
 

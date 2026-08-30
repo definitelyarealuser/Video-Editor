@@ -206,9 +206,13 @@ function runFfmpegRender(args, totalDuration, onProgress, failureMessage) {
 
     proc.stdout.on('data', (chunk) => {
       const text = chunk.toString();
-      const match = text.match(/out_time_ms=(\d+)/) || text.match(/out_time_us=(\d+)/);
-      if (match && onProgress) {
-        const seconds = Number(match[1]) / 1e6;
+      // A single chunk can carry several -progress blocks, so take the LAST timestamp in it
+      // rather than the first - otherwise the reported position is however far behind the
+      // newest one the chunk happened to contain. (out_time_ms is microseconds despite the
+      // name, a long-standing ffmpeg quirk - hence dividing by 1e6, not 1e3.)
+      const matches = text.match(/out_time_(?:ms|us)=(\d+)/g);
+      if (matches && matches.length && onProgress) {
+        const seconds = Number(matches[matches.length - 1].split('=')[1]) / 1e6;
         const fraction = totalDuration > 0 ? Math.min(seconds / totalDuration, 1) : 0;
         onProgress(fraction);
       }
@@ -403,7 +407,11 @@ async function estimateVideoSampleSize({ videoPath, sampleStart, sampleSeconds, 
  * compress trivially, so they're left out of the estimate).
  */
 async function estimateFileSizes({ videoPath, trimStart, trimEnd, width, height, fps, mainDurationSeconds }) {
-  const sampleSeconds = Math.min(12, Math.max(4, mainDurationSeconds / 4));
+  // The 4s floor can ask for more footage than a short clip actually has, and the extrapolation
+  // below divides the encoded size by this number - so on anything under 4s it would divide a
+  // (say) 2-second sample by 4 and report roughly half the real size. Never ask for more than
+  // exists.
+  const sampleSeconds = Math.min(12, Math.max(4, mainDurationSeconds / 4), mainDurationSeconds);
   const rangeStart = trimStart != null ? trimStart : 0;
   const rangeEnd = trimEnd != null ? trimEnd : mainDurationSeconds;
   const midpoint = rangeStart + (rangeEnd - rangeStart) / 2;
