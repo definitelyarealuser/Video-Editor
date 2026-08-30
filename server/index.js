@@ -50,8 +50,12 @@ const upload = multer({
   // left is disk space on whatever machine is running the app (uploads/ and output/ both hold
   // full-size files, if briefly), not anything this app enforces itself.
   fileFilter: (req, file, cb) => {
-    if (file.fieldname === 'png' || file.fieldname === 'image') {
+    if (file.fieldname === 'png') {
       if (!/^image\//.test(file.mimetype)) return cb(new Error('The bookend graphic must be an image file (PNG recommended).'));
+    }
+    // Shared by both image libraries' own upload routes, so it can't name a specific graphic.
+    if (file.fieldname === 'image') {
+      if (!/^image\//.test(file.mimetype)) return cb(new Error('That file must be an image (PNG recommended).'));
     }
     if (file.fieldname === 'squareArt') {
       if (!/^image\//.test(file.mimetype)) return cb(new Error('The square SoundCloud graphic must be an image file (PNG recommended).'));
@@ -112,6 +116,18 @@ async function copyToFolder(sourcePath, folderPath, filename) {
   } catch (err) {
     return { error: err.message || String(err) };
   }
+}
+
+// Resolves the requested trim range against the video's actual length. Clamping matters because
+// every downstream duration (the xfade offsets, the fade-to-black start, the progress bar's
+// denominator) is derived from trimEnd - trimStart: a trimEnd past the real end doesn't fail,
+// it just silently builds a timeline longer than the material, so the end crossfade and
+// fade-to-black land past where the video stops and never happen. The UI's slider is already
+// bounded by the real duration, so this only ever fires on a malformed/stale request.
+function resolveTrimRange(rawStart, rawEnd, fullDuration) {
+  const start = Math.min(Math.max(toNonNegativeFloat(rawStart, 0), 0), fullDuration);
+  const end = Math.min(toPositiveFloat(rawEnd, fullDuration), fullDuration);
+  return { trimStart: start, trimEnd: end };
 }
 
 const MIN_LUFS = -20;
@@ -231,10 +247,9 @@ app.post('/api/render/:jobId', useJobIdFromParams, renderUpload, async (req, res
     }
 
     const fullDuration = job.videoInfo.duration;
-    const trimStart = toNonNegativeFloat(req.body.trimStart, 0);
-    const trimEnd = toPositiveFloat(req.body.trimEnd, fullDuration);
+    const { trimStart, trimEnd } = resolveTrimRange(req.body.trimStart, req.body.trimEnd, fullDuration);
     const isTrimmed = trimStart > 0.001 || trimEnd < fullDuration - 0.001;
-    if (isTrimmed && trimEnd - trimStart < 1) {
+    if (trimEnd - trimStart < 1) {
       await cleanupUploadedExtras();
       return res.status(400).json({ error: 'The trimmed range is too short.' });
     }
@@ -467,8 +482,7 @@ app.post('/api/estimate-size/:jobId', useJobIdFromParams, async (req, res) => {
   }
 
   const fullDuration = job.videoInfo.duration;
-  const trimStart = toNonNegativeFloat(req.body.trimStart, 0);
-  const trimEnd = toPositiveFloat(req.body.trimEnd, fullDuration);
+  const { trimStart, trimEnd } = resolveTrimRange(req.body.trimStart, req.body.trimEnd, fullDuration);
   const mainDurationSeconds = Math.max(trimEnd - trimStart, 1);
 
   try {
@@ -487,12 +501,6 @@ app.post('/api/estimate-size/:jobId', useJobIdFromParams, async (req, res) => {
   }
 });
 
-app.use((err, req, res, next) => {
-  // Handles multer errors (bad mimetype, file too large) thrown before the route handler runs.
-  if (res.headersSent) return next(err);
-  res.status(400).json({ error: err.message || 'Upload failed.' });
-});
-
 app.get('/api/progress/:jobId', (req, res) => {
   const { jobId } = req.params;
   const job = jobs.get(jobId);
@@ -505,9 +513,30 @@ app.get('/api/progress/:jobId', (req, res) => {
   });
   res.flushHeaders();
 
+  // 'done' isn't terminal when a Vimeo and/or SoundCloud publish was confirmed for this render -
+  // the stream keeps going until whichever of those were requested each reach their own terminal
+  // state (Vimeo via `status`, SoundCloud via the separate `scStatus` since they run in parallel
+  // and independently of each other).
+  const vimeoSettled = (j) => !j.willPublishToVimeo || j.status === 'published' || j.status === 'publish-error';
+  const soundcloudSettled = (j) => !j.willPublishToSoundcloud || j.scStatus === 'published' || j.scStatus === 'error';
+  const terminal = (j) => {
+    // A failed video render still lets an already-started SoundCloud publish finish reporting -
+    // the MP3 renders (and uploads) first and is entirely independent of the video pass, so
+    // closing the stream the instant the video fails would drop a publish still in flight.
+    if (j.status === 'error') return soundcloudSettled(j);
+    if (!['done', 'publishing', 'published', 'publish-error'].includes(j.status)) return false;
+    return vimeoSettled(j) && soundcloudSettled(j);
+  };
+
   const send = (j) =>
     res.write(
       `data: ${JSON.stringify({
+        // Whether this is the last frame on this stream. The client closes on it rather than
+        // re-deriving "are we finished?" from the individual statuses: the two used to be
+        // computed independently on each side, and any disagreement left the client holding a
+        // stream the server had already ended - which EventSource then silently reconnects to
+        // every few seconds, forever, with the UI stuck mid-render.
+        streamDone: terminal(j),
         status: j.status,
         progress: j.progress,
         error: j.error,
@@ -532,18 +561,6 @@ app.get('/api/progress/:jobId', (req, res) => {
       })}\n\n`
     );
   send(job);
-
-  // 'done' isn't terminal when a Vimeo and/or SoundCloud publish was confirmed for this render -
-  // the stream keeps going until whichever of those were requested each reach their own terminal
-  // state (Vimeo via `status`, SoundCloud via the separate `scStatus` since they run in parallel
-  // and independently of each other).
-  const vimeoSettled = (j) => !j.willPublishToVimeo || j.status === 'published' || j.status === 'publish-error';
-  const soundcloudSettled = (j) => !j.willPublishToSoundcloud || j.scStatus === 'published' || j.scStatus === 'error';
-  const terminal = (j) => {
-    if (j.status === 'error') return true;
-    if (!['done', 'publishing', 'published', 'publish-error'].includes(j.status)) return false;
-    return vimeoSettled(j) && soundcloudSettled(j);
-  };
   if (terminal(job)) {
     return res.end();
   }
@@ -900,6 +917,17 @@ app.get('/api/update/status', async (req, res) => {
   } catch (err) {
     res.status(500).json({ error: err.message || 'Could not read the current version.' });
   }
+});
+
+// Error handler for anything thrown before/inside a route handler that isn't caught there -
+// most importantly multer's own rejections (bad mimetype), which happen in middleware before
+// the route body ever runs. MUST stay below every route: Express only routes errors to an error
+// handler registered after the route that raised them, so when this sat mid-file the image
+// library uploads below it fell through to Express's default handler and answered with an HTML
+// page containing a stack trace and absolute paths, instead of the JSON the client expects.
+app.use((err, req, res, next) => {
+  if (res.headersSent) return next(err);
+  res.status(400).json({ error: err.message || 'Upload failed.' });
 });
 
 // Checks GitHub for a newer commit on this branch and, if one exists, pulls it down and

@@ -889,6 +889,15 @@
   // different typical durations, so each gets its own elapsed-time clock rather than one
   // running total that would make the remaining-time estimate meaningless across the switch.
   let currentRenderPhase = null;
+  // Tracks whether the audio-ready milestone has already been handled for this render. Kept as
+  // its own flag rather than reading audioSaveStatus.hidden, since that box is only shown when
+  // there's actually something to say about a local save - with local saving off (the default)
+  // there isn't, and using its visibility as the latch both re-ran this block on every frame
+  // and left an empty bordered box on screen.
+  let audioMilestoneShown = false;
+  // The render-failed message is shown once and then left alone, since the stream can keep
+  // running past it while a SoundCloud publish that started earlier finishes up.
+  let renderErrorShown = false;
   function updateRenderProgressUI(phaseKey, label, fraction) {
     if (currentRenderPhase !== phaseKey) {
       currentRenderPhase = phaseKey;
@@ -1761,6 +1770,8 @@
     progressLabel.textContent = 'Uploading files…';
     progressTime.hidden = true;
     currentRenderPhase = null;
+    audioMilestoneShown = false;
+    renderErrorShown = false;
   }
 
   function finishRenderCycle() {
@@ -1872,10 +1883,14 @@
     source.onmessage = (evt) => {
       const data = JSON.parse(evt.data);
 
-      if (data.status === 'error') {
-        source.close();
+      // Surfaced as soon as it happens, but this deliberately doesn't close the stream or bail
+      // out of the rest of this handler: the MP3 renders and uploads to SoundCloud before the
+      // video pass even starts, so a failed video can coexist with a SoundCloud publish that's
+      // still running and has its own result worth showing. The server keeps the stream open
+      // until that settles too, and flags the real last frame with streamDone below.
+      if (data.status === 'error' && !renderErrorShown) {
+        renderErrorShown = true;
         showError(data.error || 'Rendering failed.', data.errorDetail);
-        return;
       }
 
       // Two sequential phases while status is still 'rendering': the MP3 (if requested) goes
@@ -1891,15 +1906,21 @@
       // Audio-ready milestone: reveals as soon as the fast audio pass settles (done or
       // failed), independent of the video - which is likely still going for a while yet -
       // so the MP3 can be grabbed/uploaded to SoundCloud right away instead of waiting.
-      if (data.mp3Status && data.mp3Status !== 'rendering' && audioSaveStatus.hidden) {
-        audioSaveStatus.hidden = false;
+      if (data.mp3Status && data.mp3Status !== 'rendering' && !audioMilestoneShown) {
+        audioMilestoneShown = true;
+        // Each branch reveals the box itself - when local saving is off there's simply nothing
+        // to report here, so it stays hidden rather than showing an empty one. Mirrors how the
+        // video's own save status below is handled.
         if (data.mp3Status === 'error') {
+          audioSaveStatus.hidden = false;
           audioSaveStatus.className = 'save-status audio-save-status-standalone save-failed';
           setErrorWithDetail(audioSaveStatus, data.mp3Error || 'Could not render the MP3.', data.mp3ErrorDetail);
         } else if (data.audioSavedTo) {
+          audioSaveStatus.hidden = false;
           audioSaveStatus.className = 'save-status audio-save-status-standalone save-ok';
           audioSaveStatus.textContent = `Audio saved to ${data.audioSavedTo}`;
         } else if (data.audioSaveError) {
+          audioSaveStatus.hidden = false;
           audioSaveStatus.className = 'save-status audio-save-status-standalone save-failed';
           audioSaveStatus.textContent = `Could not save audio to that folder: ${data.audioSaveError}`;
         }
@@ -1924,7 +1945,7 @@
       // The video result panel shows once the video itself is done (status has moved past
       // 'rendering') - the MP3/SoundCloud milestones above may well have already happened by
       // this point, or may still be in progress; they're tracked independently either way.
-      if (data.status !== 'rendering' && resultSection.hidden) {
+      if (data.status !== 'rendering' && data.status !== 'error' && resultSection.hidden) {
         progressSection.hidden = true;
         resultSection.hidden = false;
         const outputName = computeOutputName();
@@ -2018,20 +2039,25 @@
         soundcloudError.textContent = data.scError || 'Unknown error publishing to SoundCloud.';
       }
 
-      // Mirrors the server's terminal() gating - only close the stream and reset the form once
-      // the video itself is done AND every platform actually confirmed for this render has
-      // reached its own end state. The video-done check matters now that status stays
-      // 'rendering' through both the audio and video phases - without it, a render with
-      // neither Vimeo nor SoundCloud publishing requested would look "settled" immediately.
-      const videoDone = data.status !== 'rendering';
-      const vimeoSettled = !publishToVimeo || data.status === 'published' || data.status === 'publish-error';
-      const soundcloudSettled = !publishToSoundCloud || data.scStatus === 'published' || data.scStatus === 'error';
-      if (videoDone && vimeoSettled && soundcloudSettled) {
+      // The server flags the last frame it's going to send (see streamDone in /api/progress) and
+      // ends the stream right after, so that's what decides when to close and reset the form -
+      // rather than re-deriving it here from the individual statuses. Both sides used to work
+      // that out independently, and any disagreement (say a Vimeo token cleared mid-render, so
+      // the server stops expecting a publish the client is still waiting on) left this holding a
+      // stream the server had already closed - which EventSource then quietly reconnects to
+      // every few seconds indefinitely, with the UI stuck on "Rendering…".
+      if (data.streamDone) {
         source.close();
-        notifyIfHidden('Render complete', `${computeOutputName()} is done.`);
+        // showError() has already announced a failed render (and its own notification) - don't
+        // follow it with a "Render complete" that contradicts it.
+        if (data.status !== 'error') {
+          notifyIfHidden('Render complete', `${computeOutputName()} is done.`);
+        }
         // Snapshot the video this render just used, before finishRenderCycle() below clears
         // the active editing state - Re-Edit restores from this to jump straight back into
-        // trimming the same file without a re-upload.
+        // trimming the same file without a re-upload. Worth doing on a failed render too: a
+        // bad setting (too long a crossfade, say) is exactly when you want to jump back in
+        // without re-uploading the source.
         state.lastVideoJobId = state.videoJobId;
         state.lastVideoFile = state.videoFile;
         state.lastVideoDuration = state.videoDuration;
