@@ -409,6 +409,12 @@ app.post('/api/render/:jobId', useJobIdFromParams, renderUpload, async (req, res
             mp3Progress: 1,
             mp3Error: err.message,
             mp3ErrorDetail: err.detail || null,
+            // The SoundCloud publish lives inside the try above, so a failed MP3 means it never
+            // started and never will - there's no file to upload. This has to be retracted here
+            // or the progress stream waits forever for a SoundCloud result that isn't coming
+            // (it treats "was a publish requested?" as "must it reach a terminal state?"), and
+            // the browser sits reconnecting to a finished render.
+            willPublishToSoundcloud: false,
           });
         }
       }
