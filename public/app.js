@@ -1920,9 +1920,28 @@
   }
 
   // Mirrors the server's own filename sanitizer (server/index.js's sanitizeFilename) so the
-  // preview matches reality even in the all-blank case, rather than showing an empty name.
+  // preview is what actually lands on disk. It used to only cover the all-blank case, which made
+  // the preview quietly optimistic: anything the server strips - a colon, a question mark - still
+  // showed up here as though it would survive.
+  function previewFilename(name) {
+    const cleaned = String(name || 'sermon-final')
+      .replace(/[‘’ʼ′]/g, "'")
+      .replace(/[“”″]/g, '"')
+      .replace(/[‐-―]/g, '-')
+      .replace(/…/g, '...')
+      .trim()
+      .replace(/[:/\\|]/g, ' ')
+      .replace(/[^a-zA-Z0-9-_ .',&()]/g, '')
+      .replace(/\.{2,}/g, '.')
+      .replace(/\s+/g, ' ')
+      .replace(/^[.\s]+|[.\s]+$/g, '')
+      .slice(0, 100)
+      .replace(/[.\s]+$/, '');
+    return cleaned || 'sermon-final';
+  }
+
   function updateOutputNamePreview() {
-    outputNamePreview.textContent = `${computeOutputName() || 'sermon-final'}.mp4`;
+    outputNamePreview.textContent = `${previewFilename(computeOutputName())}.mp4`;
   }
 
   // The Render button is just disabled when something's missing, with no other feedback -

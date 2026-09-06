@@ -87,21 +87,56 @@ function useJobIdFromParams(req, res, next) {
   next();
 }
 
+// Word processors and phone keyboards produce curly punctuation that no filename or title wants
+// to be judged on - "God's" typed in Pages arrives as "God’s". Folded to the plain ASCII
+// equivalent first so it survives as punctuation instead of being stripped as a stray symbol.
+function foldSmartPunctuation(text) {
+  return String(text)
+    .replace(/[‘’ʼ′]/g, "'")
+    .replace(/[“”″]/g, '"')
+    .replace(/[‐-―]/g, '-')
+    .replace(/…/g, '...');
+}
+
 function sanitizeFilename(name) {
-  const cleaned = String(name || 'sermon-final')
+  const cleaned = foldSmartPunctuation(name || 'sermon-final')
     .trim()
     // Periods are allowed through (a title like "Pt. 2" or a speaker like "Dr. Smith" shouldn't
     // silently become "Pt 2" / "Dr Smith"), but runs of them collapse to one and any at the
     // start or end are dropped - that keeps ".." out of the result, so this still can't produce
     // anything that walks up a directory, and avoids a trailing dot colliding with the
     // extension this gets appended to ("sermon." + ".mp4").
-    .replace(/[^a-zA-Z0-9-_ .]/g, '')
+    //
+    // Apostrophes, commas, ampersands and parentheses are allowed too - sermon titles are full of
+    // them ("Becoming God's Family", "Faith, Hope and Love"), they're all perfectly legal in a
+    // macOS filename, and nothing here hands the name to a shell: ffmpeg is spawned with an
+    // argument array, saves go through fs, and downloads serve a UUID path with the name applied
+    // by the browser. Dropping them quietly misspelled the title on every file.
+    // Separator-ish characters become a space rather than vanishing, so "Romans 8:28" reads as
+    // "Romans 8 28" instead of the misleading "Romans 828". (Colons and slashes genuinely can't
+    // stay - Finder treats both as path separators.)
+    .replace(/[:/\\|]/g, ' ')
+    .replace(/[^a-zA-Z0-9-_ .',&()]/g, '')
     .replace(/\.{2,}/g, '.')
     .replace(/\s+/g, ' ')
     .replace(/^[.\s]+|[.\s]+$/g, '')
     .slice(0, 100)
     .replace(/[.\s]+$/, '');
   return cleaned || 'sermon-final';
+}
+
+// What gets published as the video/track title. A title isn't a filename and shouldn't inherit a
+// filename's restrictions - it only needs to be a single tidy line, so punctuation, accents and
+// anything else someone legitimately types are all kept as-is. Capped at Vimeo's 128-character
+// limit for a video name, which is the tighter of the two services.
+function sanitizeTitle(name) {
+  const cleaned = foldSmartPunctuation(name || '')
+    .replace(/[\r\n\t]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 128)
+    .trim();
+  return cleaned || sanitizeFilename(name);
 }
 
 function toPositiveFloat(value, fallback) {
@@ -278,6 +313,9 @@ app.post('/api/render/:jobId', useJobIdFromParams, renderUpload, async (req, res
     const transition = toPositiveFloat(req.body.transition, 1);
     const fadeOut = toPositiveFloat(req.body.fadeOut, 1.5);
     const outputName = sanitizeFilename(req.body.outputName);
+    // Kept apart from the filename on purpose: the published title should read exactly as typed,
+    // rather than inheriting whatever the filesystem-safe version had to drop.
+    const publishTitle = sanitizeTitle(req.body.outputName);
     const crossfadeAudio = toBool(req.body.crossfadeAudio, true);
     const normalize = toBool(req.body.normalizeAudio, false);
     const targetLufs = toLufs(req.body.targetLufs, -14);
@@ -387,7 +425,7 @@ app.post('/api/render/:jobId', useJobIdFromParams, renderUpload, async (req, res
             soundcloud
               .uploadAndPublish({
                 filePath: mp3OutputPath,
-                title: outputName,
+                title: publishTitle,
                 description: vimeoDescription, // same Core Text, sent to both platforms
                 privacy: soundcloudPrivacy,
                 playlistIds: soundcloudPlaylistIds,
@@ -460,7 +498,7 @@ app.post('/api/render/:jobId', useJobIdFromParams, renderUpload, async (req, res
         vimeo
           .uploadAndPublish({
             filePath: outputPath,
-            name: outputName,
+            name: publishTitle,
             description: vimeoDescription,
             showcaseIds: vimeoShowcaseIds,
             privacy: vimeoPrivacy,
