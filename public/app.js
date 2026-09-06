@@ -296,8 +296,10 @@
       }
       await loadVimeoStatus();
       await refreshVimeoShowcases();
-      updateVimeoSetupDialogActions(false);
-      vimeoSetupResetBtn.hidden = false;
+      // Saving is the end of the job here, so close up rather than leaving the dialog sitting
+      // open over the panel it just updated. Reopening re-reads the saved values, so there's
+      // nothing in the dialog's own state worth keeping around.
+      closeVimeoSetupForm();
     } catch (err) {
       vimeoSetupError.hidden = false;
       vimeoSetupError.textContent = err.message;
