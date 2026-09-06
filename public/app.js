@@ -119,6 +119,7 @@
   const soundcloudClientIdInput = document.getElementById('soundcloud-client-id-input');
   const soundcloudClientSecretInput = document.getElementById('soundcloud-client-secret-input');
   const soundcloudPlaylistIdsInput = document.getElementById('soundcloud-playlist-ids-input');
+  const soundcloudPlaylistLegend = document.getElementById('soundcloud-playlist-legend');
   const soundcloudPlaylistLookupInput = document.getElementById('soundcloud-playlist-lookup-input');
   const soundcloudPlaylistLookupBtn = document.getElementById('soundcloud-playlist-lookup-btn');
   const soundcloudPlaylistLookupStatus = document.getElementById('soundcloud-playlist-lookup-status');
@@ -136,6 +137,7 @@
   const vimeoClientIdInput = document.getElementById('vimeo-client-id-input');
   const vimeoClientSecretInput = document.getElementById('vimeo-client-secret-input');
   const vimeoShowcaseIdsInput = document.getElementById('vimeo-showcase-ids-input');
+  const vimeoShowcaseLegend = document.getElementById('vimeo-showcase-legend');
   const vimeoSetupLockedNote = document.getElementById('vimeo-setup-locked-note');
   const vimeoSetupError = document.getElementById('vimeo-setup-error');
   const vimeoSetupResetBtn = document.getElementById('vimeo-setup-reset-btn');
@@ -145,6 +147,7 @@
 
   state.vimeoConnected = false;
   state.vimeoHasOAuthApp = false;
+  state.vimeoShowcaseCount = 0;
   let vimeoSetupOpen = false;
 
   // Shows/hides the status row's pieces based on where things stand - connected (either method),
@@ -186,6 +189,29 @@
     }
   }
 
+  // Turns the row of bare IDs in a setup popup's text box into "12318106 - 2026 Sermons", so it's
+  // obvious at a glance which number is which. The names only exist once connected (they're
+  // fetched from Vimeo/SoundCloud), so this quietly stays hidden until then. An ID the account
+  // can't see comes back flagged by the server as "(not found)" rather than silently omitted -
+  // a wrong number in the box is exactly what someone opens this popup to spot.
+  function renderIdLegend(el, items, { connected, emptyLabel }) {
+    el.innerHTML = '';
+    if (!connected || !items.length) {
+      el.hidden = true;
+      return;
+    }
+    items.forEach((item) => {
+      const dt = document.createElement('dt');
+      dt.textContent = item.id;
+      const dd = document.createElement('dd');
+      dd.textContent = item.name || emptyLabel;
+      if (item.error) dd.className = 'missing';
+      el.appendChild(dt);
+      el.appendChild(dd);
+    });
+    el.hidden = false;
+  }
+
   function refreshVimeoShowcases() {
     return fetch('/api/vimeo-showcases')
       .then((res) => res.json())
@@ -195,17 +221,33 @@
       .catch(() => {});
   }
 
+  // Re-fetched rather than reusing whatever was loaded at startup: the IDs may well have just
+  // been edited in this very popup, and stale names here would defeat the point of showing them.
+  function refreshVimeoShowcaseLegend() {
+    return refreshVimeoShowcases().then(() => {
+      renderIdLegend(vimeoShowcaseLegend, state.vimeoShowcases, {
+        connected: state.vimeoConnected,
+        emptyLabel: 'Untitled showcase',
+      });
+    });
+  }
+
   function loadVimeoStatus() {
     return fetch('/api/vimeo-status')
       .then((res) => res.json())
       .then((data) => {
         state.vimeoConnected = !!data.connected;
         state.vimeoHasOAuthApp = !!data.hasOAuthApp;
+        // How many showcase IDs are saved, which is not the same as how many we could look
+        // names up for - the publish dialog needs both numbers to tell "none set up yet" apart
+        // from "some are saved but Vimeo wouldn't tell us their names".
+        state.vimeoShowcaseCount = data.showcaseCount || 0;
         refreshVimeoConnectUI();
       })
       .catch(() => {
         state.vimeoConnected = false;
         state.vimeoHasOAuthApp = false;
+        state.vimeoShowcaseCount = 0;
       });
   }
 
@@ -234,6 +276,7 @@
         updateVimeoSetupDialogActions(data.lockedByEnv);
         vimeoSetupResetBtn.hidden = data.lockedByEnv || !state.vimeoHasOAuthApp;
       })
+      .then(refreshVimeoShowcaseLegend)
       .catch(() => {});
     vimeoSetupForm.hidden = false;
     vimeoSetupOpen = true;
@@ -355,6 +398,7 @@
 
   state.soundcloudConnected = false;
   state.soundcloudHasOAuthApp = false;
+  state.soundcloudPlaylistCount = 0;
   let soundcloudSetupOpen = false;
 
   // Mirrors refreshVimeoConnectUI() - SoundCloud has no legacy-token equivalent (it's always
@@ -388,12 +432,37 @@
       .then((data) => {
         state.soundcloudConnected = !!data.connected;
         state.soundcloudHasOAuthApp = !!data.hasOAuthApp;
+        // Saved playlist IDs, as opposed to the ones we managed to look names up for - see the
+        // matching note in loadVimeoStatus().
+        state.soundcloudPlaylistCount = data.playlistCount || 0;
         refreshSoundCloudConnectUI();
       })
       .catch(() => {
         state.soundcloudConnected = false;
         state.soundcloudHasOAuthApp = false;
+        state.soundcloudPlaylistCount = 0;
       });
+  }
+
+  // Mirrors refreshVimeoShowcases() - the real playlist names for the saved IDs, which only
+  // come back once actually connected.
+  function refreshSoundCloudPlaylists() {
+    return fetch('/api/soundcloud-playlists')
+      .then((res) => res.json())
+      .then((data) => {
+        state.soundcloudPlaylists = data.playlists || [];
+      })
+      .catch(() => {});
+  }
+
+  // Mirrors refreshVimeoShowcaseLegend().
+  function refreshSoundCloudPlaylistLegend() {
+    return refreshSoundCloudPlaylists().then(() => {
+      renderIdLegend(soundcloudPlaylistLegend, state.soundcloudPlaylists, {
+        connected: state.soundcloudConnected,
+        emptyLabel: 'Untitled playlist',
+      });
+    });
   }
 
   // Mirrors updateVimeoSetupDialogActions() - one button does double duty: "Connect to
@@ -420,6 +489,7 @@
         updateSoundCloudSetupDialogActions(data.lockedByEnv);
         soundcloudSetupResetBtn.hidden = data.lockedByEnv || !state.soundcloudHasOAuthApp;
       })
+      .then(refreshSoundCloudPlaylistLegend)
       .catch(() => {});
     soundcloudSetupForm.hidden = false;
     soundcloudSetupOpen = true;
@@ -475,9 +545,7 @@
         return;
       }
       await loadSoundCloudStatus();
-      const playlistsRes = await fetch('/api/soundcloud-playlists');
-      const playlistsData = await playlistsRes.json().catch(() => ({}));
-      state.soundcloudPlaylists = playlistsData.playlists || [];
+      await refreshSoundCloudPlaylists();
       closeSoundCloudSetupForm();
     } catch (err) {
       soundcloudSetupError.hidden = false;
@@ -537,11 +605,29 @@
         .filter(Boolean);
       if (existingIds.includes(data.id)) {
         soundcloudPlaylistLookupStatus.textContent = `"${data.name}" (${data.id}) is already in the list above.`;
-      } else {
-        soundcloudPlaylistIdsInput.value = [...existingIds, data.id].join(', ');
-        soundcloudPlaylistLookupStatus.textContent = `Added "${data.name}" (${data.id}) to the list above.`;
+        soundcloudPlaylistLookupInput.value = '';
+        return;
       }
+      const nextIds = [...existingIds, data.id];
+      soundcloudPlaylistIdsInput.value = nextIds.join(', ');
       soundcloudPlaylistLookupInput.value = '';
+      // Save it right away rather than only dropping the ID in the box above. "Add" reads like
+      // it added something, so closing the popup afterwards - or hitting Cancel - looked like it
+      // had saved when nothing had been written yet. The credentials are necessarily already
+      // saved at this point (resolving a link needs a live connection), so this only ever
+      // rewrites the playlist list; leaving clientSecret out keeps the stored one.
+      soundcloudPlaylistLookupStatus.textContent = `Adding "${data.name}"…`;
+      const res2 = await fetch('/api/soundcloud-app-config', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ clientId: soundcloudClientIdInput.value.trim(), playlistIds: nextIds.join(', ') }),
+      });
+      const saved = await res2.json().catch(() => ({}));
+      if (!res2.ok) {
+        throw new Error(`Found "${data.name}", but couldn't save it: ${saved.error || 'unknown error'}. Click Save below to try again.`);
+      }
+      await refreshSoundCloudPlaylistLegend();
+      soundcloudPlaylistLookupStatus.textContent = `Added and saved "${data.name}" (${data.id}).`;
     } catch (err) {
       soundcloudPlaylistLookupStatus.textContent = err.message;
     } finally {
@@ -554,14 +640,7 @@
   // Fetched once, up front, same as Vimeo's showcases - only returns anything once actually
   // connected (no access token to look playlists up with otherwise).
   state.soundcloudPlaylists = [];
-  fetch('/api/soundcloud-playlists')
-    .then((res) => res.json())
-    .then((data) => {
-      state.soundcloudPlaylists = data.playlists || [];
-    })
-    .catch(() => {
-      state.soundcloudPlaylists = [];
-    });
+  refreshSoundCloudPlaylists();
 
   // After the OAuth redirect bounces back from Vimeo (see server's /api/vimeo/oauth-callback),
   // show a one-off confirmation/error, then scrub the query string so a page refresh doesn't
@@ -590,14 +669,7 @@
     const scResult = params.get('soundcloud');
     if (!scResult) return;
     if (scResult === 'connected') {
-      loadSoundCloudStatus().then(() => {
-        fetch('/api/soundcloud-playlists')
-          .then((res) => res.json())
-          .then((data) => {
-            state.soundcloudPlaylists = data.playlists || [];
-          })
-          .catch(() => {});
-      });
+      loadSoundCloudStatus().then(refreshSoundCloudPlaylists);
     } else if (scResult === 'error') {
       const message = params.get('message') || 'Could not connect to SoundCloud.';
       errorSection.hidden = false;
@@ -626,7 +698,11 @@
     if (!state.vimeoShowcases.length) {
       const note = document.createElement('div');
       note.className = 'showcase-load-error';
-      note.textContent = 'No showcases configured (VIMEO_SHOWCASE_IDS) - the video will just upload without being added to one.';
+      // Saved-but-unloadable is a different problem from nothing-saved, and telling someone
+      // "none configured" right after they saved four of them is how a working save looks broken.
+      note.textContent = state.vimeoShowcaseCount
+        ? `Couldn't load the ${state.vimeoShowcaseCount} saved showcase${state.vimeoShowcaseCount === 1 ? '' : 's'} - the video will still upload, but won't be added to one. Check the IDs in Vimeo settings.`
+        : 'No showcases set up - the video will just upload without being added to one. Add them under Vimeo settings.';
       vimeoShowcaseChecks.appendChild(note);
       return;
     }
@@ -694,7 +770,9 @@
     if (!state.soundcloudPlaylists.length) {
       const note = document.createElement('div');
       note.className = 'showcase-load-error';
-      note.textContent = 'No playlists configured (SOUNDCLOUD_PLAYLIST_IDS) - the track will just upload without being added to one.';
+      note.textContent = state.soundcloudPlaylistCount
+        ? `Couldn't load the ${state.soundcloudPlaylistCount} saved playlist${state.soundcloudPlaylistCount === 1 ? '' : 's'} - the track will still upload, but won't be added to one. Check the IDs in SoundCloud settings.`
+        : 'No playlists set up - the track will just upload without being added to one. Add them under SoundCloud settings.';
       soundcloudPlaylistChecks.appendChild(note);
       return;
     }

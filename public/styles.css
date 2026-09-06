@@ -593,6 +593,36 @@ button.soundcloud-connect-link {
   margin-bottom: 14px;
 }
 
+/* Spells out which saved ID is which showcase/playlist, so the ID boxes above read as a list of
+   real names instead of a row of anonymous numbers. Only filled in once connected - the names
+   have to be fetched from Vimeo/SoundCloud. */
+.id-legend {
+  margin: 8px 0 0;
+  padding: 8px 10px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-size: 0.78rem;
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 3px 10px;
+}
+
+.id-legend dt {
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.id-legend dd {
+  margin: 0;
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+
+.id-legend dd.missing {
+  color: var(--error);
+}
+
 .soundcloud-playlist-lookup-row {
   display: flex;
   gap: 8px;
