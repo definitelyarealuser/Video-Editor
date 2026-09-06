@@ -54,8 +54,13 @@ function saveAppConfig({ clientId, clientSecret, showcaseIds }) {
   const next = {
     clientId: clientId !== undefined ? String(clientId).trim() : existing.clientId || '',
     clientSecret: clientSecret !== undefined ? String(clientSecret).trim() : existing.clientSecret || '',
-    showcaseIds: showcaseIds !== undefined ? showcaseIds : existing.showcaseIds || [],
   };
+  // Leave the key out entirely rather than defaulting it to [], so "never set from the app" stays
+  // distinguishable from "set to none" - that difference is what getShowcaseIds() uses to decide
+  // whether VIMEO_SHOWCASE_IDS still applies. Writing [] here would silently empty the showcase
+  // list of an install seeded from that variable, just for saving its credentials.
+  if (showcaseIds !== undefined) next.showcaseIds = showcaseIds;
+  else if (Array.isArray(existing.showcaseIds)) next.showcaseIds = existing.showcaseIds;
   if (!next.clientId || !next.clientSecret) {
     throw new Error('Both the Client Identifier and Client Secret are required.');
   }
@@ -118,11 +123,49 @@ function getRedirectUri() {
   return process.env.VIMEO_REDIRECT_URI || 'http://localhost:3000/api/vimeo/oauth-callback';
 }
 
+// The list saved from inside the app wins. VIMEO_SHOWCASE_IDS is only a starting point, for an
+// install that was set up from a script and has never touched the app's own showcase controls -
+// it used to override the saved list outright, which made adding or removing a showcase in the
+// app look like it did nothing at all. Managing showcases is a routine job for whoever publishes
+// sermons, so the app has to own it once it has been used.
 function getShowcaseIds() {
+  const config = loadAppConfig();
+  if (config && Array.isArray(config.showcaseIds)) return config.showcaseIds;
   if (process.env.VIMEO_SHOWCASE_IDS) {
     return process.env.VIMEO_SHOWCASE_IDS.split(',').map((s) => s.trim()).filter(Boolean);
   }
-  return (loadAppConfig() || {}).showcaseIds || [];
+  return [];
+}
+
+// Writes just the showcase list. Deliberately separate from saveAppConfig(), which insists on a
+// Client Identifier and Secret - showcases can be lined up before the account is connected, and
+// a half-finished setup shouldn't block editing them.
+function saveShowcaseIds(showcaseIds) {
+  const next = { ...(loadAppConfig() || {}), showcaseIds };
+  fs.mkdirSync(DATA_DIR, { recursive: true });
+  fs.writeFileSync(APP_CONFIG_PATH, JSON.stringify(next, null, 2));
+  appConfigCache = next;
+  return next.showcaseIds;
+}
+
+// Pulls the numeric ID out of whatever someone pastes: a showcase link in any of the shapes Vimeo
+// hands out, or the bare number. Once connected the ID is checked against the account so a typo
+// is caught here rather than silently failing at publish time.
+async function resolveShowcase(input) {
+  const trimmed = String(input || '').trim();
+  if (!trimmed) throw new Error('Paste a showcase link or ID first.');
+  const fromUrl = trimmed.match(/(?:showcases?|albums?)\/(\d+)/i);
+  const id = fromUrl ? fromUrl[1] : (/^\d+$/.test(trimmed) ? trimmed : null);
+  if (!id) {
+    throw new Error('That doesn\'t look like a showcase link or ID - a showcase link ends in a number, e.g. vimeo.com/showcase/1234567.');
+  }
+  if (!isConnected()) return { id, name: `Showcase ${id}` };
+  try {
+    const res = await getClient().request({ method: 'GET', path: `/albums/${id}` });
+    return { id, name: (res.body && res.body.name) || `Showcase ${id}` };
+  } catch {
+    throw new Error(`No showcase ${id} on the connected Vimeo account - check the link and try again.`);
+  }
 }
 
 // Status for the client's setup panel - never includes the client secret itself, just whether
@@ -136,11 +179,10 @@ function getAppConfigStatus() {
     // Env vars, if set, take priority and can't be edited from the app - the UI uses this to
     // explain why the fields are locked, rather than silently ignoring what's typed into them.
     lockedByEnv: !!(process.env.VIMEO_CLIENT_ID || process.env.VIMEO_CLIENT_SECRET),
-    // Reported separately because it locks a different field: VIMEO_SHOWCASE_IDS overrides the
-    // saved showcase list on its own, with nothing to do with the client credentials. Without
-    // this the Showcases box stayed editable and Save kept reporting success while writing to a
-    // file getShowcaseIds() never reads - so additions and deletions both appeared to do nothing.
-    showcaseIdsLockedByEnv: !!process.env.VIMEO_SHOWCASE_IDS,
+    // True only while the list is still coming from VIMEO_SHOWCASE_IDS because nothing has been
+    // saved from the app yet. Purely informational now - the app's own list takes over the first
+    // time a showcase is added or removed, so this never blocks an edit.
+    showcaseIdsFromEnv: !(config && Array.isArray(config.showcaseIds)) && !!process.env.VIMEO_SHOWCASE_IDS,
   };
 }
 
@@ -251,10 +293,18 @@ function guessImageContentType(filePath) {
 async function setThumbnail(videoUri, imagePath) {
   const client = getClient();
   const created = await client.request({ method: 'POST', path: `${videoUri}/pictures` });
-  const uploadLink = created.body && created.body.upload && created.body.upload.upload_link;
-  const pictureUri = created.body && created.body.uri;
+  const body = created.body || {};
+  // The Pictures API hands back the pre-signed target to PUT the image bytes to as `link` on the
+  // picture itself. This used to look for `upload.upload_link`, which is the shape Vimeo uses for
+  // *video* uploads - so it was never present here and every custom thumbnail failed with
+  // "Vimeo did not return an upload link". The older field is still accepted in case an account
+  // is served the other shape.
+  const uploadLink = body.link || (body.upload && body.upload.upload_link);
+  const pictureUri = body.uri;
   if (!uploadLink || !pictureUri) {
-    throw new Error('Vimeo did not return an upload link for the thumbnail.');
+    // Naming what did come back turns a repeat of this into a five-second diagnosis instead of
+    // a guess about which field moved.
+    throw new Error(`Vimeo did not return an upload link for the thumbnail (it replied with: ${Object.keys(body).join(', ') || 'nothing'}).`);
   }
 
   const imageBuffer = await fs.promises.readFile(imagePath);
@@ -325,6 +375,8 @@ module.exports = {
   hasOAuthApp,
   getShowcaseIds,
   getShowcaseDetails,
+  saveShowcaseIds,
+  resolveShowcase,
   getAuthorizeUrl,
   handleOAuthCallback,
   getAppConfigStatus,

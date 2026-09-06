@@ -50,8 +50,10 @@ function saveAppConfig({ clientId, clientSecret, playlistIds }) {
   const next = {
     clientId: clientId !== undefined ? String(clientId).trim() : existing.clientId || '',
     clientSecret: clientSecret !== undefined ? String(clientSecret).trim() : existing.clientSecret || '',
-    playlistIds: playlistIds !== undefined ? playlistIds : existing.playlistIds || [],
   };
+  // See the matching note in vimeo.js's saveAppConfig().
+  if (playlistIds !== undefined) next.playlistIds = playlistIds;
+  else if (Array.isArray(existing.playlistIds)) next.playlistIds = existing.playlistIds;
   if (!next.clientId || !next.clientSecret) {
     throw new Error('Both the Client ID and Client Secret are required.');
   }
@@ -85,11 +87,24 @@ function getRedirectUri() {
   return process.env.SOUNDCLOUD_REDIRECT_URI || 'http://localhost:3000/api/soundcloud/oauth-callback';
 }
 
+// The list saved from inside the app wins - see the matching note on vimeo.js's getShowcaseIds().
 function getPlaylistIds() {
+  const config = loadAppConfig();
+  if (config && Array.isArray(config.playlistIds)) return config.playlistIds;
   if (process.env.SOUNDCLOUD_PLAYLIST_IDS) {
     return process.env.SOUNDCLOUD_PLAYLIST_IDS.split(',').map((s) => s.trim()).filter(Boolean);
   }
-  return (loadAppConfig() || {}).playlistIds || [];
+  return [];
+}
+
+// Writes just the playlist list, without saveAppConfig()'s Client ID/Secret requirement - mirrors
+// vimeo.js's saveShowcaseIds().
+function savePlaylistIds(playlistIds) {
+  const next = { ...(loadAppConfig() || {}), playlistIds };
+  fs.mkdirSync(DATA_DIR, { recursive: true });
+  fs.writeFileSync(APP_CONFIG_PATH, JSON.stringify(next, null, 2));
+  appConfigCache = next;
+  return next.playlistIds;
 }
 
 // Status for the client's setup panel - never includes the client secret itself, just whether
@@ -101,8 +116,8 @@ function getAppConfigStatus() {
     hasSecret: !!(process.env.SOUNDCLOUD_CLIENT_SECRET || (config && config.clientSecret)),
     playlistIds: getPlaylistIds(),
     lockedByEnv: !!(process.env.SOUNDCLOUD_CLIENT_ID || process.env.SOUNDCLOUD_CLIENT_SECRET),
-    // Mirrors vimeo.js's showcaseIdsLockedByEnv - see the note there.
-    playlistIdsLockedByEnv: !!process.env.SOUNDCLOUD_PLAYLIST_IDS,
+    // Mirrors vimeo.js's showcaseIdsFromEnv - see the note there.
+    playlistIdsFromEnv: !(config && Array.isArray(config.playlistIds)) && !!process.env.SOUNDCLOUD_PLAYLIST_IDS,
   };
 }
 
@@ -281,7 +296,17 @@ async function getPlaylistDetails() {
  */
 async function resolvePlaylistUrl(url) {
   const trimmed = String(url || '').trim();
-  if (!trimmed) throw new Error('Paste a SoundCloud playlist URL first.');
+  if (!trimmed) throw new Error('Paste a SoundCloud playlist link or ID first.');
+  // A bare number is already the ID - go straight to the playlist itself, both to skip a
+  // pointless /resolve round-trip and so re-adding an ID copied from elsewhere still works.
+  if (/^\d+$/.test(trimmed)) {
+    try {
+      const playlist = await apiRequest(`/playlists/${encodeURIComponent(playlistUrn(trimmed))}`);
+      return { id: trimmed, name: playlist.title || `Playlist ${trimmed}` };
+    } catch {
+      throw new Error(`No playlist ${trimmed} on the connected SoundCloud account - check the number and try again.`);
+    }
+  }
   let resolved;
   try {
     resolved = await apiRequest(`/resolve?url=${encodeURIComponent(trimmed)}`);
@@ -360,6 +385,7 @@ module.exports = {
   getPlaylistIds,
   getPlaylistDetails,
   resolvePlaylistUrl,
+  savePlaylistIds,
   getAuthorizeUrl,
   handleOAuthCallback,
   getAppConfigStatus,

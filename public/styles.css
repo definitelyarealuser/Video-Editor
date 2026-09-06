@@ -605,35 +605,110 @@ button.soundcloud-connect-link {
   color: var(--text);
 }
 
-/* Spells out which saved ID is which showcase/playlist, so the ID boxes above read as a list of
-   real names instead of a row of anonymous numbers. Only filled in once connected - the names
-   have to be fetched from Vimeo/SoundCloud. */
-.id-legend {
-  margin: 8px 0 0;
-  padding: 8px 10px;
-  background: var(--bg);
+/* The showcase/playlist list inside a setup popup: one row per entry, real name first with its ID
+   alongside, and a Remove button. Replaces a comma-separated text box - the names are what anyone
+   actually thinks in, and add/remove are one click each rather than careful comma surgery. */
+.id-manager {
+  margin-top: 8px;
   border: 1px solid var(--border);
   border-radius: 6px;
-  font-size: 0.78rem;
-  display: grid;
-  grid-template-columns: auto 1fr;
-  gap: 3px 10px;
+  background: var(--bg);
+  overflow: hidden;
 }
 
-.id-legend dt {
-  color: var(--muted);
-  font-variant-numeric: tabular-nums;
+.id-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 10px;
+  border-bottom: 1px solid var(--border);
 }
 
-.id-legend dd {
-  margin: 0;
-  color: var(--text);
+.id-row:last-child {
+  border-bottom: none;
+}
+
+.id-row-name {
+  flex: 1;
+  min-width: 0;
   overflow-wrap: anywhere;
 }
 
-.id-legend dd.missing {
+.id-row-name.missing {
   color: var(--error);
 }
+
+.id-row-id {
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.id-row-remove {
+  flex: none;
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  color: var(--muted);
+  padding: 3px 9px;
+  font-size: 0.78rem;
+  cursor: pointer;
+}
+
+.id-row-remove:hover:not(:disabled) {
+  border-color: var(--error);
+  color: var(--error);
+}
+
+.id-row-remove:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.id-manager-empty {
+  padding: 10px;
+  color: var(--muted);
+  font-size: 0.82rem;
+}
+
+.id-manager-add {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.id-manager-add input {
+  flex: 1;
+  min-width: 0;
+}
+
+/* Matches the Browse… button next to the save-path fields - it's the same kind of thing, an
+   action attached to the box beside it, and as a bare ghost button it read as plain text. */
+.id-manager-add button {
+  flex: none;
+  background: color-mix(in srgb, var(--accent) 14%, var(--panel));
+  border: 1px solid color-mix(in srgb, var(--accent) 40%, var(--border));
+  color: var(--accent);
+  border-radius: 8px;
+  padding: 0 18px;
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+
+.id-manager-add button:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--accent) 24%, var(--panel));
+  border-color: var(--accent);
+}
+
+.id-manager-add button:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.status-error {
+  color: var(--error);
+}
+
 
 .soundcloud-playlist-lookup-row {
   display: flex;

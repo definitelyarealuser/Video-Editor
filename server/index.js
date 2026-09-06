@@ -829,6 +829,32 @@ app.get('/api/vimeo-showcases', async (req, res) => {
   }
 });
 
+// Saves the showcase list on its own, so the setup panel's Add/Remove controls can write a change
+// the moment it's made rather than depending on the Save button below them. Deliberately doesn't
+// touch the Client Identifier/Secret.
+app.put('/api/vimeo-showcase-ids', (req, res) => {
+  const ids = Array.isArray(req.body && req.body.ids)
+    ? req.body.ids.map((id) => String(id).trim()).filter(Boolean)
+    : null;
+  if (!ids) return res.status(400).json({ error: 'Expected a list of showcase IDs.' });
+  try {
+    res.json({ showcaseIds: vimeo.saveShowcaseIds(ids) });
+  } catch (err) {
+    res.status(500).json({ error: err.message || 'Could not save the showcase list.' });
+  }
+});
+
+// Turns a pasted showcase link (or a bare ID) into { id, name }, checking it against the connected
+// account so a bad one is caught here instead of at publish time. Mirrors the SoundCloud
+// playlist resolver.
+app.get('/api/vimeo-resolve-showcase', async (req, res) => {
+  try {
+    res.json(await vimeo.resolveShowcase(req.query.url));
+  } catch (err) {
+    res.status(400).json({ error: err.message || 'Could not find that showcase.' });
+  }
+});
+
 // Full-page redirect (not fetched) - mirrors /api/soundcloud/connect below. Only meaningful
 // when an OAuth app (VIMEO_CLIENT_ID/VIMEO_CLIENT_SECRET) is set up - a legacy VIMEO_ACCESS_TOKEN
 // is already connected with nothing further to do, so the frontend never offers this button then.
@@ -904,6 +930,19 @@ app.post('/api/soundcloud-app-config', (req, res) => {
     res.json({ ok: true });
   } catch (err) {
     res.status(400).json({ error: err.message || 'Could not save SoundCloud settings.' });
+  }
+});
+
+// Mirrors /api/vimeo-showcase-ids.
+app.put('/api/soundcloud-playlist-ids', (req, res) => {
+  const ids = Array.isArray(req.body && req.body.ids)
+    ? req.body.ids.map((id) => String(id).trim()).filter(Boolean)
+    : null;
+  if (!ids) return res.status(400).json({ error: 'Expected a list of playlist IDs.' });
+  try {
+    res.json({ playlistIds: soundcloud.savePlaylistIds(ids) });
+  } catch (err) {
+    res.status(500).json({ error: err.message || 'Could not save the playlist list.' });
   }
 });
 

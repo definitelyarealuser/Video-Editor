@@ -118,12 +118,11 @@
   const soundcloudSetupForm = document.getElementById('soundcloud-setup-form');
   const soundcloudClientIdInput = document.getElementById('soundcloud-client-id-input');
   const soundcloudClientSecretInput = document.getElementById('soundcloud-client-secret-input');
-  const soundcloudPlaylistIdsInput = document.getElementById('soundcloud-playlist-ids-input');
-  const soundcloudPlaylistLegend = document.getElementById('soundcloud-playlist-legend');
-  const soundcloudPlaylistLockedNote = document.getElementById('soundcloud-playlist-locked-note');
-  const soundcloudPlaylistLookupInput = document.getElementById('soundcloud-playlist-lookup-input');
-  const soundcloudPlaylistLookupBtn = document.getElementById('soundcloud-playlist-lookup-btn');
-  const soundcloudPlaylistLookupStatus = document.getElementById('soundcloud-playlist-lookup-status');
+  const soundcloudPlaylistRows = document.getElementById('soundcloud-playlist-rows');
+  const soundcloudPlaylistAddInput = document.getElementById('soundcloud-playlist-add-input');
+  const soundcloudPlaylistAddBtn = document.getElementById('soundcloud-playlist-add-btn');
+  const soundcloudPlaylistAddStatus = document.getElementById('soundcloud-playlist-add-status');
+  const soundcloudPlaylistEnvNote = document.getElementById('soundcloud-playlist-env-note');
   const soundcloudSetupLockedNote = document.getElementById('soundcloud-setup-locked-note');
   const soundcloudSetupError = document.getElementById('soundcloud-setup-error');
   const soundcloudSetupResetBtn = document.getElementById('soundcloud-setup-reset-btn');
@@ -137,9 +136,11 @@
   const vimeoSetupForm = document.getElementById('vimeo-setup-form');
   const vimeoClientIdInput = document.getElementById('vimeo-client-id-input');
   const vimeoClientSecretInput = document.getElementById('vimeo-client-secret-input');
-  const vimeoShowcaseIdsInput = document.getElementById('vimeo-showcase-ids-input');
-  const vimeoShowcaseLegend = document.getElementById('vimeo-showcase-legend');
-  const vimeoShowcaseLockedNote = document.getElementById('vimeo-showcase-locked-note');
+  const vimeoShowcaseRows = document.getElementById('vimeo-showcase-rows');
+  const vimeoShowcaseAddInput = document.getElementById('vimeo-showcase-add-input');
+  const vimeoShowcaseAddBtn = document.getElementById('vimeo-showcase-add-btn');
+  const vimeoShowcaseAddStatus = document.getElementById('vimeo-showcase-add-status');
+  const vimeoShowcaseEnvNote = document.getElementById('vimeo-showcase-env-note');
   const vimeoSetupLockedNote = document.getElementById('vimeo-setup-locked-note');
   const vimeoSetupError = document.getElementById('vimeo-setup-error');
   const vimeoSetupResetBtn = document.getElementById('vimeo-setup-reset-btn');
@@ -154,8 +155,7 @@
   // What the popup's fields held when it was opened, so closing it can tell "nothing typed" from
   // "typed something and never pressed Save".
   let vimeoSetupSnapshot = '';
-  const vimeoSetupFields = () =>
-    [vimeoClientIdInput.value, vimeoClientSecretInput.value, vimeoShowcaseIdsInput.value].join('\u0000');
+  const vimeoSetupFields = () => [vimeoClientIdInput.value, vimeoClientSecretInput.value].join('\u0000');
 
   // Shows/hides the status row's pieces based on where things stand - connected (either method),
   // OAuth app saved but not yet connected, or nothing set up at all. A legacy VIMEO_ACCESS_TOKEN
@@ -196,27 +196,176 @@
     }
   }
 
-  // Turns the row of bare IDs in a setup popup's text box into "12318106 - 2026 Sermons", so it's
-  // obvious at a glance which number is which. The names only exist once connected (they're
-  // fetched from Vimeo/SoundCloud), so this quietly stays hidden until then. An ID the account
-  // can't see comes back flagged by the server as "(not found)" rather than silently omitted -
-  // a wrong number in the box is exactly what someone opens this popup to spot.
-  function renderIdLegend(el, items, { connected, emptyLabel }) {
-    el.innerHTML = '';
-    if (!connected || !items.length) {
-      el.hidden = true;
-      return;
+  /**
+   * The showcase/playlist list inside a setup popup: one row per entry showing the real name with
+   * a Remove button, plus a box to paste a link into. Both connectors get the same thing, so it's
+   * built once here and instantiated twice - the only differences are the URLs and the wording.
+   *
+   * Every change writes straight through to the server and is read back before it's reported as
+   * done. The list used to be a comma-separated text box saved by the popup's Save button, which
+   * meant an edit could be lost by closing the popup, and left no way to see which number was
+   * which showcase.
+   */
+  function createIdListManager(config) {
+    const { rowsEl, addInput, addBtn, statusEl, envNoteEl, noun } = config;
+    let ids = [];
+    let details = new Map();
+    let busy = false;
+
+    const setStatus = (text, isError) => {
+      statusEl.hidden = !text;
+      statusEl.textContent = text || '';
+      statusEl.classList.toggle('status-error', !!isError);
+    };
+
+    function render() {
+      rowsEl.innerHTML = '';
+      if (!ids.length) {
+        const empty = document.createElement('div');
+        empty.className = 'id-manager-empty';
+        empty.textContent = `No ${noun}s yet - every published ${config.itemNoun} just goes up on its own.`;
+        rowsEl.appendChild(empty);
+        return;
+      }
+      ids.forEach((id) => {
+        const detail = details.get(id);
+        const row = document.createElement('div');
+        row.className = 'id-row';
+
+        const name = document.createElement('span');
+        name.className = 'id-row-name';
+        // Before the account is connected there are no names to show, so the ID is the label.
+        // A name we did fetch but that came back flagged means the ID points at nothing.
+        name.textContent = detail ? detail.name : id;
+        if (detail && detail.error) name.classList.add('missing');
+
+        const idLabel = document.createElement('span');
+        idLabel.className = 'id-row-id';
+        idLabel.textContent = id;
+
+        const remove = document.createElement('button');
+        remove.type = 'button';
+        remove.className = 'id-row-remove';
+        remove.textContent = 'Remove';
+        remove.disabled = busy;
+        remove.addEventListener('click', () => removeId(id, detail ? detail.name : id));
+
+        row.appendChild(name);
+        row.appendChild(idLabel);
+        row.appendChild(remove);
+        rowsEl.appendChild(row);
+      });
     }
-    items.forEach((item) => {
-      const dt = document.createElement('dt');
-      dt.textContent = item.id;
-      const dd = document.createElement('dd');
-      dd.textContent = item.name || emptyLabel;
-      if (item.error) dd.className = 'missing';
-      el.appendChild(dt);
-      el.appendChild(dd);
+
+    // Names come from the connector, so they only exist once connected; the rows fall back to
+    // bare IDs until then rather than waiting for something that will never arrive.
+    function refreshDetails() {
+      if (!config.isConnected()) {
+        details = new Map();
+        state[config.stateKey] = [];
+        return Promise.resolve();
+      }
+      return fetch(config.detailsUrl)
+        .then((res) => res.json())
+        .then((data) => {
+          const items = data[config.detailsKey] || [];
+          state[config.stateKey] = items;
+          details = new Map(items.map((item) => [String(item.id), item]));
+        })
+        .catch(() => {});
+    }
+
+    // Writes the whole list, then reads back what actually stuck. A save that reports success
+    // has to mean the change is really there - anything else is how "it didn't save" happens
+    // without a word on screen.
+    async function commit(nextIds, describe) {
+      busy = true;
+      render();
+      try {
+        const res = await fetch(config.saveUrl, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ids: nextIds }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data.error || `Could not save the ${noun} list.`);
+        const stored = (data[config.idsKey] || []).map(String);
+        if (stored.join(',') !== nextIds.join(',')) {
+          throw new Error(`The ${noun} list didn't save - it still reads ${stored.join(', ') || '(empty)'}.`);
+        }
+        ids = stored;
+        state[config.countKey] = ids.length;
+        // The saved list is now what counts, so the "this came from outside the app" note has
+        // stopped being true - drop it the moment the first change lands.
+        envNoteEl.hidden = true;
+        await refreshDetails();
+        setStatus(describe(), false);
+      } catch (err) {
+        setStatus(err.message, true);
+        throw err;
+      } finally {
+        busy = false;
+        render();
+      }
+    }
+
+    async function removeId(id, label) {
+      if (!window.confirm(`Remove "${label}" from the ${noun} list? This only stops new uploads being added to it - nothing already published changes.`)) return;
+      try {
+        await commit(ids.filter((existing) => existing !== id), () => `Removed "${label}".`);
+      } catch { /* commit() has already put the reason on screen */ }
+    }
+
+    async function addFromInput() {
+      const value = addInput.value.trim();
+      if (!value) {
+        setStatus(`Paste a ${noun} link first.`, true);
+        return;
+      }
+      if (config.needsConnectionToAdd && !config.isConnected()) {
+        setStatus(`Connect to ${config.serviceName} first - a ${noun} link can only be looked up through the connected account.`, true);
+        return;
+      }
+      addBtn.disabled = true;
+      setStatus('Looking it up…', false);
+      try {
+        const res = await fetch(`${config.resolveUrl}?url=${encodeURIComponent(value)}`);
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data.error || `Could not find that ${noun}.`);
+        const id = String(data.id);
+        if (ids.includes(id)) {
+          addInput.value = '';
+          setStatus(`"${data.name}" is already in the list.`, false);
+          return;
+        }
+        await commit([...ids, id], () => `Added "${data.name}".`);
+        addInput.value = '';
+      } catch (err) {
+        setStatus(err.message, true);
+      } finally {
+        addBtn.disabled = false;
+      }
+    }
+
+    addBtn.addEventListener('click', addFromInput);
+    addInput.addEventListener('keydown', (e) => {
+      if (e.key !== 'Enter') return;
+      e.preventDefault();
+      addFromInput();
     });
-    el.hidden = false;
+
+    return {
+      // Called each time the popup opens, with the list the server currently reports.
+      load(nextIds, fromEnv) {
+        ids = (nextIds || []).map(String);
+        state[config.countKey] = ids.length;
+        envNoteEl.hidden = !fromEnv;
+        addInput.value = '';
+        setStatus('', false);
+        render();
+        return refreshDetails().then(render);
+      },
+    };
   }
 
   function refreshVimeoShowcases() {
@@ -226,17 +375,6 @@
         state.vimeoShowcases = data.showcases || [];
       })
       .catch(() => {});
-  }
-
-  // Re-fetched rather than reusing whatever was loaded at startup: the IDs may well have just
-  // been edited in this very popup, and stale names here would defeat the point of showing them.
-  function refreshVimeoShowcaseLegend() {
-    return refreshVimeoShowcases().then(() => {
-      renderIdLegend(vimeoShowcaseLegend, state.vimeoShowcases, {
-        connected: state.vimeoConnected,
-        emptyLabel: 'Untitled showcase',
-      });
-    });
   }
 
   function loadVimeoStatus() {
@@ -296,18 +434,6 @@
     });
   }
 
-  // A save can report OK and still not take effect: an env var that overrides the field wins on
-  // read-back, so the file is written and then ignored. Comparing what actually stuck against
-  // what was sent is the only way to catch that from here - otherwise the popup says "saved",
-  // closes, and the list is unchanged next time it's opened.
-  function idsDiffer(submitted, stored) {
-    const norm = (v) => (Array.isArray(v) ? v : String(v || '').split(','))
-      .map((x) => String(x).trim())
-      .filter(Boolean)
-      .join(',');
-    return norm(submitted) !== norm(stored);
-  }
-
   // Last line of defence for the same problem: never throw away typed-but-unsaved edits without
   // asking. Only fires when something actually changed, so the ordinary "opened it to look,
   // pressed Escape" case stays silent.
@@ -333,18 +459,14 @@
         vimeoClientIdInput.value = data.clientId || '';
         vimeoClientSecretInput.value = '';
         vimeoClientSecretInput.placeholder = data.hasSecret ? 'Already saved - leave blank to keep it' : 'Paste it here';
-        vimeoShowcaseIdsInput.value = (data.showcaseIds || []).join(', ');
         vimeoSetupLockedNote.hidden = !data.lockedByEnv;
         vimeoClientIdInput.disabled = data.lockedByEnv;
         vimeoClientSecretInput.disabled = data.lockedByEnv;
-        // VIMEO_SHOWCASE_IDS locks this one field on its own, independently of the credentials.
-        vimeoShowcaseIdsInput.disabled = !!data.showcaseIdsLockedByEnv;
-        vimeoShowcaseLockedNote.hidden = !data.showcaseIdsLockedByEnv;
+        vimeoShowcaseManager.load(data.showcaseIds, data.showcaseIdsFromEnv);
         updateVimeoSetupDialogActions(data.lockedByEnv);
         vimeoSetupResetBtn.hidden = data.lockedByEnv || !state.vimeoHasOAuthApp;
         vimeoSetupSnapshot = vimeoSetupFields();
       })
-      .then(refreshVimeoShowcaseLegend)
       .catch(() => {});
     vimeoSetupForm.hidden = false;
     vimeoSetupOpen = true;
@@ -372,19 +494,19 @@
   document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape' && vimeoSetupOpen) dismissVimeoSetupForm();
   });
-  bindEnterToClick([vimeoClientIdInput, vimeoClientSecretInput, vimeoShowcaseIdsInput], vimeoSetupSaveBtn);
+  bindEnterToClick([vimeoClientIdInput, vimeoClientSecretInput], vimeoSetupSaveBtn);
 
   vimeoSetupSaveBtn.addEventListener('click', async () => {
     vimeoSetupError.hidden = true;
     const clientId = vimeoClientIdInput.value.trim();
     const clientSecret = vimeoClientSecretInput.value.trim();
-    const showcaseIds = vimeoShowcaseIdsInput.value.trim();
+
     if (!clientId) {
       vimeoSetupError.hidden = false;
       vimeoSetupError.textContent = 'Paste in the Client Identifier from the Vimeo app page first.';
       return;
     }
-    const body = { clientId, showcaseIds };
+    const body = { clientId };
     // Leaving the secret blank on an edit means "keep the one already saved" - only require a
     // freshly-typed one when nothing's saved yet (the placeholder tells us which case this is).
     if (clientSecret) {
@@ -408,18 +530,6 @@
       if (!res.ok) throw new Error(data.error || 'Could not save Vimeo settings.');
       if (shouldConnectAfterSave) {
         window.location.href = '/api/vimeo/connect';
-        return;
-      }
-      const stored = await fetch('/api/vimeo-app-config').then((r) => r.json()).catch(() => null);
-      if (stored && idsDiffer(showcaseIds, stored.showcaseIds)) {
-        vimeoSetupError.hidden = false;
-        vimeoSetupError.textContent = stored.showcaseIdsLockedByEnv
-          ? "Everything else saved, but the showcase list is set outside the app and overrides what's typed here - see the note under the Showcases box."
-          : `The showcase list didn't stick - it still reads ${(stored.showcaseIds || []).join(', ') || '(empty)'}. Double-check the IDs and try again.`;
-        vimeoShowcaseIdsInput.value = (stored.showcaseIds || []).join(', ');
-        vimeoSetupSnapshot = vimeoSetupFields();
-        await loadVimeoStatus();
-        await refreshVimeoShowcaseLegend();
         return;
       }
       await loadVimeoStatus();
@@ -488,8 +598,7 @@
   // Mirrors the Vimeo popup's unsaved-edit tracking. The Add-by-link box isn't part of the
   // snapshot: what it holds is a URL that's already been consumed, not an unsaved setting.
   let soundcloudSetupSnapshot = '';
-  const soundcloudSetupFields = () =>
-    [soundcloudClientIdInput.value, soundcloudClientSecretInput.value, soundcloudPlaylistIdsInput.value].join('\u0000');
+  const soundcloudSetupFields = () => [soundcloudClientIdInput.value, soundcloudClientSecretInput.value].join('\u0000');
 
   // Mirrors refreshVimeoConnectUI() - SoundCloud has no legacy-token equivalent (it's always
   // real OAuth), so there's no "hide the settings toggle entirely" case to account for here.
@@ -545,16 +654,6 @@
       .catch(() => {});
   }
 
-  // Mirrors refreshVimeoShowcaseLegend().
-  function refreshSoundCloudPlaylistLegend() {
-    return refreshSoundCloudPlaylists().then(() => {
-      renderIdLegend(soundcloudPlaylistLegend, state.soundcloudPlaylists, {
-        connected: state.soundcloudConnected,
-        emptyLabel: 'Untitled playlist',
-      });
-    });
-  }
-
   // Mirrors updateVimeoSetupDialogActions() - one button does double duty: "Connect to
   // SoundCloud" while not yet connected (saves + redirects in one click), "Save" once connected
   // (just persists edits, no redirect needed).
@@ -572,20 +671,14 @@
         soundcloudClientIdInput.value = data.clientId || '';
         soundcloudClientSecretInput.value = '';
         soundcloudClientSecretInput.placeholder = data.hasSecret ? 'Already saved - leave blank to keep it' : 'Paste it here';
-        soundcloudPlaylistIdsInput.value = (data.playlistIds || []).join(', ');
         soundcloudSetupLockedNote.hidden = !data.lockedByEnv;
         soundcloudClientIdInput.disabled = data.lockedByEnv;
         soundcloudClientSecretInput.disabled = data.lockedByEnv;
-        // SOUNDCLOUD_PLAYLIST_IDS locks this one field on its own - see the Vimeo equivalent.
-        soundcloudPlaylistIdsInput.disabled = !!data.playlistIdsLockedByEnv;
-        soundcloudPlaylistLockedNote.hidden = !data.playlistIdsLockedByEnv;
-        soundcloudPlaylistLookupInput.disabled = !!data.playlistIdsLockedByEnv;
-        soundcloudPlaylistLookupBtn.disabled = !!data.playlistIdsLockedByEnv;
+        soundcloudPlaylistManager.load(data.playlistIds, data.playlistIdsFromEnv);
         updateSoundCloudSetupDialogActions(data.lockedByEnv);
         soundcloudSetupResetBtn.hidden = data.lockedByEnv || !state.soundcloudHasOAuthApp;
         soundcloudSetupSnapshot = soundcloudSetupFields();
       })
-      .then(refreshSoundCloudPlaylistLegend)
       .catch(() => {});
     soundcloudSetupForm.hidden = false;
     soundcloudSetupOpen = true;
@@ -610,21 +703,19 @@
   document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape' && soundcloudSetupOpen) dismissSoundCloudSetupForm();
   });
-  bindEnterToClick([soundcloudClientIdInput, soundcloudClientSecretInput, soundcloudPlaylistIdsInput], soundcloudSetupSaveBtn);
-  // The link box's own Enter goes to Add, not Save - that's the button sitting right next to it.
-  bindEnterToClick([soundcloudPlaylistLookupInput], soundcloudPlaylistLookupBtn);
+  bindEnterToClick([soundcloudClientIdInput, soundcloudClientSecretInput], soundcloudSetupSaveBtn);
 
   soundcloudSetupSaveBtn.addEventListener('click', async () => {
     soundcloudSetupError.hidden = true;
     const clientId = soundcloudClientIdInput.value.trim();
     const clientSecret = soundcloudClientSecretInput.value.trim();
-    const playlistIds = soundcloudPlaylistIdsInput.value.trim();
+
     if (!clientId) {
       soundcloudSetupError.hidden = false;
       soundcloudSetupError.textContent = 'Paste in the Client ID from the SoundCloud app page first.';
       return;
     }
-    const body = { clientId, playlistIds };
+    const body = { clientId };
     if (clientSecret) {
       body.clientSecret = clientSecret;
     } else if (!soundcloudClientSecretInput.placeholder.startsWith('Already saved')) {
@@ -644,18 +735,6 @@
       if (!res.ok) throw new Error(data.error || 'Could not save SoundCloud settings.');
       if (shouldConnectAfterSave) {
         window.location.href = '/api/soundcloud/connect';
-        return;
-      }
-      const stored = await fetch('/api/soundcloud-app-config').then((r) => r.json()).catch(() => null);
-      if (stored && idsDiffer(playlistIds, stored.playlistIds)) {
-        soundcloudSetupError.hidden = false;
-        soundcloudSetupError.textContent = stored.playlistIdsLockedByEnv
-          ? "Everything else saved, but the playlist list is set outside the app and overrides what's typed here - see the note under the Playlists box."
-          : `The playlist list didn't stick - it still reads ${(stored.playlistIds || []).join(', ') || '(empty)'}. Double-check the IDs and try again.`;
-        soundcloudPlaylistIdsInput.value = (stored.playlistIds || []).join(', ');
-        soundcloudSetupSnapshot = soundcloudSetupFields();
-        await loadSoundCloudStatus();
-        await refreshSoundCloudPlaylistLegend();
         return;
       }
       await loadSoundCloudStatus();
@@ -697,69 +776,49 @@
     }
   });
 
-  // A playlist's ordinary web link (soundcloud.com/user/sets/name) doesn't contain the numeric
-  // ID the API needs, unlike Vimeo's showcase links - so offer to resolve it server-side (which
-  // requires an active connection) instead of asking anyone to dig for it by hand.
-  soundcloudPlaylistLookupBtn.addEventListener('click', async () => {
-    const url = soundcloudPlaylistLookupInput.value.trim();
-    soundcloudPlaylistLookupStatus.hidden = false;
-    if (!url) {
-      soundcloudPlaylistLookupStatus.textContent = 'Paste a playlist link first.';
-      return;
-    }
-    soundcloudPlaylistLookupBtn.disabled = true;
-    soundcloudPlaylistLookupStatus.textContent = 'Looking it up…';
-    try {
-      const res = await fetch(`/api/soundcloud-resolve-playlist?url=${encodeURIComponent(url)}`);
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Could not resolve that playlist URL.');
-      const existingIds = soundcloudPlaylistIdsInput.value
-        .split(',')
-        .map((s) => s.trim())
-        .filter(Boolean);
-      if (existingIds.includes(data.id)) {
-        soundcloudPlaylistLookupStatus.textContent = `"${data.name}" (${data.id}) is already in the list above.`;
-        soundcloudPlaylistLookupInput.value = '';
-        return;
-      }
-      const nextIds = [...existingIds, data.id];
-      soundcloudPlaylistIdsInput.value = nextIds.join(', ');
-      soundcloudPlaylistLookupInput.value = '';
-      // Save it right away rather than only dropping the ID in the box above. "Add" reads like
-      // it added something, so closing the popup afterwards - or hitting Cancel - looked like it
-      // had saved when nothing had been written yet. The credentials are necessarily already
-      // saved at this point (resolving a link needs a live connection), so this only ever
-      // rewrites the playlist list; leaving clientSecret out keeps the stored one.
-      soundcloudPlaylistLookupStatus.textContent = `Adding "${data.name}"…`;
-      const res2 = await fetch('/api/soundcloud-app-config', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ clientId: soundcloudClientIdInput.value.trim(), playlistIds: nextIds.join(', ') }),
-      });
-      const saved = await res2.json().catch(() => ({}));
-      if (!res2.ok) {
-        throw new Error(`Found "${data.name}", but couldn't save it: ${saved.error || 'unknown error'}. Click Save below to try again.`);
-      }
-      // Same read-back check the Save button does - "saved" has to mean it actually stuck.
-      const stored = await fetch('/api/soundcloud-app-config').then((r) => r.json()).catch(() => null);
-      if (stored && idsDiffer(nextIds, stored.playlistIds)) {
-        soundcloudPlaylistIdsInput.value = (stored.playlistIds || []).join(', ');
-        await refreshSoundCloudPlaylistLegend();
-        soundcloudSetupSnapshot = soundcloudSetupFields();
-        throw new Error(stored.playlistIdsLockedByEnv
-          ? `Found "${data.name}" (${data.id}), but the playlist list is set outside the app and overrides this box - see the note below.`
-          : `Found "${data.name}" (${data.id}), but it didn't save. Try again.`);
-      }
-      await refreshSoundCloudPlaylistLegend();
-      // The ID box changed, but it's already on disk - re-baseline so closing the popup right
-      // afterwards doesn't wrongly warn about unsaved changes.
-      soundcloudSetupSnapshot = soundcloudSetupFields();
-      soundcloudPlaylistLookupStatus.textContent = `Added and saved "${data.name}" (${data.id}).`;
-    } catch (err) {
-      soundcloudPlaylistLookupStatus.textContent = err.message;
-    } finally {
-      soundcloudPlaylistLookupBtn.disabled = false;
-    }
+  // Both connectors' lists are managed by the shared controller above: paste a link (or, for
+  // Vimeo, a bare ID), press Add, press Remove on a row to take one out - each change written and
+  // read back on the spot, with no separate Save step to forget.
+  const vimeoShowcaseManager = createIdListManager({
+    rowsEl: vimeoShowcaseRows,
+    addInput: vimeoShowcaseAddInput,
+    addBtn: vimeoShowcaseAddBtn,
+    statusEl: vimeoShowcaseAddStatus,
+    envNoteEl: vimeoShowcaseEnvNote,
+    saveUrl: '/api/vimeo-showcase-ids',
+    resolveUrl: '/api/vimeo-resolve-showcase',
+    detailsUrl: '/api/vimeo-showcases',
+    detailsKey: 'showcases',
+    idsKey: 'showcaseIds',
+    stateKey: 'vimeoShowcases',
+    countKey: 'vimeoShowcaseCount',
+    isConnected: () => state.vimeoConnected,
+    noun: 'showcase',
+    itemNoun: 'video',
+    serviceName: 'Vimeo',
+    // A Vimeo showcase link carries its ID, so one can be lined up before connecting.
+    needsConnectionToAdd: false,
+  });
+
+  const soundcloudPlaylistManager = createIdListManager({
+    rowsEl: soundcloudPlaylistRows,
+    addInput: soundcloudPlaylistAddInput,
+    addBtn: soundcloudPlaylistAddBtn,
+    statusEl: soundcloudPlaylistAddStatus,
+    envNoteEl: soundcloudPlaylistEnvNote,
+    saveUrl: '/api/soundcloud-playlist-ids',
+    resolveUrl: '/api/soundcloud-resolve-playlist',
+    detailsUrl: '/api/soundcloud-playlists',
+    detailsKey: 'playlists',
+    idsKey: 'playlistIds',
+    stateKey: 'soundcloudPlaylists',
+    countKey: 'soundcloudPlaylistCount',
+    isConnected: () => state.soundcloudConnected,
+    noun: 'playlist',
+    itemNoun: 'track',
+    serviceName: 'SoundCloud',
+    // A SoundCloud share link doesn't contain the ID - only the connected account can resolve it.
+    needsConnectionToAdd: true,
   });
 
   loadSoundCloudStatus();
