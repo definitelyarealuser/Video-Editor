@@ -136,6 +136,11 @@ function getAppConfigStatus() {
     // Env vars, if set, take priority and can't be edited from the app - the UI uses this to
     // explain why the fields are locked, rather than silently ignoring what's typed into them.
     lockedByEnv: !!(process.env.VIMEO_CLIENT_ID || process.env.VIMEO_CLIENT_SECRET),
+    // Reported separately because it locks a different field: VIMEO_SHOWCASE_IDS overrides the
+    // saved showcase list on its own, with nothing to do with the client credentials. Without
+    // this the Showcases box stayed editable and Save kept reporting success while writing to a
+    // file getShowcaseIds() never reads - so additions and deletions both appeared to do nothing.
+    showcaseIdsLockedByEnv: !!process.env.VIMEO_SHOWCASE_IDS,
   };
 }
 

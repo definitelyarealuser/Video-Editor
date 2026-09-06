@@ -120,6 +120,7 @@
   const soundcloudClientSecretInput = document.getElementById('soundcloud-client-secret-input');
   const soundcloudPlaylistIdsInput = document.getElementById('soundcloud-playlist-ids-input');
   const soundcloudPlaylistLegend = document.getElementById('soundcloud-playlist-legend');
+  const soundcloudPlaylistLockedNote = document.getElementById('soundcloud-playlist-locked-note');
   const soundcloudPlaylistLookupInput = document.getElementById('soundcloud-playlist-lookup-input');
   const soundcloudPlaylistLookupBtn = document.getElementById('soundcloud-playlist-lookup-btn');
   const soundcloudPlaylistLookupStatus = document.getElementById('soundcloud-playlist-lookup-status');
@@ -138,6 +139,7 @@
   const vimeoClientSecretInput = document.getElementById('vimeo-client-secret-input');
   const vimeoShowcaseIdsInput = document.getElementById('vimeo-showcase-ids-input');
   const vimeoShowcaseLegend = document.getElementById('vimeo-showcase-legend');
+  const vimeoShowcaseLockedNote = document.getElementById('vimeo-showcase-locked-note');
   const vimeoSetupLockedNote = document.getElementById('vimeo-setup-locked-note');
   const vimeoSetupError = document.getElementById('vimeo-setup-error');
   const vimeoSetupResetBtn = document.getElementById('vimeo-setup-reset-btn');
@@ -294,6 +296,18 @@
     });
   }
 
+  // A save can report OK and still not take effect: an env var that overrides the field wins on
+  // read-back, so the file is written and then ignored. Comparing what actually stuck against
+  // what was sent is the only way to catch that from here - otherwise the popup says "saved",
+  // closes, and the list is unchanged next time it's opened.
+  function idsDiffer(submitted, stored) {
+    const norm = (v) => (Array.isArray(v) ? v : String(v || '').split(','))
+      .map((x) => String(x).trim())
+      .filter(Boolean)
+      .join(',');
+    return norm(submitted) !== norm(stored);
+  }
+
   // Last line of defence for the same problem: never throw away typed-but-unsaved edits without
   // asking. Only fires when something actually changed, so the ordinary "opened it to look,
   // pressed Escape" case stays silent.
@@ -323,6 +337,9 @@
         vimeoSetupLockedNote.hidden = !data.lockedByEnv;
         vimeoClientIdInput.disabled = data.lockedByEnv;
         vimeoClientSecretInput.disabled = data.lockedByEnv;
+        // VIMEO_SHOWCASE_IDS locks this one field on its own, independently of the credentials.
+        vimeoShowcaseIdsInput.disabled = !!data.showcaseIdsLockedByEnv;
+        vimeoShowcaseLockedNote.hidden = !data.showcaseIdsLockedByEnv;
         updateVimeoSetupDialogActions(data.lockedByEnv);
         vimeoSetupResetBtn.hidden = data.lockedByEnv || !state.vimeoHasOAuthApp;
         vimeoSetupSnapshot = vimeoSetupFields();
@@ -391,6 +408,18 @@
       if (!res.ok) throw new Error(data.error || 'Could not save Vimeo settings.');
       if (shouldConnectAfterSave) {
         window.location.href = '/api/vimeo/connect';
+        return;
+      }
+      const stored = await fetch('/api/vimeo-app-config').then((r) => r.json()).catch(() => null);
+      if (stored && idsDiffer(showcaseIds, stored.showcaseIds)) {
+        vimeoSetupError.hidden = false;
+        vimeoSetupError.textContent = stored.showcaseIdsLockedByEnv
+          ? "Everything else saved, but the showcase list is set outside the app and overrides what's typed here - see the note under the Showcases box."
+          : `The showcase list didn't stick - it still reads ${(stored.showcaseIds || []).join(', ') || '(empty)'}. Double-check the IDs and try again.`;
+        vimeoShowcaseIdsInput.value = (stored.showcaseIds || []).join(', ');
+        vimeoSetupSnapshot = vimeoSetupFields();
+        await loadVimeoStatus();
+        await refreshVimeoShowcaseLegend();
         return;
       }
       await loadVimeoStatus();
@@ -547,6 +576,11 @@
         soundcloudSetupLockedNote.hidden = !data.lockedByEnv;
         soundcloudClientIdInput.disabled = data.lockedByEnv;
         soundcloudClientSecretInput.disabled = data.lockedByEnv;
+        // SOUNDCLOUD_PLAYLIST_IDS locks this one field on its own - see the Vimeo equivalent.
+        soundcloudPlaylistIdsInput.disabled = !!data.playlistIdsLockedByEnv;
+        soundcloudPlaylistLockedNote.hidden = !data.playlistIdsLockedByEnv;
+        soundcloudPlaylistLookupInput.disabled = !!data.playlistIdsLockedByEnv;
+        soundcloudPlaylistLookupBtn.disabled = !!data.playlistIdsLockedByEnv;
         updateSoundCloudSetupDialogActions(data.lockedByEnv);
         soundcloudSetupResetBtn.hidden = data.lockedByEnv || !state.soundcloudHasOAuthApp;
         soundcloudSetupSnapshot = soundcloudSetupFields();
@@ -610,6 +644,18 @@
       if (!res.ok) throw new Error(data.error || 'Could not save SoundCloud settings.');
       if (shouldConnectAfterSave) {
         window.location.href = '/api/soundcloud/connect';
+        return;
+      }
+      const stored = await fetch('/api/soundcloud-app-config').then((r) => r.json()).catch(() => null);
+      if (stored && idsDiffer(playlistIds, stored.playlistIds)) {
+        soundcloudSetupError.hidden = false;
+        soundcloudSetupError.textContent = stored.playlistIdsLockedByEnv
+          ? "Everything else saved, but the playlist list is set outside the app and overrides what's typed here - see the note under the Playlists box."
+          : `The playlist list didn't stick - it still reads ${(stored.playlistIds || []).join(', ') || '(empty)'}. Double-check the IDs and try again.`;
+        soundcloudPlaylistIdsInput.value = (stored.playlistIds || []).join(', ');
+        soundcloudSetupSnapshot = soundcloudSetupFields();
+        await loadSoundCloudStatus();
+        await refreshSoundCloudPlaylistLegend();
         return;
       }
       await loadSoundCloudStatus();
@@ -693,6 +739,16 @@
       const saved = await res2.json().catch(() => ({}));
       if (!res2.ok) {
         throw new Error(`Found "${data.name}", but couldn't save it: ${saved.error || 'unknown error'}. Click Save below to try again.`);
+      }
+      // Same read-back check the Save button does - "saved" has to mean it actually stuck.
+      const stored = await fetch('/api/soundcloud-app-config').then((r) => r.json()).catch(() => null);
+      if (stored && idsDiffer(nextIds, stored.playlistIds)) {
+        soundcloudPlaylistIdsInput.value = (stored.playlistIds || []).join(', ');
+        await refreshSoundCloudPlaylistLegend();
+        soundcloudSetupSnapshot = soundcloudSetupFields();
+        throw new Error(stored.playlistIdsLockedByEnv
+          ? `Found "${data.name}" (${data.id}), but the playlist list is set outside the app and overrides this box - see the note below.`
+          : `Found "${data.name}" (${data.id}), but it didn't save. Try again.`);
       }
       await refreshSoundCloudPlaylistLegend();
       // The ID box changed, but it's already on disk - re-baseline so closing the popup right

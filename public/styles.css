@@ -593,6 +593,18 @@ button.soundcloud-connect-link {
   margin-bottom: 14px;
 }
 
+/* Explains a field that's greyed out because something outside the app is setting it. Worth more
+   weight than an ordinary hint - it's the answer to "why won't my change save?". */
+.locked-note {
+  margin-top: 8px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--accent);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--text);
+}
+
 /* Spells out which saved ID is which showcase/playlist, so the ID boxes above read as a list of
    real names instead of a row of anonymous numbers. Only filled in once connected - the names
    have to be fetched from Vimeo/SoundCloud. */

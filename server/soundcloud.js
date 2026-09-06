@@ -101,6 +101,8 @@ function getAppConfigStatus() {
     hasSecret: !!(process.env.SOUNDCLOUD_CLIENT_SECRET || (config && config.clientSecret)),
     playlistIds: getPlaylistIds(),
     lockedByEnv: !!(process.env.SOUNDCLOUD_CLIENT_ID || process.env.SOUNDCLOUD_CLIENT_SECRET),
+    // Mirrors vimeo.js's showcaseIdsLockedByEnv - see the note there.
+    playlistIdsLockedByEnv: !!process.env.SOUNDCLOUD_PLAYLIST_IDS,
   };
 }
 
