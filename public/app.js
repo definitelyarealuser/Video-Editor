@@ -149,6 +149,11 @@
   state.vimeoHasOAuthApp = false;
   state.vimeoShowcaseCount = 0;
   let vimeoSetupOpen = false;
+  // What the popup's fields held when it was opened, so closing it can tell "nothing typed" from
+  // "typed something and never pressed Save".
+  let vimeoSetupSnapshot = '';
+  const vimeoSetupFields = () =>
+    [vimeoClientIdInput.value, vimeoClientSecretInput.value, vimeoShowcaseIdsInput.value].join('\u0000');
 
   // Shows/hides the status row's pieces based on where things stand - connected (either method),
   // OAuth app saved but not yet connected, or nothing set up at all. A legacy VIMEO_ACCESS_TOKEN
@@ -251,6 +256,51 @@
       });
   }
 
+  // Closing a popup that has text fields in it needs more care than a plain confirm dialog does.
+  // Selecting text inside the dialog and letting go of the mouse past its edge fires a click
+  // whose target is the backdrop, which the old "clicked outside" check read as "close me" -
+  // so editing a long list of IDs could dismiss the popup mid-edit and drop the change. Only
+  // count it as an outside click when the press *started* outside as well.
+  // Returns an unbind function, for the dialogs that wire themselves up per-invocation.
+  function bindOverlayDismiss(overlay, dismiss) {
+    let pressedOnOverlay = false;
+    const onMouseDown = (e) => {
+      pressedOnOverlay = e.target === overlay;
+    };
+    const onClick = (e) => {
+      const outsidePress = pressedOnOverlay;
+      pressedOnOverlay = false;
+      if (e.target === overlay && outsidePress) dismiss();
+    };
+    overlay.addEventListener('mousedown', onMouseDown);
+    overlay.addEventListener('click', onClick);
+    return () => {
+      overlay.removeEventListener('mousedown', onMouseDown);
+      overlay.removeEventListener('click', onClick);
+    };
+  }
+
+  // Enter in a text field should do the obvious thing. These popups deliberately aren't <form>s
+  // (a stray submit would reload the whole page and lose the render in progress), which left
+  // Enter doing nothing at all - so typing an ID and pressing Enter looked like a save that
+  // silently didn't happen.
+  function bindEnterToClick(inputs, button) {
+    inputs.forEach((input) => {
+      input.addEventListener('keydown', (e) => {
+        if (e.key !== 'Enter') return;
+        e.preventDefault();
+        if (!button.hidden && !button.disabled) button.click();
+      });
+    });
+  }
+
+  // Last line of defence for the same problem: never throw away typed-but-unsaved edits without
+  // asking. Only fires when something actually changed, so the ordinary "opened it to look,
+  // pressed Escape" case stays silent.
+  function confirmDiscard(changed) {
+    return !changed() || window.confirm('Close without saving? The changes you just made will be lost.');
+  }
+
   // One button does double duty: while not yet connected, it reads "Connect to Vimeo" and both
   // saves what's in the fields AND goes straight to Vimeo's permission screen in a single click
   // (see the click handler below) - no separate Save-then-Connect step. Once actually connected,
@@ -275,6 +325,7 @@
         vimeoClientSecretInput.disabled = data.lockedByEnv;
         updateVimeoSetupDialogActions(data.lockedByEnv);
         vimeoSetupResetBtn.hidden = data.lockedByEnv || !state.vimeoHasOAuthApp;
+        vimeoSetupSnapshot = vimeoSetupFields();
       })
       .then(refreshVimeoShowcaseLegend)
       .catch(() => {});
@@ -287,19 +338,24 @@
     vimeoSetupOpen = false;
   }
 
+  // Cancel/Escape/clicking outside, as opposed to closeVimeoSetupForm()'s unconditional close
+  // after a successful save.
+  function dismissVimeoSetupForm() {
+    if (confirmDiscard(() => vimeoSetupFields() !== vimeoSetupSnapshot)) closeVimeoSetupForm();
+  }
+
   vimeoToggleSetupBtn.addEventListener('click', () => {
-    if (vimeoSetupOpen) closeVimeoSetupForm();
+    if (vimeoSetupOpen) dismissVimeoSetupForm();
     else openVimeoSetupForm();
   });
-  vimeoSetupCancelBtn.addEventListener('click', closeVimeoSetupForm);
+  vimeoSetupCancelBtn.addEventListener('click', dismissVimeoSetupForm);
   // Popup behavior matching the app's other modals - click the backdrop or press Escape to
   // back out without saving.
-  vimeoSetupForm.addEventListener('click', (e) => {
-    if (e.target === vimeoSetupForm) closeVimeoSetupForm();
-  });
+  bindOverlayDismiss(vimeoSetupForm, dismissVimeoSetupForm);
   document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape' && vimeoSetupOpen) closeVimeoSetupForm();
+    if (e.key === 'Escape' && vimeoSetupOpen) dismissVimeoSetupForm();
   });
+  bindEnterToClick([vimeoClientIdInput, vimeoClientSecretInput, vimeoShowcaseIdsInput], vimeoSetupSaveBtn);
 
   vimeoSetupSaveBtn.addEventListener('click', async () => {
     vimeoSetupError.hidden = true;
@@ -400,6 +456,11 @@
   state.soundcloudHasOAuthApp = false;
   state.soundcloudPlaylistCount = 0;
   let soundcloudSetupOpen = false;
+  // Mirrors the Vimeo popup's unsaved-edit tracking. The Add-by-link box isn't part of the
+  // snapshot: what it holds is a URL that's already been consumed, not an unsaved setting.
+  let soundcloudSetupSnapshot = '';
+  const soundcloudSetupFields = () =>
+    [soundcloudClientIdInput.value, soundcloudClientSecretInput.value, soundcloudPlaylistIdsInput.value].join('\u0000');
 
   // Mirrors refreshVimeoConnectUI() - SoundCloud has no legacy-token equivalent (it's always
   // real OAuth), so there's no "hide the settings toggle entirely" case to account for here.
@@ -488,6 +549,7 @@
         soundcloudClientSecretInput.disabled = data.lockedByEnv;
         updateSoundCloudSetupDialogActions(data.lockedByEnv);
         soundcloudSetupResetBtn.hidden = data.lockedByEnv || !state.soundcloudHasOAuthApp;
+        soundcloudSetupSnapshot = soundcloudSetupFields();
       })
       .then(refreshSoundCloudPlaylistLegend)
       .catch(() => {});
@@ -500,17 +562,23 @@
     soundcloudSetupOpen = false;
   }
 
+  // Mirrors dismissVimeoSetupForm().
+  function dismissSoundCloudSetupForm() {
+    if (confirmDiscard(() => soundcloudSetupFields() !== soundcloudSetupSnapshot)) closeSoundCloudSetupForm();
+  }
+
   soundcloudToggleSetupBtn.addEventListener('click', () => {
-    if (soundcloudSetupOpen) closeSoundCloudSetupForm();
+    if (soundcloudSetupOpen) dismissSoundCloudSetupForm();
     else openSoundCloudSetupForm();
   });
-  soundcloudSetupCancelBtn.addEventListener('click', closeSoundCloudSetupForm);
-  soundcloudSetupForm.addEventListener('click', (e) => {
-    if (e.target === soundcloudSetupForm) closeSoundCloudSetupForm();
-  });
+  soundcloudSetupCancelBtn.addEventListener('click', dismissSoundCloudSetupForm);
+  bindOverlayDismiss(soundcloudSetupForm, dismissSoundCloudSetupForm);
   document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape' && soundcloudSetupOpen) closeSoundCloudSetupForm();
+    if (e.key === 'Escape' && soundcloudSetupOpen) dismissSoundCloudSetupForm();
   });
+  bindEnterToClick([soundcloudClientIdInput, soundcloudClientSecretInput, soundcloudPlaylistIdsInput], soundcloudSetupSaveBtn);
+  // The link box's own Enter goes to Add, not Save - that's the button sitting right next to it.
+  bindEnterToClick([soundcloudPlaylistLookupInput], soundcloudPlaylistLookupBtn);
 
   soundcloudSetupSaveBtn.addEventListener('click', async () => {
     soundcloudSetupError.hidden = true;
@@ -627,6 +695,9 @@
         throw new Error(`Found "${data.name}", but couldn't save it: ${saved.error || 'unknown error'}. Click Save below to try again.`);
       }
       await refreshSoundCloudPlaylistLegend();
+      // The ID box changed, but it's already on disk - re-baseline so closing the popup right
+      // afterwards doesn't wrongly warn about unsaved changes.
+      soundcloudSetupSnapshot = soundcloudSetupFields();
       soundcloudPlaylistLookupStatus.textContent = `Added and saved "${data.name}" (${data.id}).`;
     } catch (err) {
       soundcloudPlaylistLookupStatus.textContent = err.message;
@@ -743,9 +814,6 @@
         cleanup();
         resolve({ publish: true, showcaseIds, privacy });
       };
-      const onOverlayClick = (e) => {
-        if (e.target === vimeoConfirmOverlay) onCancel();
-      };
       const onKeydown = (e) => {
         if (e.key === 'Escape') onCancel();
       };
@@ -754,13 +822,13 @@
         vimeoCancelBtn.removeEventListener('click', onCancel);
         renderOnlyBtn.removeEventListener('click', onRenderOnly);
         renderPublishBtn.removeEventListener('click', onRenderPublish);
-        vimeoConfirmOverlay.removeEventListener('click', onOverlayClick);
+        unbindOverlayDismiss();
         document.removeEventListener('keydown', onKeydown);
       }
       vimeoCancelBtn.addEventListener('click', onCancel);
       renderOnlyBtn.addEventListener('click', onRenderOnly);
       renderPublishBtn.addEventListener('click', onRenderPublish);
-      vimeoConfirmOverlay.addEventListener('click', onOverlayClick);
+      const unbindOverlayDismiss = bindOverlayDismiss(vimeoConfirmOverlay, onCancel);
       document.addEventListener('keydown', onKeydown);
     });
   }
@@ -810,9 +878,6 @@
         cleanup();
         resolve({ publish: true, playlistIds, privacy });
       };
-      const onOverlayClick = (e) => {
-        if (e.target === soundcloudConfirmOverlay) onCancel();
-      };
       const onKeydown = (e) => {
         if (e.key === 'Escape') onCancel();
       };
@@ -821,13 +886,13 @@
         soundcloudCancelBtn.removeEventListener('click', onCancel);
         soundcloudRenderOnlyBtn.removeEventListener('click', onRenderOnly);
         soundcloudRenderPublishBtn.removeEventListener('click', onRenderPublish);
-        soundcloudConfirmOverlay.removeEventListener('click', onOverlayClick);
+        unbindOverlayDismiss();
         document.removeEventListener('keydown', onKeydown);
       }
       soundcloudCancelBtn.addEventListener('click', onCancel);
       soundcloudRenderOnlyBtn.addEventListener('click', onRenderOnly);
       soundcloudRenderPublishBtn.addEventListener('click', onRenderPublish);
-      soundcloudConfirmOverlay.addEventListener('click', onOverlayClick);
+      const unbindOverlayDismiss = bindOverlayDismiss(soundcloudConfirmOverlay, onCancel);
       document.addEventListener('keydown', onKeydown);
     });
   }
@@ -1376,9 +1441,7 @@
       openEditOverlay();
     });
     editCloseBtn.addEventListener('click', closeEditOverlay);
-    editOverlay.addEventListener('click', (e) => {
-      if (e.target === editOverlay) closeEditOverlay();
-    });
+    bindOverlayDismiss(editOverlay, closeEditOverlay);
 
     function renderEditList() {
       editList.innerHTML = '';
@@ -1436,9 +1499,6 @@
         renderThumbs();
         renderEditList();
       };
-      const onOverlayClick = (e) => {
-        if (e.target === deleteConfirmOverlay) onCancel();
-      };
       const onKeydown = (e) => {
         if (e.key === 'Escape') onCancel();
       };
@@ -1446,12 +1506,12 @@
         deleteConfirmOverlay.hidden = true;
         deleteCancelBtn.removeEventListener('click', onCancel);
         deleteConfirmBtn.removeEventListener('click', onConfirm);
-        deleteConfirmOverlay.removeEventListener('click', onOverlayClick);
+        unbindOverlayDismiss();
         document.removeEventListener('keydown', onKeydown);
       }
       deleteCancelBtn.addEventListener('click', onCancel);
       deleteConfirmBtn.addEventListener('click', onConfirm);
-      deleteConfirmOverlay.addEventListener('click', onOverlayClick);
+      const unbindOverlayDismiss = bindOverlayDismiss(deleteConfirmOverlay, onCancel);
       document.addEventListener('keydown', onKeydown);
     }
 
@@ -1638,9 +1698,7 @@
     });
   });
   folderBrowserCancelBtn.addEventListener('click', closeFolderBrowser);
-  folderBrowserOverlay.addEventListener('click', (e) => {
-    if (e.target === folderBrowserOverlay) closeFolderBrowser();
-  });
+  bindOverlayDismiss(folderBrowserOverlay, closeFolderBrowser);
   folderBrowserSelectBtn.addEventListener('click', () => {
     if (folderBrowserTargetInput && folderBrowserCurrentDir) {
       folderBrowserTargetInput.value = folderBrowserCurrentDir;
