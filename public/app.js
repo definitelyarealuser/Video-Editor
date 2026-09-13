@@ -1015,6 +1015,7 @@
   const normalizeAudioCheckbox = document.getElementById('normalizeAudio');
   const targetLufsSelect = document.getElementById('targetLufs');
   const checkLoudnessBtn = document.getElementById('checkLoudnessBtn');
+  const audioLevelPanel = document.getElementById('audio-level-panel');
   const loudnessResult = document.getElementById('loudnessResult');
   const loudnessIcon = document.getElementById('loudnessIcon');
   const loudnessHeadline = document.getElementById('loudnessHeadline');
@@ -1030,6 +1031,18 @@
   // sound quieter than last week?" has an answer instead of being a judgement call made fresh
   // every Sunday. Advisory only - it never changes a setting on its own.
   let loudnessCheckInFlight = false;
+  let loudnessPending = false;
+  let loudnessDebounceTimer = null;
+
+  // Trimming changes the answer, so the measurement follows the trim rather than being taken once
+  // at upload and left to go stale. Debounced because dragging a handle fires constantly, and
+  // coalesced because a change landing mid-measurement has to be honoured once the current one
+  // finishes - dropping it would leave a figure on screen describing a range nobody selected.
+  function scheduleLoudnessCheck() {
+    if (!state.videoJobId) return;
+    clearTimeout(loudnessDebounceTimer);
+    loudnessDebounceTimer = setTimeout(runLoudnessCheck, 900);
+  }
 
   function showLoudnessMessage(icon, headline, kind) {
     loudnessResult.hidden = false;
@@ -1042,7 +1055,12 @@
   }
 
   async function runLoudnessCheck() {
-    if (!state.videoJobId || loudnessCheckInFlight) return;
+    if (!state.videoJobId) return;
+    clearTimeout(loudnessDebounceTimer);
+    if (loudnessCheckInFlight) {
+      loudnessPending = true;
+      return;
+    }
     loudnessCheckInFlight = true;
     checkLoudnessBtn.disabled = true;
     showLoudnessMessage('⏳', 'Measuring the audio…', 'working');
@@ -1088,6 +1106,10 @@
     } finally {
       loudnessCheckInFlight = false;
       checkLoudnessBtn.disabled = !state.videoJobId;
+      if (loudnessPending) {
+        loudnessPending = false;
+        runLoudnessCheck();
+      }
     }
   }
 
@@ -1379,6 +1401,7 @@
     updateTrimUI();
     scrubTo(start);
     scheduleSizeEstimate();
+    scheduleLoudnessCheck();
   }
 
   // --- Live preview while trimming ---
@@ -1433,6 +1456,7 @@
     const end = parseFloat(trimEndHandle.value);
     playRange(start, Math.min(start + SNIPPET_SECONDS, end));
     scheduleSizeEstimate();
+    scheduleLoudnessCheck();
   });
 
   trimEndHandle.addEventListener('input', () => {
@@ -1447,6 +1471,7 @@
     const end = parseFloat(trimEndHandle.value);
     playRange(Math.max(start, end - SNIPPET_SECONDS), end);
     scheduleSizeEstimate();
+    scheduleLoudnessCheck();
   });
 
   // Fine-tune nudge buttons: step a handle by a fixed amount once dragging has gotten it
@@ -1929,10 +1954,12 @@
     setTrimRange(0, duration);
     trimPanel.hidden = false;
     qualityPanel.hidden = false;
+    audioLevelPanel.hidden = false;
 
-    // Measured up front rather than on demand: the whole point is to catch a week that drifted,
-    // which nobody thinks to go looking for. It only reads the audio, so it finishes long before
-    // anyone has finished filling in the name fields, and it changes nothing on its own.
+    // Started up front rather than waiting to be asked, even though the panel it reports into is
+    // the last step: the whole point is to catch a week that drifted, which nobody thinks to go
+    // looking for. Running it now means the answer is waiting by the time anyone scrolls down to
+    // it, and any trim made on the way there re-runs it. It changes nothing on its own.
     checkLoudnessBtn.disabled = false;
     runLoudnessCheck();
 
@@ -1990,6 +2017,7 @@
     inputVideo.value = '';
     trimPanel.hidden = true;
     qualityPanel.hidden = true;
+    audioLevelPanel.hidden = true;
     state.sizeEstimates = null;
     checkLoudnessBtn.disabled = true;
     loudnessResult.hidden = true;

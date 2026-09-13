@@ -471,8 +471,13 @@ async function estimateFileSizes({ videoPath, trimStart, trimEnd, width, height,
 //    second per four minutes of audio
 //  - a sampled pass costs about the same no matter how long the clip is, because the windows are
 //    seeked to directly and everything between them is never decoded
-// Short clips are measured straight through - it is both exact and quicker than seeking around.
-const LOUDNESS_WHOLE_RANGE_MAX_SECONDS = 900;
+// Measured straight through up to an hour, which is exact and covers essentially every sermon.
+// This used to be 15 minutes, back when the check sat beside the render button and had to answer
+// while someone waited on it. It now reports into the last step of the form and starts as soon as
+// the video lands, so it has the whole time anyone spends naming the file and setting save paths
+// to finish in - which buys an exact reading instead of an estimate, and removes the one real
+// weakness of sampling: a brief peak falling between windows.
+const LOUDNESS_WHOLE_RANGE_MAX_SECONDS = 3600;
 // Many short windows rather than a few long ones. Coverage is what catches a one-off loud moment
 // (a song, applause, a dropped mic): sampling a 45-minute clip with 12 x 20s windows walked
 // straight past a 60-second burst and under-read its peak by 17 dB, while ~100 short windows

@@ -186,33 +186,6 @@
               Render MP3
             </label>
           </div>
-          <div class="toggle-row">
-            <label class="inline-check">
-              <input type="checkbox" id="normalizeAudio" />
-              Normalize audio to
-            </label>
-            <select id="targetLufs">
-              <option value="-20">-20</option>
-              <option value="-19">-19</option>
-              <option value="-18">-18</option>
-              <option value="-17">-17</option>
-              <option value="-16">-16</option>
-              <option value="-15">-15</option>
-              <option value="-14" selected>-14 (Default)</option>
-              <option value="-13">-13</option>
-              <option value="-12">-12</option>
-              <option value="-11">-11</option>
-              <option value="-10">-10</option>
-            </select>
-            <span class="toggle-hint">LUFS</span>
-            <button type="button" id="checkLoudnessBtn" class="browse-btn" disabled>Check audio level</button>
-          </div>
-          <div id="loudnessResult" class="loudness-result" hidden>
-            <div class="loudness-headline"><span id="loudnessIcon" class="loudness-icon"></span><span id="loudnessHeadline"></span></div>
-            <ul id="loudnessReasons" class="loudness-reasons"></ul>
-            <div class="loudness-measured" id="loudnessMeasured"></div>
-            <button type="button" id="applyNormalizeBtn" class="loudness-apply" hidden>Turn on normalizing</button>
-          </div>
         </div>
       </section>
 
@@ -377,6 +350,37 @@
           </div>
         </div>
       </div>
+
+      <section class="quality-panel audio-level-panel" id="audio-level-panel" hidden>
+        <h3>Audio level <span class="trim-panel-hint">(measured automatically, and re-measured whenever you change the trim - so it always describes the part you're actually publishing)</span></h3>
+        <div id="loudnessResult" class="loudness-result" hidden>
+          <div class="loudness-headline"><span id="loudnessIcon" class="loudness-icon"></span><span id="loudnessHeadline"></span></div>
+          <ul id="loudnessReasons" class="loudness-reasons"></ul>
+          <div class="loudness-measured" id="loudnessMeasured"></div>
+          <button type="button" id="applyNormalizeBtn" class="loudness-apply" hidden>Turn on normalizing</button>
+        </div>
+        <div class="toggle-row">
+          <label class="inline-check">
+            <input type="checkbox" id="normalizeAudio" />
+            Normalize audio to
+          </label>
+          <select id="targetLufs">
+            <option value="-20">-20</option>
+            <option value="-19">-19</option>
+            <option value="-18">-18</option>
+            <option value="-17">-17</option>
+            <option value="-16">-16</option>
+            <option value="-15">-15</option>
+            <option value="-14" selected>-14 (Default)</option>
+            <option value="-13">-13</option>
+            <option value="-12">-12</option>
+            <option value="-11">-11</option>
+            <option value="-10">-10</option>
+          </select>
+          <span class="toggle-hint">LUFS</span>
+          <button type="button" id="checkLoudnessBtn" class="browse-btn" disabled>Re-check now</button>
+        </div>
+      </section>
 
       <div id="render-requirements" class="render-requirements" hidden></div>
       <button type="submit" id="render-btn" disabled>Render Video</button>
