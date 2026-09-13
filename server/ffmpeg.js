@@ -97,8 +97,8 @@ async function probe(filePath) {
  * picture: silence under the PNG segments, then either crossfaded the same
  * way as the video (`crossfadeAudio: true`) or hard-cut at the moment each
  * video transition starts/ends (`crossfadeAudio: false`). Optionally the
- * combined audio is loudness-normalized (EBU R128 `loudnorm`) before the
- * final fade-out.
+ * the sermon's own audio is loudness-normalized (EBU R128 `loudnorm`) before the
+ * bookend silence is attached, and the whole thing fades out at the end.
  *
  * The MP3 export is a wholly separate ffmpeg pass (see buildAudioOnlyFilterGraph/
  * renderAudio below) - it doesn't touch the PNG or video streams at all, so it renders
@@ -140,11 +140,28 @@ function buildFilterGraph({
 
   const audioChain = [mainAudioSource];
 
+  // Normalized before the silent bookend holds are attached, not after. loudnorm here runs in its
+  // single-pass streaming mode, where it adapts as audio flows through it - so feeding it several
+  // seconds of digital silence first spends that adaptation on nothing and leaves the sermon
+  // itself under-corrected. Measured: a -28 LUFS source aiming at -14 came out at -22 with the
+  // silence in front, and lands on -14.2 without it. The error grew the quieter the source was,
+  // so the weeks that most needed normalizing were the ones it helped least - and the MP3, which
+  // has always normalized its own audio directly (see buildAudioOnlyFilterGraph), came out
+  // correct meanwhile, so the same sermon could be published at two different levels.
+  //
+  // Normalizing the sermon audio on its own is also just the right question to ask: the bookend
+  // silence isn't content, and how long it runs shouldn't change how loud the sermon ends up.
+  let mainLabel = 'maina';
+  if (normalize) {
+    audioChain.push(`[maina]loudnorm=I=${targetLufs}:TP=-1.5:LRA=11[mainan]`);
+    mainLabel = 'mainan';
+  }
+
   if (crossfadeAudio) {
     audioChain.push(
       `anullsrc=channel_layout=stereo:sample_rate=48000,atrim=0:${startDuration},asetpts=PTS-STARTPTS[silence1]`,
       `anullsrc=channel_layout=stereo:sample_rate=48000,atrim=0:${endDuration},asetpts=PTS-STARTPTS[silence2]`,
-      `[silence1][maina]acrossfade=d=${transition}[xa1]`,
+      `[silence1][${mainLabel}]acrossfade=d=${transition}[xa1]`,
       `[xa1][silence2]acrossfade=d=${transition}[xa2]`
     );
   } else {
@@ -153,16 +170,11 @@ function buildFilterGraph({
     audioChain.push(
       `anullsrc=channel_layout=stereo:sample_rate=48000,atrim=0:${offset1},asetpts=PTS-STARTPTS[silence1]`,
       `anullsrc=channel_layout=stereo:sample_rate=48000,atrim=0:${endDuration - transition},asetpts=PTS-STARTPTS[silence2]`,
-      `[silence1][maina][silence2]concat=n=3:v=0:a=1[xa2]`
+      `[silence1][${mainLabel}][silence2]concat=n=3:v=0:a=1[xa2]`
     );
   }
 
-  let lastAudioLabel = 'xa2';
-  if (normalize) {
-    audioChain.push(`[xa2]loudnorm=I=${targetLufs}:TP=-1.5:LRA=11[xa2n]`);
-    lastAudioLabel = 'xa2n';
-  }
-  audioChain.push(`[${lastAudioLabel}]afade=t=out:st=${fadeStart}:d=${fadeOut}[aout]`);
+  audioChain.push(`[xa2]afade=t=out:st=${fadeStart}:d=${fadeOut}[aout]`);
 
   return {
     filterComplex: [...videoChain, ...audioChain].join(';'),
@@ -441,11 +453,139 @@ async function estimateFileSizes({ videoPath, trimStart, trimEnd, width, height,
   return { video, audio };
 }
 
+
+/**
+ * Measures how loud the sermon audio actually is, so the decision to normalize can be based on a
+ * number rather than a guess about whether this week sounds quieter than last week.
+ *
+ * Uses `loudnorm`'s analysis pass, which reports the same EBU R128 figures the render itself
+ * normalizes against - so what's measured here is exactly what the normalizer would act on. Only
+ * the audio is decoded (`-vn`), which is why this is quick even on an hour-long service.
+ *
+ * Measures the trimmed range, not the whole file: the pre-roll and post-roll a sermon gets topped
+ * and tailed with are often music or a silent room, and either would drag the number away from
+ * what the published clip will actually sound like.
+ */
+async function analyzeLoudness({ videoPath, trimStart, trimEnd }) {
+  const seekArgs =
+    trimStart != null && trimEnd != null
+      ? ['-ss', String(trimStart), '-to', String(trimEnd)]
+      : [];
+
+  const { stderr } = await run('ffmpeg', [
+    '-nostats',
+    '-hide_banner',
+    ...seekArgs,
+    '-i', videoPath,
+    '-vn',
+    '-af', 'loudnorm=print_format=json',
+    '-f', 'null',
+    '-',
+  ]);
+
+  // The JSON block is printed to stderr, last, after whatever ffmpeg logged on the way through.
+  const match = stderr.match(/\{[^{}]*"input_i"[^{}]*\}/);
+  if (!match) {
+    const err = new Error('Could not read a loudness measurement from the audio.');
+    err.detail = stderr.slice(-4000);
+    throw err;
+  }
+  const parsed = JSON.parse(match[0]);
+
+  // Digital silence reports as "-inf" rather than a number - a real answer, not a failure, so it
+  // is passed through as null for the caller to describe rather than being coerced to a
+  // nonsensical figure.
+  const toNumber = (value) => {
+    const n = parseFloat(value);
+    return Number.isFinite(n) ? n : null;
+  };
+
+  return {
+    integratedLufs: toNumber(parsed.input_i),
+    truePeakDb: toNumber(parsed.input_tp),
+    loudnessRange: toNumber(parsed.input_lra),
+  };
+}
+
+// How far from the target counts as worth fixing. Below a listener can't tell; above it is the
+// week-to-week drift that makes one sermon noticeably quieter than the last.
+const LOUDNESS_CLOSE_ENOUGH_LU = 1;
+const LOUDNESS_WORTH_FIXING_LU = 3;
+// Anything peaking above this is close enough to full scale that the platforms' own encoding can
+// push it into clipping.
+const TRUE_PEAK_CEILING_DB = -1;
+
+/**
+ * Turns a measurement into a plain-English verdict. Kept next to the measurement, and separate
+ * from any wording the page uses, so the thresholds are in one place and testable on their own.
+ *
+ * Returns a `verdict` of 'silent', 'ok', 'optional' or 'recommended', plus the gain that
+ * normalizing would apply - which is the number that actually explains the recommendation.
+ */
+function recommendNormalization({ integratedLufs, truePeakDb, loudnessRange }, targetLufs) {
+  if (integratedLufs === null) {
+    return {
+      verdict: 'silent',
+      headline: 'No audio to measure',
+      gainDb: null,
+      reasons: ['No sound was detected in this clip.'],
+    };
+  }
+
+  const gainDb = Math.round((targetLufs - integratedLufs) * 10) / 10;
+  const distance = Math.abs(gainDb);
+  const direction = gainDb > 0 ? 'quieter' : 'louder';
+  const peaksTooHot = truePeakDb !== null && truePeakDb > TRUE_PEAK_CEILING_DB;
+  const reasons = [];
+
+  // Each reason is labelled and states one fact on its own terms, so the list still reads
+  // straight when the headline is driven by peaks while the average level is perfectly fine -
+  // "Normalizing recommended" above a bare "already on target" line just reads like a
+  // contradiction.
+  let verdict;
+  if (distance <= LOUDNESS_CLOSE_ENOUGH_LU) {
+    verdict = 'ok';
+    reasons.push(`Level: on target, within ${LOUDNESS_CLOSE_ENOUGH_LU} LU of ${targetLufs} LUFS.`);
+  } else if (distance <= LOUDNESS_WORTH_FIXING_LU) {
+    verdict = 'optional';
+    reasons.push(`Level: ${distance.toFixed(1)} LU ${direction} than the ${targetLufs} LUFS target - a small difference most listeners won't pick up.`);
+  } else {
+    verdict = 'recommended';
+    reasons.push(`Level: ${distance.toFixed(1)} LU ${direction} than the ${targetLufs} LUFS target - enough to stand out next to a normally-levelled sermon.`);
+  }
+
+  // Worth fixing on its own whatever the average level is doing: normalizing brings a true-peak
+  // ceiling with it, and these are the moments that distort.
+  if (peaksTooHot) {
+    reasons.push(`Peaks: ${truePeakDb.toFixed(1)} dBTP, over the ${TRUE_PEAK_CEILING_DB} dBTP ceiling - the loudest moments risk distorting once Vimeo and SoundCloud re-encode it.`);
+    if (verdict !== 'recommended') verdict = 'recommended';
+  }
+
+  // Spoken word normally sits well under this. A wide range usually means the quiet passages are
+  // hard to hear at all, which normalizing evens out less than it might seem - so this is
+  // reported for information and never changes the verdict.
+  if (loudnessRange !== null && loudnessRange > 15) {
+    reasons.push(`Range: ${loudnessRange.toFixed(1)} LU between the quietest and loudest passages, which is wide for speech - worth a listen to the quiet parts.`);
+  }
+
+  const headline = verdict === 'ok'
+    ? 'Levels look good - no need to normalize'
+    : verdict === 'optional'
+      ? 'Close to target - normalizing optional'
+      : distance <= LOUDNESS_WORTH_FIXING_LU && peaksTooHot
+        ? 'Normalizing recommended - peaks are too hot'
+        : `Normalizing recommended - this clip is noticeably ${direction}`;
+
+  return { verdict, headline, gainDb, reasons };
+}
+
 module.exports = {
   probe,
   render,
   renderAudio,
   checkFfmpegAvailable,
+  analyzeLoudness,
+  recommendNormalization,
   estimateFileSizes,
   VIDEO_QUALITY_PRESETS,
   MP3_BITRATE_PRESETS,

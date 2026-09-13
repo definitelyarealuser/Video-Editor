@@ -605,6 +605,73 @@ button.soundcloud-connect-link {
   color: var(--text);
 }
 
+/* The measured audio level and what to do about it. Colour-coded by verdict so the answer is
+   readable at a glance, with the raw figures underneath for anyone who wants to check the
+   reasoning rather than take it on faith. */
+.loudness-result {
+  margin-top: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--muted);
+  border-radius: 8px;
+  background: var(--bg);
+  font-size: 0.82rem;
+}
+
+.loudness-result.loudness-ok { border-left-color: var(--success); }
+.loudness-result.loudness-optional { border-left-color: var(--accent); }
+.loudness-result.loudness-recommended { border-left-color: #e0a63f; }
+.loudness-result.loudness-error,
+.loudness-result.loudness-silent { border-left-color: var(--error); }
+
+.loudness-headline {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.loudness-icon { flex: none; }
+.loudness-ok .loudness-icon { color: var(--success); }
+.loudness-optional .loudness-icon { color: var(--accent); }
+.loudness-recommended .loudness-icon { color: #e0a63f; }
+.loudness-error .loudness-icon,
+.loudness-silent .loudness-icon { color: var(--error); }
+
+.loudness-reasons {
+  margin: 6px 0 0;
+  padding-left: 20px;
+  color: var(--muted);
+  line-height: 1.5;
+}
+
+.loudness-reasons:empty { display: none; }
+
+.loudness-measured {
+  margin-top: 6px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.loudness-measured:empty { display: none; }
+
+.loudness-apply {
+  margin-top: 10px;
+  background: color-mix(in srgb, var(--accent) 14%, var(--panel));
+  border: 1px solid color-mix(in srgb, var(--accent) 40%, var(--border));
+  color: var(--accent);
+  border-radius: 8px;
+  padding: 5px 14px;
+  font-size: 0.82rem;
+  cursor: pointer;
+}
+
+.loudness-apply:hover {
+  background: color-mix(in srgb, var(--accent) 24%, var(--panel));
+  border-color: var(--accent);
+}
+
 /* The showcase/playlist list inside a setup popup: one row per entry, real name first with its ID
    alongside, and a Remove button. Replaces a comma-separated text box - the names are what anyone
    actually thinks in, and add/remove are one click each rather than careful comma surgery. */

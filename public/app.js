@@ -1014,10 +1014,86 @@
 
   const normalizeAudioCheckbox = document.getElementById('normalizeAudio');
   const targetLufsSelect = document.getElementById('targetLufs');
+  const checkLoudnessBtn = document.getElementById('checkLoudnessBtn');
+  const loudnessResult = document.getElementById('loudnessResult');
+  const loudnessIcon = document.getElementById('loudnessIcon');
+  const loudnessHeadline = document.getElementById('loudnessHeadline');
+  const loudnessReasons = document.getElementById('loudnessReasons');
+  const loudnessMeasured = document.getElementById('loudnessMeasured');
+  const applyNormalizeBtn = document.getElementById('applyNormalizeBtn');
   normalizeAudioCheckbox.addEventListener('change', () => {
     targetLufsSelect.disabled = !normalizeAudioCheckbox.checked;
   });
   targetLufsSelect.disabled = !normalizeAudioCheckbox.checked;
+
+  // Measures the clip and says whether normalizing is worth switching on, so "does this week
+  // sound quieter than last week?" has an answer instead of being a judgement call made fresh
+  // every Sunday. Advisory only - it never changes a setting on its own.
+  let loudnessCheckInFlight = false;
+
+  function showLoudnessMessage(icon, headline, kind) {
+    loudnessResult.hidden = false;
+    loudnessResult.className = `loudness-result loudness-${kind}`;
+    loudnessIcon.textContent = icon;
+    loudnessHeadline.textContent = headline;
+    loudnessReasons.innerHTML = '';
+    loudnessMeasured.textContent = '';
+    applyNormalizeBtn.hidden = true;
+  }
+
+  async function runLoudnessCheck() {
+    if (!state.videoJobId || loudnessCheckInFlight) return;
+    loudnessCheckInFlight = true;
+    checkLoudnessBtn.disabled = true;
+    showLoudnessMessage('⏳', 'Measuring the audio…', 'working');
+    try {
+      const res = await fetch(`/api/analyze-loudness/${state.videoJobId}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          trimStart: trimStartHandle.value,
+          trimEnd: trimEndHandle.value,
+          targetLufs: targetLufsSelect.value,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Could not measure the audio level.');
+
+      const icon = { ok: '✓', optional: '•', recommended: '!', silent: '?' }[data.verdict] || '•';
+      showLoudnessMessage(icon, data.headline, data.verdict);
+      (data.reasons || []).forEach((reason) => {
+        const li = document.createElement('li');
+        li.textContent = reason;
+        loudnessReasons.appendChild(li);
+      });
+      if (data.integratedLufs !== null) {
+        // The raw figures, spelled out - the same numbers anyone would get checking this
+        // by hand, so the recommendation above can be sanity-checked rather than trusted blind.
+        loudnessMeasured.textContent =
+          `Measured ${data.integratedLufs.toFixed(1)} LUFS, peaks ${data.truePeakDb.toFixed(1)} dBTP. ` +
+          `Normalizing would ${data.gainDb >= 0 ? 'add' : 'take off'} ${Math.abs(data.gainDb).toFixed(1)} dB.`;
+      }
+      // Only offered when it would actually change something, and only as a one-click shortcut
+      // for the checkbox just above - never applied automatically.
+      applyNormalizeBtn.hidden = normalizeAudioCheckbox.checked || data.verdict !== 'recommended';
+    } catch (err) {
+      showLoudnessMessage('✕', err.message, 'error');
+    } finally {
+      loudnessCheckInFlight = false;
+      checkLoudnessBtn.disabled = !state.videoJobId;
+    }
+  }
+
+  checkLoudnessBtn.addEventListener('click', runLoudnessCheck);
+  applyNormalizeBtn.addEventListener('click', () => {
+    normalizeAudioCheckbox.checked = true;
+    targetLufsSelect.disabled = false;
+    applyNormalizeBtn.hidden = true;
+  });
+  // Changing the target changes the verdict, so a result measured against the old one is stale.
+  targetLufsSelect.addEventListener('change', () => {
+    if (!loudnessResult.hidden && state.videoJobId) runLoudnessCheck();
+  });
 
   const exportMp3Checkbox = document.getElementById('exportMp3');
   // The idle label reflects whatever's checked right now - only touched outside an
@@ -1847,6 +1923,12 @@
     trimPanel.hidden = false;
     qualityPanel.hidden = false;
 
+    // Measured up front rather than on demand: the whole point is to catch a week that drifted,
+    // which nobody thinks to go looking for. It only reads the audio, so it finishes long before
+    // anyone has finished filling in the name fields, and it changes nothing on its own.
+    checkLoudnessBtn.disabled = false;
+    runLoudnessCheck();
+
     updateRenderButton();
   }
 
@@ -1902,6 +1984,8 @@
     trimPanel.hidden = true;
     qualityPanel.hidden = true;
     state.sizeEstimates = null;
+    checkLoudnessBtn.disabled = true;
+    loudnessResult.hidden = true;
     updateRenderButton();
   });
 

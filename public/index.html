@@ -205,6 +205,13 @@
               <option value="-10">-10</option>
             </select>
             <span class="toggle-hint">LUFS</span>
+            <button type="button" id="checkLoudnessBtn" class="browse-btn" disabled>Check audio level</button>
+          </div>
+          <div id="loudnessResult" class="loudness-result" hidden>
+            <div class="loudness-headline"><span id="loudnessIcon" class="loudness-icon"></span><span id="loudnessHeadline"></span></div>
+            <ul id="loudnessReasons" class="loudness-reasons"></ul>
+            <div class="loudness-measured" id="loudnessMeasured"></div>
+            <button type="button" id="applyNormalizeBtn" class="loudness-apply" hidden>Turn on normalizing</button>
           </div>
         </div>
       </section>

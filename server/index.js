@@ -8,7 +8,7 @@ const express = require('express');
 const multer = require('multer');
 
 const jobs = require('./jobs');
-const { probe, render, renderAudio, checkFfmpegAvailable, estimateFileSizes, VIDEO_QUALITY_PRESETS, MP3_BITRATE_PRESETS } = require('./ffmpeg');
+const { probe, render, renderAudio, checkFfmpegAvailable, estimateFileSizes, analyzeLoudness, recommendNormalization, VIDEO_QUALITY_PRESETS, MP3_BITRATE_PRESETS } = require('./ffmpeg');
 const { recordRender, getLastRenderSettings } = require('./history');
 const vimeo = require('./vimeo');
 const soundcloud = require('./soundcloud');
@@ -539,6 +539,44 @@ app.post('/api/render/:jobId', useJobIdFromParams, renderUpload, async (req, res
 // encoding a short sample from the middle of the (possibly trimmed) selection and extrapolating -
 // CRF encoding has no fixed bitrate, so a real sample is the only way this means anything for
 // the specific file being rendered. Can take a while (up to 6 short encodes); that's expected.
+// Measures how loud this clip actually is and says whether normalizing is worth turning on.
+// Advisory only - it changes nothing about the render, it just replaces "does this week sound
+// quieter than last week?" with a number. Measures the trimmed range, so re-checking after
+// adjusting the trim gives an answer about what will actually be published.
+app.post('/api/analyze-loudness/:jobId', useJobIdFromParams, async (req, res) => {
+  const job = jobs.get(req.jobId);
+  if (!job || !job.videoPath) {
+    return res.status(404).json({ error: 'Upload a video first (this session may have expired - try re-uploading).' });
+  }
+  if (!job.videoInfo.hasAudio) {
+    // ffmpeg would fail outright with no audio stream to filter, and "no audio track" is a much
+    // more useful thing to be told than whatever that failure looks like.
+    return res.json({
+      verdict: 'silent',
+      headline: 'No audio to measure',
+      integratedLufs: null,
+      truePeakDb: null,
+      loudnessRange: null,
+      gainDb: null,
+      targetLufs: toLufs(req.body.targetLufs, -14),
+      reasons: ['This video has no audio track.'],
+    });
+  }
+  if (!(await checkFfmpegAvailable())) {
+    return res.status(500).json({ error: 'ffmpeg/ffprobe is not installed on the server. Install ffmpeg and restart the app.' });
+  }
+
+  const targetLufs = toLufs(req.body.targetLufs, -14);
+  const { trimStart, trimEnd } = resolveTrimRange(req.body.trimStart, req.body.trimEnd, job.videoInfo.duration);
+
+  try {
+    const measured = await analyzeLoudness({ videoPath: job.videoPath, trimStart, trimEnd });
+    res.json({ ...measured, ...recommendNormalization(measured, targetLufs), targetLufs });
+  } catch (err) {
+    res.status(500).json({ error: err.message || 'Could not measure the audio level.', detail: err.detail || null });
+  }
+});
+
 app.post('/api/estimate-size/:jobId', useJobIdFromParams, async (req, res) => {
   const job = jobs.get(req.jobId);
   if (!job || !job.videoPath) {
