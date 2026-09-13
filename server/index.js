@@ -570,8 +570,14 @@ app.post('/api/analyze-loudness/:jobId', useJobIdFromParams, async (req, res) =>
   const { trimStart, trimEnd } = resolveTrimRange(req.body.trimStart, req.body.trimEnd, job.videoInfo.duration);
 
   try {
+    const startedAt = Date.now();
     const measured = await analyzeLoudness({ videoPath: job.videoPath, trimStart, trimEnd });
-    res.json({ ...measured, ...recommendNormalization(measured, targetLufs), targetLufs });
+    res.json({
+      ...measured,
+      ...recommendNormalization(measured, targetLufs),
+      targetLufs,
+      tookSeconds: (Date.now() - startedAt) / 1000,
+    });
   } catch (err) {
     res.status(500).json({ error: err.message || 'Could not measure the audio level.', detail: err.detail || null });
   }

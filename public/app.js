@@ -1069,9 +1069,16 @@
       if (data.integratedLufs !== null) {
         // The raw figures, spelled out - the same numbers anyone would get checking this
         // by hand, so the recommendation above can be sanity-checked rather than trusted blind.
+        // Whether the whole clip was measured or only a spread of samples is part of that: it is
+        // the difference between an exact figure and a very good estimate, and it shouldn't take
+        // reading the source to find out which one is on screen.
+        const how = data.sampled
+          ? `sampled ${data.sampled.windows} points across the clip`
+          : 'whole clip measured';
         loudnessMeasured.textContent =
           `Measured ${data.integratedLufs.toFixed(1)} LUFS, peaks ${data.truePeakDb.toFixed(1)} dBTP. ` +
-          `Normalizing would ${data.gainDb >= 0 ? 'add' : 'take off'} ${Math.abs(data.gainDb).toFixed(1)} dB.`;
+          `Normalizing would ${data.gainDb >= 0 ? 'add' : 'take off'} ${Math.abs(data.gainDb).toFixed(1)} dB. ` +
+          `(${how}, ${data.tookSeconds.toFixed(1)}s)`;
       }
       // Only offered when it would actually change something, and only as a one-click shortcut
       // for the checkbox just above - never applied automatically.
