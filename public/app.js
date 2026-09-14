@@ -1031,8 +1031,8 @@
   // sound quieter than last week?" has an answer instead of being a judgement call made fresh
   // every Sunday. Advisory only - it never changes a setting on its own.
   let loudnessCheckInFlight = false;
-  let loudnessPending = false;
   let loudnessDebounceTimer = null;
+  let loudnessAbort = null;
 
   // Trimming changes the answer, so the measurement follows the trim rather than being taken once
   // at upload and left to go stale. Debounced because dragging a handle fires constantly, and
@@ -1041,6 +1041,9 @@
   function scheduleLoudnessCheck() {
     if (!state.videoJobId) return;
     clearTimeout(loudnessDebounceTimer);
+    // Whatever is running measures a range that no longer exists, so it is dropped rather than
+    // waited out - the server kills the ffmpeg behind it when the request goes away.
+    if (loudnessAbort) loudnessAbort.abort();
     loudnessDebounceTimer = setTimeout(runLoudnessCheck, 900);
   }
 
@@ -1057,10 +1060,9 @@
   async function runLoudnessCheck() {
     if (!state.videoJobId) return;
     clearTimeout(loudnessDebounceTimer);
-    if (loudnessCheckInFlight) {
-      loudnessPending = true;
-      return;
-    }
+    if (loudnessAbort) loudnessAbort.abort();
+    const abort = new AbortController();
+    loudnessAbort = abort;
     loudnessCheckInFlight = true;
     checkLoudnessBtn.disabled = true;
     showLoudnessMessage('⏳', 'Measuring the audio…', 'working');
@@ -1073,6 +1075,7 @@
           trimEnd: trimEndHandle.value,
           targetLufs: targetLufsSelect.value,
         }),
+        signal: abort.signal,
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Could not measure the audio level.');
@@ -1102,13 +1105,15 @@
       // for the checkbox just above - never applied automatically.
       applyNormalizeBtn.hidden = normalizeAudioCheckbox.checked || data.verdict !== 'recommended';
     } catch (err) {
-      showLoudnessMessage('✕', err.message, 'error');
+      // An aborted request means a newer measurement is already on its way, so the "Measuring…"
+      // state is left alone for it to replace - swapping in an error here would flash a failure
+      // for something that is working exactly as intended.
+      if (err.name !== 'AbortError') showLoudnessMessage('✕', err.message, 'error');
     } finally {
-      loudnessCheckInFlight = false;
-      checkLoudnessBtn.disabled = !state.videoJobId;
-      if (loudnessPending) {
-        loudnessPending = false;
-        runLoudnessCheck();
+      if (loudnessAbort === abort) {
+        loudnessAbort = null;
+        loudnessCheckInFlight = false;
+        checkLoudnessBtn.disabled = !state.videoJobId;
       }
     }
   }
@@ -1961,7 +1966,7 @@
     // looking for. Running it now means the answer is waiting by the time anyone scrolls down to
     // it, and any trim made on the way there re-runs it. It changes nothing on its own.
     checkLoudnessBtn.disabled = false;
-    runLoudnessCheck();
+    scheduleLoudnessCheck();
 
     updateRenderButton();
   }
@@ -2019,6 +2024,10 @@
     qualityPanel.hidden = true;
     audioLevelPanel.hidden = true;
     state.sizeEstimates = null;
+    // Removing the video mid-measurement should stop it, not leave ffmpeg chewing through a file
+    // nobody is editing any more.
+    clearTimeout(loudnessDebounceTimer);
+    if (loudnessAbort) loudnessAbort.abort();
     checkLoudnessBtn.disabled = true;
     loudnessResult.hidden = true;
     updateRenderButton();

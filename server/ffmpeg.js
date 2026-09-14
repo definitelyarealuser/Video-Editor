@@ -509,20 +509,43 @@ function planLoudnessSampling(rangeDuration) {
  * long clip the full log is megabytes of text nobody reads - but the summary block this needs is
  * the last thing printed, so only the end is worth holding on to.
  */
-function runKeepingStderrTail(args, tailBytes = 8192) {
+function runKeepingStderrTail(args, { tailBytes = 8192, signal } = {}) {
   return new Promise((resolve, reject) => {
+    if (signal && signal.aborted) {
+      return reject(Object.assign(new Error('Measurement cancelled.'), { cancelled: true }));
+    }
     const proc = spawn('ffmpeg', args);
     let tail = '';
+    let cancelled = false;
+
+    // Measuring a long clip is seconds of real work, and trimming makes whatever is running
+    // obsolete the moment it happens. Without this the new measurement queues behind a result
+    // that is already known to be wrong, which on a 45-minute service is another ten seconds of
+    // waiting for an answer nobody will read.
+    const onAbort = () => {
+      cancelled = true;
+      proc.kill('SIGKILL');
+    };
+    if (signal) signal.addEventListener('abort', onAbort, { once: true });
+    const cleanup = () => {
+      if (signal) signal.removeEventListener('abort', onAbort);
+    };
+
     proc.stdout.on('data', () => {});
     proc.stderr.on('data', (chunk) => {
       tail = (tail + chunk).slice(-tailBytes);
     });
     proc.on('error', (err) => {
+      cleanup();
       reject(err.code === 'ENOENT'
         ? new Error('"ffmpeg" was not found on PATH. Install ffmpeg and try again.')
         : err);
     });
     proc.on('close', (code) => {
+      cleanup();
+      if (cancelled) {
+        return reject(Object.assign(new Error('Measurement cancelled.'), { cancelled: true }));
+      }
       if (code === 0) return resolve(tail);
       const err = new Error(`ffmpeg reported an error while measuring the audio (exit code ${code}).`);
       err.detail = tail;
@@ -547,7 +570,7 @@ function runKeepingStderrTail(args, tailBytes = 8192) {
  * and tailed with are often music or a silent room, and either would drag the number away from
  * what the published clip will actually sound like.
  */
-async function analyzeLoudness({ videoPath, trimStart, trimEnd }) {
+async function analyzeLoudness({ videoPath, trimStart, trimEnd, signal }) {
   const hasRange = trimStart != null && trimEnd != null;
   const rangeStart = hasRange ? trimStart : 0;
   const rangeDuration = hasRange ? trimEnd - trimStart : null;
@@ -589,7 +612,7 @@ async function analyzeLoudness({ videoPath, trimStart, trimEnd }) {
     ];
   }
 
-  const stderr = await runKeepingStderrTail(args);
+  const stderr = await runKeepingStderrTail(args, { signal });
 
   const summaryAt = stderr.lastIndexOf('Integrated loudness:');
   if (summaryAt === -1) {

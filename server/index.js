@@ -539,6 +539,9 @@ app.post('/api/render/:jobId', useJobIdFromParams, renderUpload, async (req, res
 // encoding a short sample from the middle of the (possibly trimmed) selection and extrapolating -
 // CRF encoding has no fixed bitrate, so a real sample is the only way this means anything for
 // the specific file being rendered. Can take a while (up to 6 short encodes); that's expected.
+// In-flight loudness measurements, by job, so a newer request can stop the one it replaces.
+const loudnessRuns = new Map();
+
 // Measures how loud this clip actually is and says whether normalizing is worth turning on.
 // Advisory only - it changes nothing about the render, it just replaces "does this week sound
 // quieter than last week?" with a number. Measures the trimmed range, so re-checking after
@@ -569,9 +572,26 @@ app.post('/api/analyze-loudness/:jobId', useJobIdFromParams, async (req, res) =>
   const targetLufs = toLufs(req.body.targetLufs, -14);
   const { trimStart, trimEnd } = resolveTrimRange(req.body.trimStart, req.body.trimEnd, job.videoInfo.duration);
 
+  // Two ways a measurement stops being wanted: the browser gave up on the request (the trim
+  // moved again, so it asked for a fresh one), or a newer request for this same job arrived.
+  // Either way the ffmpeg behind it is doing work whose answer is already known to be stale, so
+  // it gets killed rather than left to finish and hold the next one up.
+  const previous = loudnessRuns.get(req.jobId);
+  if (previous) previous.abort();
+  const controller = new AbortController();
+  loudnessRuns.set(req.jobId, controller);
+  // Deliberately the response's close, not the request's: for a request whose body has already
+  // been read in full - which this one always is, it's a small JSON payload - req's 'close' is
+  // about the body stream finishing, not about the browser going away. Listening there left the
+  // abandoned ffmpeg running to completion. res 'close' is the one that fires when the client
+  // actually disconnects.
+  res.on('close', () => {
+    if (!res.writableEnded) controller.abort();
+  });
+
   try {
     const startedAt = Date.now();
-    const measured = await analyzeLoudness({ videoPath: job.videoPath, trimStart, trimEnd });
+    const measured = await analyzeLoudness({ videoPath: job.videoPath, trimStart, trimEnd, signal: controller.signal });
     res.json({
       ...measured,
       ...recommendNormalization(measured, targetLufs),
@@ -579,7 +599,15 @@ app.post('/api/analyze-loudness/:jobId', useJobIdFromParams, async (req, res) =>
       tookSeconds: (Date.now() - startedAt) / 1000,
     });
   } catch (err) {
+    // A cancelled run is a superseded one, not a failure - there is nobody left waiting on this
+    // response, and reporting an error for it would only race the real answer onto the screen.
+    if (err.cancelled) {
+      if (!res.writableEnded) res.status(499).json({ error: 'Measurement superseded.', superseded: true });
+      return;
+    }
     res.status(500).json({ error: err.message || 'Could not measure the audio level.', detail: err.detail || null });
+  } finally {
+    if (loudnessRuns.get(req.jobId) === controller) loudnessRuns.delete(req.jobId);
   }
 });
 
