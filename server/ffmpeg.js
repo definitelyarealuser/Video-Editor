@@ -13,7 +13,6 @@ const crypto = require('crypto');
 // Vimeo re-transcodes everything you upload anyway, so the CRF choice here mostly trades
 // render time for file size (and therefore upload time), not final viewer quality.
 const VIDEO_QUALITY_PRESETS = { high: 18, balanced: 22, smaller: 27 };
-const MP3_BITRATE_PRESETS = [128, 192, 320];
 
 function run(cmd, args) {
   return new Promise((resolve, reject) => {
@@ -412,46 +411,6 @@ async function estimateVideoSampleSize({ videoPath, sampleStart, sampleSeconds, 
   }
 }
 
-/**
- * Runs estimateVideoSampleSize for every quality preset, plus exact arithmetic estimates for
- * each MP3 bitrate preset (no sample needed - CBR MP3 size is just bitrate × duration, unlike
- * CRF video). `mainDurationSeconds` is the trimmed clip length (bookend PNG holds are brief and
- * compress trivially, so they're left out of the estimate).
- */
-async function estimateFileSizes({ videoPath, trimStart, trimEnd, width, height, fps, mainDurationSeconds }) {
-  // The 4s floor can ask for more footage than a short clip actually has, and the extrapolation
-  // below divides the encoded size by this number - so on anything under 4s it would divide a
-  // (say) 2-second sample by 4 and report roughly half the real size. Never ask for more than
-  // exists.
-  const sampleSeconds = Math.min(12, Math.max(4, mainDurationSeconds / 4), mainDurationSeconds);
-  const rangeStart = trimStart != null ? trimStart : 0;
-  const rangeEnd = trimEnd != null ? trimEnd : mainDurationSeconds;
-  const midpoint = rangeStart + (rangeEnd - rangeStart) / 2;
-  const sampleStart = Math.max(rangeStart, Math.min(midpoint - sampleSeconds / 2, rangeEnd - sampleSeconds));
-
-  const video = {};
-  for (const [quality, crf] of Object.entries(VIDEO_QUALITY_PRESETS)) {
-    // Sequential, not parallel - concurrent ffmpeg encodes would just compete for the same
-    // CPU cores and slow each other down with no net time savings.
-    video[quality] = await estimateVideoSampleSize({
-      videoPath,
-      sampleStart,
-      sampleSeconds,
-      totalSeconds: mainDurationSeconds,
-      width,
-      height,
-      fps,
-      videoCrf: crf,
-    });
-  }
-
-  const audio = {};
-  for (const bitrate of MP3_BITRATE_PRESETS) {
-    audio[bitrate] = Math.round(((bitrate * 1000) / 8) * mainDurationSeconds);
-  }
-
-  return { video, audio };
-}
 
 
 /**
@@ -725,7 +684,5 @@ module.exports = {
   analyzeLoudness,
   recommendNormalization,
   planLoudnessSampling,
-  estimateFileSizes,
   VIDEO_QUALITY_PRESETS,
-  MP3_BITRATE_PRESETS,
 };

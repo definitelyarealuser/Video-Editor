@@ -1220,7 +1220,6 @@
 
   // --- Trim panel ---
   const trimPanel = document.getElementById('trim-panel');
-  const qualityPanel = document.getElementById('quality-panel');
   const trimStartHandle = document.getElementById('trim-start-handle');
   const trimEndHandle = document.getElementById('trim-end-handle');
   const trimRangeFill = document.getElementById('trim-range-fill');
@@ -1292,109 +1291,6 @@
     trimDurationLabel.textContent = formatTime(end - start);
     // Any trim change invalidates a previous size estimate - it was measured against a
     // different clip length, so showing it now would just be misleading.
-    state.sizeEstimates = null;
-    resetQualityOptionLabels();
-  }
-
-  // --- Output quality: CRF preset + MP3 bitrate, with real size estimates ---
-  const videoQualitySelect = document.getElementById('videoQuality');
-  const mp3BitrateSelect = document.getElementById('mp3Bitrate');
-  const estimateSizeStatus = document.getElementById('estimate-size-status');
-  const estimateSizeError = document.getElementById('estimate-size-error');
-
-  const VIDEO_QUALITY_LABELS = { high: 'High Quality (default)', balanced: 'Balanced', smaller: 'Smaller File' };
-  const MP3_BITRATE_LABELS = { 128: '128 kbps', 192: '192 kbps (default)', 320: '320 kbps' };
-
-  state.sizeEstimates = null;
-
-  function formatBytes(bytes) {
-    if (!bytes || bytes <= 0) return '';
-    const mb = bytes / (1024 * 1024);
-    if (mb >= 1024) return `${(mb / 1024).toFixed(1)} GB`;
-    if (mb >= 1) return `${Math.round(mb)} MB`;
-    return `${Math.max(1, Math.round(bytes / 1024))} KB`;
-  }
-
-  function resetQualityOptionLabels() {
-    Array.from(videoQualitySelect.options).forEach((opt) => {
-      opt.textContent = VIDEO_QUALITY_LABELS[opt.value] || opt.value;
-    });
-    Array.from(mp3BitrateSelect.options).forEach((opt) => {
-      opt.textContent = MP3_BITRATE_LABELS[opt.value] || `${opt.value} kbps`;
-    });
-  }
-
-  function updateQualityOptionLabels() {
-    if (!state.sizeEstimates) {
-      resetQualityOptionLabels();
-      return;
-    }
-    const videoSizes = state.sizeEstimates.video || {};
-    Array.from(videoQualitySelect.options).forEach((opt) => {
-      const baseLabel = VIDEO_QUALITY_LABELS[opt.value] || opt.value;
-      const size = videoSizes[opt.value];
-      opt.textContent = size ? `${baseLabel} (~${formatBytes(size)})` : baseLabel;
-    });
-    const audioSizes = state.sizeEstimates.audio || {};
-    Array.from(mp3BitrateSelect.options).forEach((opt) => {
-      const baseLabel = MP3_BITRATE_LABELS[opt.value] || `${opt.value} kbps`;
-      const size = audioSizes[opt.value];
-      opt.textContent = size ? `${baseLabel} (~${formatBytes(size)})` : baseLabel;
-    });
-  }
-
-  // Estimates run automatically now - as soon as a video's uploaded, and again whenever the
-  // trim range changes - so there's no manual button to gate this behind; every caller just
-  // asks for one and the debounce/in-flight guards below keep that cheap.
-  let estimateInFlight = false;
-  let estimatePending = false;
-  let sizeEstimateDebounceTimer = null;
-
-  // Nudge-button clicks (and slider drags) can fire several trim changes in a row - each one
-  // used to kick off its own full round of ffmpeg sample encodes, piling up redundant work.
-  // This waits for a short quiet period before actually asking the server for a new estimate.
-  function scheduleSizeEstimate() {
-    if (!state.videoJobId) return;
-    clearTimeout(sizeEstimateDebounceTimer);
-    sizeEstimateDebounceTimer = setTimeout(runSizeEstimate, 700);
-  }
-
-  async function runSizeEstimate() {
-    if (!state.videoJobId) return;
-    clearTimeout(sizeEstimateDebounceTimer);
-    if (estimateInFlight) {
-      // Already running one - just remember to run again with whatever's current once it
-      // finishes, instead of starting a second overlapping round of ffmpeg encodes.
-      estimatePending = true;
-      return;
-    }
-    estimateInFlight = true;
-    estimateSizeError.hidden = true;
-    estimateSizeStatus.hidden = false;
-    try {
-      const res = await fetch(`/api/estimate-size/${state.videoJobId}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ trimStart: trimStartHandle.value, trimEnd: trimEndHandle.value }),
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        const err = new Error(data.error || 'Could not estimate file sizes.');
-        err.detail = data.errorDetail;
-        throw err;
-      }
-      state.sizeEstimates = data;
-      updateQualityOptionLabels();
-    } catch (err) {
-      setErrorWithDetail(estimateSizeError, err.message, err.detail);
-    } finally {
-      estimateSizeStatus.hidden = true;
-      estimateInFlight = false;
-      if (estimatePending) {
-        estimatePending = false;
-        runSizeEstimate();
-      }
-    }
   }
 
   function setTrimRange(start, end) {
@@ -1402,7 +1298,6 @@
     trimEndHandle.value = end;
     updateTrimUI();
     scrubTo(start);
-    scheduleSizeEstimate();
     scheduleLoudnessCheck();
   }
 
@@ -1457,7 +1352,6 @@
     const start = parseFloat(trimStartHandle.value);
     const end = parseFloat(trimEndHandle.value);
     playRange(start, Math.min(start + SNIPPET_SECONDS, end));
-    scheduleSizeEstimate();
     scheduleLoudnessCheck();
   });
 
@@ -1472,7 +1366,6 @@
     const start = parseFloat(trimStartHandle.value);
     const end = parseFloat(trimEndHandle.value);
     playRange(Math.max(start, end - SNIPPET_SECONDS), end);
-    scheduleSizeEstimate();
     scheduleLoudnessCheck();
   });
 
@@ -1956,7 +1849,6 @@
     trimEndHandle.step = 0.1;
     setTrimRange(0, duration);
     trimPanel.hidden = false;
-    qualityPanel.hidden = false;
     audioLevelPanel.hidden = false;
 
     // Started up front rather than waiting to be asked, even though the panel it reports into is
@@ -2019,9 +1911,7 @@
     showDzState(dzVideo, 'dz-empty');
     inputVideo.value = '';
     trimPanel.hidden = true;
-    qualityPanel.hidden = true;
     audioLevelPanel.hidden = true;
-    state.sizeEstimates = null;
     // Removing the video mid-measurement should stop it, not leave ffmpeg chewing through a file
     // nobody is editing any more.
     clearTimeout(loudnessDebounceTimer);
@@ -2189,8 +2079,6 @@
     showDzState(dzVideo, 'dz-empty');
     inputVideo.value = '';
     trimPanel.hidden = true;
-    qualityPanel.hidden = true;
-    state.sizeEstimates = null;
     updateRenderButton();
   }
 
@@ -2210,10 +2098,10 @@
       : { publish: false, showcaseIds: [] };
     if (vimeoChoice.cancelled) return; // back out entirely - no render, nothing changes
 
-    // SoundCloud is audio-only, so it's only offered when there'll actually be an MP3 to send -
-    // asking about a platform that has nothing to upload to would just be noise.
-    const willExportMp3 = document.getElementById('exportMp3').checked;
-    const soundcloudChoice = (state.soundcloudConnected && willExportMp3)
+    // Offered purely on being connected. It used to also require the "Render MP3" box, which
+    // meant unticking that quietly removed SoundCloud from the flow - the server renders an MP3
+    // for the upload regardless of whether you asked to keep one.
+    const soundcloudChoice = state.soundcloudConnected
       ? await confirmSoundCloudPublish()
       : { publish: false, playlistIds: [] };
     if (soundcloudChoice.cancelled) return; // same as Vimeo's Cancel - back out entirely
@@ -2262,8 +2150,6 @@
     // locally" is unchecked, so the checkbox is the actual source of truth, not stale input.
     formData.append('videoSavePath', saveLocallyCheckbox.checked ? document.getElementById('videoSavePath').value.trim() : '');
     formData.append('audioSavePath', saveLocallyCheckbox.checked ? document.getElementById('audioSavePath').value.trim() : '');
-    formData.append('videoQuality', videoQualitySelect.value);
-    formData.append('mp3Bitrate', mp3BitrateSelect.value);
 
     let jobId;
     try {

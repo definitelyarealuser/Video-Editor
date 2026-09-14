@@ -8,7 +8,7 @@ const express = require('express');
 const multer = require('multer');
 
 const jobs = require('./jobs');
-const { probe, render, renderAudio, checkFfmpegAvailable, estimateFileSizes, analyzeLoudness, recommendNormalization, VIDEO_QUALITY_PRESETS, MP3_BITRATE_PRESETS } = require('./ffmpeg');
+const { probe, render, renderAudio, checkFfmpegAvailable, analyzeLoudness, recommendNormalization, VIDEO_QUALITY_PRESETS } = require('./ffmpeg');
 const { recordRender, getLastRenderSettings } = require('./history');
 const vimeo = require('./vimeo');
 const soundcloud = require('./soundcloud');
@@ -320,11 +320,11 @@ app.post('/api/render/:jobId', useJobIdFromParams, renderUpload, async (req, res
     const normalize = toBool(req.body.normalizeAudio, false);
     const targetLufs = toLufs(req.body.targetLufs, -14);
     const exportMp3 = toBool(req.body.exportMp3, false);
-    const videoQuality = Object.prototype.hasOwnProperty.call(VIDEO_QUALITY_PRESETS, req.body.videoQuality)
-      ? req.body.videoQuality
-      : 'high';
-    const videoCrf = VIDEO_QUALITY_PRESETS[videoQuality];
-    const mp3Bitrate = MP3_BITRATE_PRESETS.includes(Number(req.body.mp3Bitrate)) ? Number(req.body.mp3Bitrate) : 192;
+    // Fixed rather than chosen in the app. These traded render time for file size, which barely
+    // matters when Vimeo and SoundCloud re-encode whatever they're given anyway - so the two
+    // dropdowns that set them earned less than the space and the test-encodes they cost.
+    const videoCrf = VIDEO_QUALITY_PRESETS.high;
+    const mp3Bitrate = 192;
     const publishToVimeo = toBool(req.body.publishToVimeo, false) && vimeo.isConnected();
     const vimeoDescription = String(req.body.vimeoDescription || '').slice(0, 5000);
     // Which configured showcases to actually add it to for this render - defaults to "all of
@@ -333,7 +333,10 @@ app.post('/api/render/:jobId', useJobIdFromParams, renderUpload, async (req, res
       ? String(req.body.vimeoShowcaseIds).split(',').map((s) => s.trim()).filter(Boolean)
       : undefined;
     const vimeoPrivacy = String(req.body.vimeoPrivacy || 'anybody');
-    const publishToSoundCloud = toBool(req.body.publishToSoundCloud, false) && exportMp3 && soundcloud.isConnected();
+    // Deliberately NOT gated on exportMp3. That checkbox asks for an MP3 of your own; publishing
+    // to SoundCloud needs one regardless, and tying the two meant turning off the local MP3
+    // silently turned off SoundCloud publishing with nothing on screen to say so.
+    const publishToSoundCloud = toBool(req.body.publishToSoundCloud, false) && soundcloud.isConnected();
     const soundcloudPlaylistIds = req.body.soundcloudPlaylistIds !== undefined
       ? String(req.body.soundcloudPlaylistIds).split(',').map((s) => s.trim()).filter(Boolean)
       : undefined;
@@ -359,7 +362,10 @@ app.post('/api/render/:jobId', useJobIdFromParams, renderUpload, async (req, res
     }
 
     const outputPath = path.join(OUTPUT_DIR, `${jobId}.mp4`);
-    const mp3OutputPath = exportMp3 ? path.join(OUTPUT_DIR, `${jobId}.mp3`) : null;
+    // Rendered whenever anything needs one: the checkbox asking for a copy, or a SoundCloud
+    // publish that has to have something to upload.
+    const needMp3 = exportMp3 || publishToSoundCloud;
+    const mp3OutputPath = needMp3 ? path.join(OUTPUT_DIR, `${jobId}.mp3`) : null;
     jobs.update(jobId, {
       status: 'rendering',
       progress: 0,
@@ -387,8 +393,6 @@ app.post('/api/render/:jobId', useJobIdFromParams, renderUpload, async (req, res
       exportMp3,
       videoSavePath,
       audioSavePath,
-      videoQuality,
-      mp3Bitrate,
     };
 
     (async () => {
@@ -611,34 +615,6 @@ app.post('/api/analyze-loudness/:jobId', useJobIdFromParams, async (req, res) =>
   }
 });
 
-app.post('/api/estimate-size/:jobId', useJobIdFromParams, async (req, res) => {
-  const job = jobs.get(req.jobId);
-  if (!job || !job.videoPath) {
-    return res.status(404).json({ error: 'Upload a video first (this session may have expired - try re-uploading).' });
-  }
-  if (!(await checkFfmpegAvailable())) {
-    return res.status(500).json({ error: 'ffmpeg/ffprobe is not installed on the server. Install ffmpeg and restart the app.' });
-  }
-
-  const fullDuration = job.videoInfo.duration;
-  const { trimStart, trimEnd } = resolveTrimRange(req.body.trimStart, req.body.trimEnd, fullDuration);
-  const mainDurationSeconds = Math.max(trimEnd - trimStart, 1);
-
-  try {
-    const sizes = await estimateFileSizes({
-      videoPath: job.videoPath,
-      trimStart,
-      trimEnd,
-      width: job.videoInfo.width,
-      height: job.videoInfo.height,
-      fps: job.videoInfo.fps,
-      mainDurationSeconds,
-    });
-    res.json(sizes);
-  } catch (err) {
-    res.status(500).json({ error: err.message || 'Could not estimate file sizes.', errorDetail: err.detail });
-  }
-});
 
 app.get('/api/progress/:jobId', (req, res) => {
   const { jobId } = req.params;
