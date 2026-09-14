@@ -1375,6 +1375,21 @@ button.soundcloud-connect-link {
   flex-wrap: wrap;
 }
 
+/* The SoundCloud step carries one more choice than the others - Skip the MP3 alongside Cancel -
+   and four buttons squeezed into 480px wrapped their labels onto three lines each. Wider, with
+   the two backing-out choices held to the left and the two doing-something ones to the right. */
+.modal-dialog.soundcloud-confirm-dialog {
+  max-width: 600px;
+}
+
+.soundcloud-confirm-dialog .modal-actions {
+  align-items: stretch;
+}
+
+.soundcloud-confirm-dialog .modal-actions #soundcloud-skip-mp3-btn {
+  margin-right: auto;
+}
+
 .modal-btn-secondary,
 .modal-btn-primary {
   flex: 1;

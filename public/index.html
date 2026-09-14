@@ -294,12 +294,6 @@
       <div class="settings">
         <div class="field field-wide">
           <label class="inline-check">
-            <input type="checkbox" id="exportMp3" checked />
-            Render MP3
-          </label>
-        </div>
-        <div class="field field-wide">
-          <label class="inline-check">
             <input type="checkbox" id="saveLocally" />
             Also save a copy to a folder on this computer
           </label>
@@ -436,7 +430,7 @@
   </div>
 
   <div class="modal-overlay" id="soundcloud-confirm-overlay" hidden>
-    <div class="modal-dialog">
+    <div class="modal-dialog soundcloud-confirm-dialog">
       <h3>Publish to SoundCloud?</h3>
       <p class="modal-hint">This choice applies to this render only - you'll be asked again next time.</p>
       <p class="modal-hint">Title and description come from the form (file name and Core Text).</p>
@@ -447,11 +441,14 @@
         <option value="public">Public - anybody can listen</option>
       </select>
 
+      <p class="modal-hint">An MP3 is made either way - <strong>Skip the MP3</strong> renders the video on its own.</p>
+
       <label>Add to playlists</label>
       <div id="soundcloud-playlist-checks" class="vimeo-showcase-checks"></div>
 
       <div class="modal-actions">
         <button type="button" id="soundcloud-cancel-btn" class="modal-btn-ghost">Cancel</button>
+        <button type="button" id="soundcloud-skip-mp3-btn" class="modal-btn-ghost">Skip the MP3</button>
         <button type="button" id="soundcloud-render-only-btn" class="modal-btn-secondary">Render Only</button>
         <button type="button" id="soundcloud-render-publish-btn" class="modal-btn-primary">Render &amp; Publish to SoundCloud</button>
       </div>

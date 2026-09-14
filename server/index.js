@@ -319,7 +319,9 @@ app.post('/api/render/:jobId', useJobIdFromParams, renderUpload, async (req, res
     const crossfadeAudio = toBool(req.body.crossfadeAudio, true);
     const normalize = toBool(req.body.normalizeAudio, false);
     const targetLufs = toLufs(req.body.targetLufs, -14);
-    const exportMp3 = toBool(req.body.exportMp3, false);
+    // Defaults to true: an MP3 is made on every render unless the SoundCloud step was used to
+    // decline one. It used to default to false to match a checkbox that no longer exists.
+    const exportMp3 = toBool(req.body.exportMp3, true);
     // Fixed rather than chosen in the app. These traded render time for file size, which barely
     // matters when Vimeo and SoundCloud re-encode whatever they're given anyway - so the two
     // dropdowns that set them earned less than the space and the test-encodes they cost.

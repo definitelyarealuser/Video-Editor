@@ -110,6 +110,7 @@
   const soundcloudPlaylistChecks = document.getElementById('soundcloud-playlist-checks');
   const soundcloudCancelBtn = document.getElementById('soundcloud-cancel-btn');
   const soundcloudRenderOnlyBtn = document.getElementById('soundcloud-render-only-btn');
+  const soundcloudSkipMp3Btn = document.getElementById('soundcloud-skip-mp3-btn');
   const soundcloudRenderPublishBtn = document.getElementById('soundcloud-render-publish-btn');
 
   const soundcloudConnectStatus = document.getElementById('soundcloud-connect-status');
@@ -987,6 +988,13 @@
         cleanup();
         resolve({ publish: false, playlistIds: [] });
       };
+      // Skipping the MP3 and not publishing are one decision, not two - there is nothing to
+      // upload without a file. That is what lets this replace the old "Render MP3" checkbox
+      // without adding a setting anywhere: it is a choice made once, at the point it matters.
+      const onSkipMp3 = () => {
+        cleanup();
+        resolve({ publish: false, playlistIds: [], skipMp3: true });
+      };
       const onRenderPublish = () => {
         const playlistIds = Array.from(soundcloudPlaylistChecks.querySelectorAll('input[type="checkbox"]:checked')).map((c) => c.value);
         const privacy = document.getElementById('soundcloud-privacy').value;
@@ -1000,12 +1008,14 @@
         soundcloudConfirmOverlay.hidden = true;
         soundcloudCancelBtn.removeEventListener('click', onCancel);
         soundcloudRenderOnlyBtn.removeEventListener('click', onRenderOnly);
+        soundcloudSkipMp3Btn.removeEventListener('click', onSkipMp3);
         soundcloudRenderPublishBtn.removeEventListener('click', onRenderPublish);
         unbindOverlayDismiss();
         document.removeEventListener('keydown', onKeydown);
       }
       soundcloudCancelBtn.addEventListener('click', onCancel);
       soundcloudRenderOnlyBtn.addEventListener('click', onRenderOnly);
+      soundcloudSkipMp3Btn.addEventListener('click', onSkipMp3);
       soundcloudRenderPublishBtn.addEventListener('click', onRenderPublish);
       const unbindOverlayDismiss = bindOverlayDismiss(soundcloudConfirmOverlay, onCancel);
       document.addEventListener('keydown', onKeydown);
@@ -1126,33 +1136,28 @@
     if (!loudnessResult.hidden && state.videoJobId) runLoudnessCheck();
   });
 
-  const exportMp3Checkbox = document.getElementById('exportMp3');
-  // The idle label reflects whatever's checked right now - only touched outside an
-  // in-flight render, so it never clobbers the "Rendering…" state.
+  // An MP3 is made on every render now, so the label is fixed. Opting out happens in the
+  // SoundCloud step, by which point this button has already been pressed.
   function idleRenderLabel() {
-    return exportMp3Checkbox.checked ? 'Render Audio and Video' : 'Render Video';
+    return 'Render Audio and Video';
   }
   function refreshIdleRenderLabel() {
     if (renderBtn.textContent !== 'Rendering…') renderBtn.textContent = idleRenderLabel();
   }
-  exportMp3Checkbox.addEventListener('change', refreshIdleRenderLabel);
   refreshIdleRenderLabel();
 
   // Saving locally is entirely optional (unchecked by default - Vimeo/SoundCloud publishing
-  // covers most people's needs now) - checking it reveals the video path field, and the audio
-  // path field on top of that only when "Render MP3" is actually checked too, since there's
-  // nothing to save otherwise.
+  // covers most people's needs now) - checking it reveals both path fields, since a render
+  // always produces an MP4 and an MP3 to put somewhere.
   const saveLocallyCheckbox = document.getElementById('saveLocally');
   const videoSavePathBlock = document.getElementById('videoSavePathBlock');
   const audioSavePathBlock = document.getElementById('audioSavePathBlock');
   function updateSavePathVisibility() {
     videoSavePathBlock.hidden = !saveLocallyCheckbox.checked;
-    audioSavePathBlock.hidden = !saveLocallyCheckbox.checked || !exportMp3Checkbox.checked;
+    audioSavePathBlock.hidden = !saveLocallyCheckbox.checked;
   }
   saveLocallyCheckbox.addEventListener('change', updateSavePathVisibility);
   saveLocallyCheckbox.addEventListener('change', () => updateRenderButton());
-  exportMp3Checkbox.addEventListener('change', updateSavePathVisibility);
-  exportMp3Checkbox.addEventListener('change', () => updateRenderButton());
   updateSavePathVisibility();
 
   // The video/audio save-folder paths are remembered the moment either is set - via Browse or
@@ -1207,7 +1212,6 @@
       if (typeof s.targetLufs === 'number' && document.querySelector(`#targetLufs option[value="${s.targetLufs}"]`)) {
         targetLufsSelect.value = String(s.targetLufs);
       }
-      if (typeof s.exportMp3 === 'boolean') exportMp3Checkbox.checked = s.exportMp3;
       // Video quality and MP3 bitrate deliberately always start at their defaults (High
       // Quality / 192 kbps) rather than recalling the last-used value like the other
       // settings here - those are the values labeled "(default)" in their dropdowns.
@@ -1973,11 +1977,12 @@
     // Series/Sermon Title/Speaker's Name/Sermon Date/Core Text are all optional -
     // computeOutputName() and the server's own filename sanitizer both already handle any
     // subset of the name fields being blank, and an empty description is a valid choice too.
-    // Both paths only matter - and are only required - once "save locally" is checked; the
-    // audio one additionally only when there'll actually be an MP3 to save.
+    // Both paths only matter - and are only required - once "save locally" is checked. Both are
+    // asked for now, since a render always produces an MP4 and an MP3; skipping the MP3 happens
+    // later, in the SoundCloud step, by which point this has long since been satisfied.
     if (saveLocallyCheckbox.checked) {
       if (!document.getElementById('videoSavePath').value.trim()) missing.push('a folder to save the MP4 to');
-      if (document.getElementById('exportMp3').checked && !document.getElementById('audioSavePath').value.trim()) {
+      if (!document.getElementById('audioSavePath').value.trim()) {
         missing.push('a folder to save the MP3 to');
       }
     }
@@ -2108,6 +2113,8 @@
 
     const { publish: publishToVimeo, showcaseIds: vimeoShowcaseIds, privacy: vimeoPrivacy } = vimeoChoice;
     const { publish: publishToSoundCloud, playlistIds: soundcloudPlaylistIds, privacy: soundcloudPrivacy } = soundcloudChoice;
+    // Every render makes an MP3 unless the SoundCloud step was used to say otherwise.
+    const exportMp3 = !soundcloudChoice.skipMp3;
     // Read independently of either dialog - description is the same Core Text either way, and
     // needs to be correct even when only one of the two platforms is actually being published to
     // (e.g. Vimeo isn't configured at all, so vimeoChoice never touches this).
@@ -2136,7 +2143,7 @@
     formData.append('crossfadeAudio', document.getElementById('crossfadeAudio').checked);
     formData.append('normalizeAudio', normalizeAudioCheckbox.checked);
     formData.append('targetLufs', targetLufsSelect.value);
-    formData.append('exportMp3', document.getElementById('exportMp3').checked);
+    formData.append('exportMp3', exportMp3);
     formData.append('trimStart', trimStartHandle.value);
     formData.append('trimEnd', trimEndHandle.value);
     formData.append('publishToVimeo', publishToVimeo);
