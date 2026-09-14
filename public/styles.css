@@ -324,6 +324,30 @@ header h1 {
   border-color: var(--accent);
 }
 
+/* Looks like Browse… but is deliberately its own class: everything with .browse-btn gets wired
+   to the folder picker, so borrowing that class for an unrelated button opened a folder window
+   when it was clicked. */
+.inline-action-btn {
+  background: color-mix(in srgb, var(--accent) 14%, var(--panel));
+  border: 1px solid color-mix(in srgb, var(--accent) 40%, var(--border));
+  color: var(--accent);
+  border-radius: 8px;
+  padding: 4px 14px;
+  font-size: 0.85rem;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.inline-action-btn:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--accent) 24%, var(--panel));
+  border-color: var(--accent);
+}
+
+.inline-action-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
 .folder-browser-path {
   font-size: 0.85rem;
   color: var(--muted);
