@@ -318,6 +318,26 @@ async function setThumbnail(videoUri, imagePath) {
   }
 
   await client.request({ method: 'PATCH', path: pictureUri, query: { active: true } });
+
+  // Ask Vimeo what the video's thumbnail actually is now, rather than assuming the PATCH stuck.
+  // A video's `pictures.type` reads "custom" when an uploaded image is the active one and
+  // "default" when Vimeo is still showing a frame it picked itself - which is exactly the
+  // difference between the graphic someone chose and the "wrong picture" they end up reporting.
+  // Retried briefly because the video is usually still transcoding at this point and the change
+  // does not always read back instantly.
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    if (attempt > 0) await new Promise((resolve) => setTimeout(resolve, 2000));
+    try {
+      const check = await client.request({ method: 'GET', path: `${videoUri}?fields=pictures.type` });
+      const type = check.body && check.body.pictures && check.body.pictures.type;
+      if (type === 'custom') return { confirmed: true };
+    } catch {
+      // Keep trying - a failed read says nothing about whether the thumbnail took.
+    }
+  }
+  // Not an error: the image uploaded fine and Vimeo accepted it. It just is not showing yet, and
+  // saying so is far more useful than silence when someone is asking why the picture is wrong.
+  return { confirmed: false };
 }
 
 /**
@@ -348,9 +368,10 @@ async function uploadAndPublish({ filePath, name, description, showcaseIds, priv
   const videoUrl = `https://vimeo.com/${videoId}`;
 
   let thumbnailError = null;
+  let thumbnailConfirmed = false;
   if (thumbnailPath) {
     try {
-      await setThumbnail(videoUri, thumbnailPath);
+      ({ confirmed: thumbnailConfirmed } = await setThumbnail(videoUri, thumbnailPath));
     } catch (err) {
       thumbnailError = err.message || String(err);
     }
@@ -367,10 +388,12 @@ async function uploadAndPublish({ filePath, name, description, showcaseIds, priv
     }
   }
 
-  return { videoUri, videoUrl, showcaseResults, thumbnailError };
+  return { videoUri, videoUrl, showcaseResults, thumbnailError, thumbnailSet: !!thumbnailPath, thumbnailConfirmed };
 }
 
 module.exports = {
+  // Exported for tests only - the real caller reaches it through uploadAndPublish().
+  __test_setThumbnail: setThumbnail,
   isConnected,
   hasOAuthApp,
   getShowcaseIds,

@@ -2283,10 +2283,20 @@
         vimeoResultLink.href = data.vimeoUrl;
         vimeoResultLink.textContent = data.vimeoUrl;
         vimeoShowcaseList.innerHTML = '';
+        // Reported either way now. Only failures used to show, so a thumbnail that quietly did
+        // not take looked identical to one that worked - which is no help at all when the
+        // complaint is that the picture on Vimeo is the wrong one.
         if (data.vimeoThumbnailError) {
           const li = document.createElement('li');
           li.className = 'showcase-failed';
           li.textContent = `Custom thumbnail failed: ${data.vimeoThumbnailError}`;
+          vimeoShowcaseList.appendChild(li);
+        } else if (data.vimeoThumbnailSet) {
+          const li = document.createElement('li');
+          li.className = data.vimeoThumbnailConfirmed ? 'showcase-ok' : 'showcase-failed';
+          li.textContent = data.vimeoThumbnailConfirmed
+            ? 'Custom thumbnail set from your bookend image'
+            : 'Custom thumbnail uploaded, but Vimeo is still showing its own picture - check the video on Vimeo once it has finished processing.';
           vimeoShowcaseList.appendChild(li);
         }
         (data.vimeoShowcaseResults || []).forEach((r) => {

@@ -511,13 +511,15 @@ app.post('/api/render/:jobId', useJobIdFromParams, renderUpload, async (req, res
             thumbnailPath: pngPath,
             onProgress: (fraction) => jobs.update(jobId, { progress: fraction }),
           })
-          .then(({ videoUrl, showcaseResults, thumbnailError }) => {
+          .then(({ videoUrl, showcaseResults, thumbnailError, thumbnailSet, thumbnailConfirmed }) => {
             jobs.update(jobId, {
               status: 'published',
               progress: 1,
               vimeoUrl: videoUrl,
               vimeoShowcaseResults: showcaseResults,
               vimeoThumbnailError: thumbnailError,
+              vimeoThumbnailSet: thumbnailSet,
+              vimeoThumbnailConfirmed: thumbnailConfirmed,
             });
           })
           .catch((err) => {
@@ -669,6 +671,8 @@ app.get('/api/progress/:jobId', (req, res) => {
         vimeoUrl: j.vimeoUrl || undefined,
         vimeoShowcaseResults: j.vimeoShowcaseResults || undefined,
         vimeoThumbnailError: j.vimeoThumbnailError || undefined,
+        vimeoThumbnailSet: j.vimeoThumbnailSet || undefined,
+        vimeoThumbnailConfirmed: j.vimeoThumbnailConfirmed || undefined,
         scStatus: j.scStatus || undefined,
         scProgress: j.scProgress,
         scError: j.scError || undefined,
