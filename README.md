@@ -130,6 +130,14 @@ removed: Vimeo and SoundCloud re-encode whatever they are given, so the choice t
 for file size without changing what anyone ends up watching or hearing - and the estimates cost a
 round of ffmpeg sample encodes each time the trim moved to label a dropdown nobody needed to touch.
 
+### Checking which videos have the right thumbnail
+
+`node tools/check-vimeo-thumbnails.js` (run from the app's folder) lists your recent Vimeo videos
+and says for each whether the thumbnail is the graphic uploaded with it or a frame Vimeo picked
+itself, flagging any published before the 2026-09-06 fix as explained rather than mysterious. Pass
+a number to check more than the default 25. It's read-only - it fetches metadata and changes
+nothing. Use it to find the backlog worth re-publishing or fixing by hand on vimeo.com.
+
 ## Notes / tuning
 
 - The crossfade duration must be shorter than both PNG durations and the video's own length.
