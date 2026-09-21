@@ -330,14 +330,50 @@ async function setThumbnail(videoUri, imagePath) {
     try {
       const check = await client.request({ method: 'GET', path: `${videoUri}?fields=pictures.type` });
       const type = check.body && check.body.pictures && check.body.pictures.type;
-      if (type === 'custom') return { confirmed: true };
+      if (type === 'custom') {
+        const removed = await removeOtherPictures(client, videoUri, pictureUri);
+        return { confirmed: true, removedPictures: removed };
+      }
     } catch {
       // Keep trying - a failed read says nothing about whether the thumbnail took.
     }
   }
   // Not an error: the image uploaded fine and Vimeo accepted it. It just is not showing yet, and
   // saying so is far more useful than silence when someone is asking why the picture is wrong.
-  return { confirmed: false };
+  return { confirmed: false, removedPictures: 0 };
+}
+
+/**
+ * Deletes every picture on the video except `keepUri`, leaving exactly one thumbnail.
+ *
+ * Vimeo keeps every picture ever attached to a video and offers all of them in its thumbnail
+ * picker, so each publish left the uploaded graphic sitting next to the frame Vimeo generated
+ * for itself - two near-identical choices, since these videos open on that very graphic. Only
+ * one is ever wanted.
+ *
+ * Deliberately only called once the uploaded picture is confirmed active, so there is no way to
+ * strip a video back to nothing: the one being kept is known to be the one on display. Failures
+ * are swallowed - an extra thumbnail left behind is untidy, not broken, and never worth failing
+ * a publish over.
+ */
+async function removeOtherPictures(client, videoUri, keepUri) {
+  let removed = 0;
+  try {
+    const listed = await client.request({ method: 'GET', path: `${videoUri}/pictures?fields=uri&per_page=100` });
+    const pictures = (listed.body && listed.body.data) || [];
+    for (const picture of pictures) {
+      if (!picture.uri || picture.uri === keepUri) continue;
+      try {
+        await client.request({ method: 'DELETE', path: picture.uri });
+        removed += 1;
+      } catch {
+        // Some pictures can't be deleted; leaving one behind is harmless.
+      }
+    }
+  } catch {
+    // Couldn't list them - nothing to tidy, and nothing worth reporting.
+  }
+  return removed;
 }
 
 /**

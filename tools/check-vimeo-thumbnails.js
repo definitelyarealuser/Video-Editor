@@ -7,11 +7,20 @@
  * wrong field, so every one failed and Vimeo fell back to its own frame. This answers "which of
  * our videos are affected" in one go, rather than opening each one to look.
  *
+ * It also counts spare thumbnails. Vimeo keeps every picture ever attached to a video and offers
+ * all of them in its thumbnail picker, so a video usually carries the uploaded graphic alongside
+ * the frame Vimeo generated for itself - near-identical here, since these videos open on that
+ * very graphic. Only one is ever wanted.
+ *
  * Run from the app's folder:   node tools/check-vimeo-thumbnails.js
  * Optionally pass how many to check (default 25, max 100):
  *                              node tools/check-vimeo-thumbnails.js 50
+ * Add --tidy to delete the spares, keeping each video's active thumbnail:
+ *                              node tools/check-vimeo-thumbnails.js 50 --tidy
  *
- * Read-only: it fetches video metadata and changes nothing.
+ * Without --tidy it only reads: it fetches metadata and changes nothing. With --tidy it deletes
+ * only non-active pictures, and only on videos whose active thumbnail is an uploaded one - so it
+ * can never leave a video without the picture it is currently showing.
  */
 
 require('dotenv').config();
@@ -45,15 +54,34 @@ function buildClient() {
   return new Vimeo(clientId, clientSecret, accessToken);
 }
 
+// Lists a video's pictures and deletes all but `keepUri`. Mirrors removeOtherPictures() in
+// server/vimeo.js, which does the same for videos published from now on.
+async function tidyVideo(client, videoUri, keepUri) {
+  let removed = 0;
+  const listed = await client.request({ method: 'GET', path: `${videoUri}/pictures?fields=uri&per_page=100` });
+  for (const picture of (listed.body && listed.body.data) || []) {
+    if (!picture.uri || picture.uri === keepUri) continue;
+    try {
+      await client.request({ method: 'DELETE', path: picture.uri });
+      removed += 1;
+    } catch {
+      // Some pictures can't be deleted; leaving one behind is harmless.
+    }
+  }
+  return removed;
+}
+
 (async () => {
-  const perPage = Math.min(Math.max(parseInt(process.argv[2], 10) || 25, 1), 100);
+  const args = process.argv.slice(2);
+  const tidy = args.includes('--tidy');
+  const perPage = Math.min(Math.max(parseInt(args.find((a) => /^\d+$/.test(a)), 10) || 25, 1), 100);
   const client = buildClient();
 
   let body;
   try {
     ({ body } = await client.request({
       method: 'GET',
-      path: `/me/videos?per_page=${perPage}&sort=date&direction=desc&fields=uri,name,created_time,pictures.type,link`,
+      path: `/me/videos?per_page=${perPage}&sort=date&direction=desc&fields=uri,name,created_time,pictures.uri,pictures.type,link`,
     }));
   } catch (err) {
     console.error('Could not read your videos from Vimeo:', err.message || err);
@@ -68,6 +96,8 @@ function buildClient() {
 
   let custom = 0;
   let auto = 0;
+  let spares = 0;
+  let tidied = 0;
   console.log(`\nMost recent ${videos.length} video(s) on the connected Vimeo account:\n`);
   for (const v of videos) {
     const type = (v.pictures && v.pictures.type) || 'unknown';
@@ -76,10 +106,39 @@ function buildClient() {
     const date = (v.created_time || '').slice(0, 10);
     const mark = isCustom ? 'custom  ' : 'VIMEO’S ';
     const note = !isCustom && date && date < FIX_DATE ? '  (published before the fix)' : '';
-    console.log(`  ${date}  ${mark}  ${(v.name || '(untitled)').slice(0, 58)}${note}`);
+
+    // How many pictures this video carries beyond the one on display.
+    let extras = 0;
+    try {
+      const listed = await client.request({ method: 'GET', path: `${v.uri}/pictures?fields=uri&per_page=100` });
+      extras = Math.max((((listed.body && listed.body.data) || []).length) - 1, 0);
+    } catch {
+      // Not worth failing the listing over.
+    }
+    spares += extras;
+    let extraNote = extras ? `  [+${extras} spare]` : '';
+
+    // Only tidy where the displayed thumbnail is an uploaded one, so the keeper is known good.
+    if (tidy && extras && isCustom && v.pictures && v.pictures.uri) {
+      try {
+        const removed = await tidyVideo(client, v.uri, v.pictures.uri);
+        tidied += removed;
+        extraNote = `  [removed ${removed}]`;
+      } catch (err) {
+        extraNote = `  [could not tidy: ${err.message || err}]`;
+      }
+    }
+
+    console.log(`  ${date}  ${mark}  ${(v.name || '(untitled)').slice(0, 48)}${extraNote}${note}`);
   }
 
   console.log(`\n  ${custom} using the uploaded graphic, ${auto} using a frame Vimeo chose.`);
+  if (tidy) {
+    console.log(`  ${tidied} spare thumbnail(s) deleted.`);
+  } else if (spares) {
+    console.log(`  ${spares} spare thumbnail(s) sitting alongside the ones on display.`);
+    console.log('  Re-run with --tidy to delete them, keeping each video\'s active thumbnail.');
+  }
   if (auto) {
     console.log('\n  Those marked VIMEO’S have the wrong picture. Any published before');
     console.log(`  ${FIX_DATE} could not have worked - the thumbnail upload was broken until then.`);

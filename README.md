@@ -138,6 +138,14 @@ itself, flagging any published before the 2026-09-06 fix as explained rather tha
 a number to check more than the default 25. It's read-only - it fetches metadata and changes
 nothing. Use it to find the backlog worth re-publishing or fixing by hand on vimeo.com.
 
+It also counts spare thumbnails. Vimeo keeps every picture ever attached to a video and offers all
+of them in its thumbnail picker, so a video typically carries the uploaded graphic *and* the frame
+Vimeo generated for itself - near-identical on these sermons, since the video opens on that very
+graphic. Videos published from now on are tidied automatically (the app deletes the leftovers once
+its own picture is confirmed to be the one showing). For the existing backlog, re-run the tool with
+`--tidy` to do the same: it deletes only non-active pictures, and only on videos whose active
+thumbnail is an uploaded one, so it can never leave a video without the picture it's displaying.
+
 ## Notes / tuning
 
 - The crossfade duration must be shorter than both PNG durations and the video's own length.
