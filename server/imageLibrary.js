@@ -19,18 +19,27 @@ function createImageLibrary(kind) {
   const IMAGES_DIR = path.join(DATA_DIR, `${kind}-images`);
   const INDEX_PATH = path.join(DATA_DIR, `${kind}-images.json`);
 
+  // Cached after the first read, the same way vimeo.js and soundcloud.js cache their config and
+  // for the same reason: this process is the only writer, so re-reading and re-parsing the file
+  // on every lookup is a synchronous disk hit inside a request handler buying nothing.
+  // `undefined` means "not loaded yet".
+  let indexCache;
+
   function loadIndex() {
+    if (indexCache !== undefined) return indexCache;
     try {
       const parsed = JSON.parse(fs.readFileSync(INDEX_PATH, 'utf8'));
-      return Array.isArray(parsed.images) ? parsed.images : [];
+      indexCache = Array.isArray(parsed.images) ? parsed.images : [];
     } catch {
-      return [];
+      indexCache = [];
     }
+    return indexCache;
   }
 
   function saveIndex(images) {
     fs.mkdirSync(DATA_DIR, { recursive: true });
     fs.writeFileSync(INDEX_PATH, JSON.stringify({ images }, null, 2));
+    indexCache = images;
   }
 
   function hashFile(filePath) {
@@ -74,9 +83,12 @@ function createImageLibrary(kind) {
   }
 
   function listImages() {
+    // Compared as strings, not Dates. These are ISO-8601 timestamps, which sort correctly
+    // lexicographically - building two Date objects per comparison did the same job by a longer
+    // route. Sorting a copy, since the array being sorted is the cache itself.
     return loadIndex()
       .slice()
-      .sort((a, b) => new Date(b.lastUsedAt) - new Date(a.lastUsedAt));
+      .sort((a, b) => String(b.lastUsedAt).localeCompare(String(a.lastUsedAt)));
   }
 
   function getImage(id) {

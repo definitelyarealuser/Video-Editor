@@ -81,7 +81,10 @@ async function tidyVideo(client, videoUri, keepUri) {
   try {
     ({ body } = await client.request({
       method: 'GET',
-      path: `/me/videos?per_page=${perPage}&sort=date&direction=desc&fields=uri,name,created_time,pictures.uri,pictures.type,link`,
+      // pictures.total comes back in this same listing, so counting spares costs no extra
+      // requests. Asking each video for its picture list instead meant 1 + N round-trips -
+      // 51 of them for a 50-video check, run one after another.
+      path: `/me/videos?per_page=${perPage}&sort=date&direction=desc&fields=uri,name,created_time,pictures.uri,pictures.type,metadata.connections.pictures.total,link`,
     }));
   } catch (err) {
     console.error('Could not read your videos from Vimeo:', err.message || err);
@@ -107,13 +110,21 @@ async function tidyVideo(client, videoUri, keepUri) {
     const mark = isCustom ? 'custom  ' : 'VIMEO’S ';
     const note = !isCustom && date && date < FIX_DATE ? '  (published before the fix)' : '';
 
-    // How many pictures this video carries beyond the one on display.
-    let extras = 0;
-    try {
-      const listed = await client.request({ method: 'GET', path: `${v.uri}/pictures?fields=uri&per_page=100` });
-      extras = Math.max((((listed.body && listed.body.data) || []).length) - 1, 0);
-    } catch {
-      // Not worth failing the listing over.
+    // How many pictures this video carries beyond the one on display, taken from the listing
+    // above. Only falls back to asking this video directly if the count didn't come through.
+    const total = v.metadata && v.metadata.connections && v.metadata.connections.pictures
+      && v.metadata.connections.pictures.total;
+    let extras;
+    if (typeof total === 'number') {
+      extras = Math.max(total - 1, 0);
+    } else {
+      extras = 0;
+      try {
+        const listed = await client.request({ method: 'GET', path: `${v.uri}/pictures?fields=uri&per_page=100` });
+        extras = Math.max((((listed.body && listed.body.data) || []).length) - 1, 0);
+      } catch {
+        // Not worth failing the listing over.
+      }
     }
     spares += extras;
     let extraNote = extras ? `  [+${extras} spare]` : '';
