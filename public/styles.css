@@ -907,6 +907,50 @@ button.soundcloud-connect-link {
   border-radius: 3px;
 }
 
+/* The span being removed, drawn over the kept range in a colour that reads as "this goes" -
+   deliberately not the accent used for the part being kept. */
+.cut-range-fill {
+  position: absolute;
+  top: 50%;
+  height: 8px;
+  transform: translateY(-50%);
+  background: repeating-linear-gradient(
+    45deg,
+    var(--error) 0 6px,
+    color-mix(in srgb, var(--error) 55%, var(--panel)) 6px 12px
+  );
+  border-radius: 3px;
+  opacity: 0.85;
+}
+
+.trim-slider input.cut-handle[type="range"]::-webkit-slider-thumb {
+  background: var(--error);
+}
+
+.trim-slider input.cut-handle[type="range"]::-moz-range-thumb {
+  background: var(--error);
+}
+
+.cut-section {
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
+}
+
+#cut-controls {
+  margin-top: 12px;
+}
+
+.cut-warning {
+  margin-top: 10px;
+  padding: 8px 10px;
+  border: 1px solid var(--error);
+  border-radius: 6px;
+  background: rgba(229, 86, 107, 0.1);
+  color: var(--error);
+  font-size: 0.82rem;
+}
+
 .trim-slider input[type="range"] {
   position: absolute;
   top: 50%;

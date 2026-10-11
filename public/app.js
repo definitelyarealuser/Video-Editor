@@ -1224,6 +1224,19 @@
 
   // --- Trim panel ---
   const trimPanel = document.getElementById('trim-panel');
+  const removeMiddleCheckbox = document.getElementById('removeMiddle');
+  const cutControls = document.getElementById('cut-controls');
+  const cutRangeFill = document.getElementById('cut-range-fill');
+  const cutStartHandle = document.getElementById('cut-start-handle');
+  const cutEndHandle = document.getElementById('cut-end-handle');
+  const cutStartLabel = document.getElementById('cut-start-label');
+  const cutEndLabel = document.getElementById('cut-end-label');
+  const cutDurationLabel = document.getElementById('cut-duration-label');
+  const cutResultLabel = document.getElementById('cut-result-label');
+  const cutWarning = document.getElementById('cut-warning');
+  const previewCutStartBtn = document.getElementById('preview-cut-start-btn');
+  const previewCutEndBtn = document.getElementById('preview-cut-end-btn');
+  const previewJoinBtn = document.getElementById('preview-join-btn');
   const trimStartHandle = document.getElementById('trim-start-handle');
   const trimEndHandle = document.getElementById('trim-end-handle');
   const trimRangeFill = document.getElementById('trim-range-fill');
@@ -1293,8 +1306,56 @@
     trimStartLabel.textContent = formatTime(start);
     trimEndLabel.textContent = formatTime(end);
     trimDurationLabel.textContent = formatTime(end - start);
-    // Any trim change invalidates a previous size estimate - it was measured against a
-    // different clip length, so showing it now would just be misleading.
+    updateCutUI();
+  }
+
+  // Whether a section is being removed from the middle, and the two kept pieces crossfaded
+  // together. Null when the box is unticked - every caller treats that as "no cut".
+  function currentCut() {
+    if (!removeMiddleCheckbox.checked) return null;
+    return { start: parseFloat(cutStartHandle.value), end: parseFloat(cutEndHandle.value) };
+  }
+
+  // Mirrors resolveCutRange() on the server, so the same range is refused in the same words
+  // before a render starts rather than minutes into one.
+  function cutProblem() {
+    const cut = currentCut();
+    if (!cut) return null;
+    const trimStart = parseFloat(trimStartHandle.value);
+    const trimEnd = parseFloat(trimEndHandle.value);
+    const transition = parseFloat(document.getElementById('transition').value) || 0;
+    if (!(cut.end - cut.start >= 0.1)) return 'Drag the end of the removed section past its start.';
+    if (cut.start < trimStart || cut.end > trimEnd) return 'The removed section has to sit inside the trimmed sermon.';
+    const before = cut.start - trimStart;
+    const after = trimEnd - cut.end;
+    if (before <= transition || after <= transition) {
+      return `Both kept pieces have to be longer than the ${transition}s crossfade joining them - this leaves ${before.toFixed(1)}s before and ${after.toFixed(1)}s after.`;
+    }
+    return null;
+  }
+
+  function updateCutUI() {
+    const cut = currentCut();
+    const max = state.videoDuration || 1;
+    cutRangeFill.hidden = !cut;
+    if (!cut) {
+      cutWarning.hidden = true;
+      return;
+    }
+    cutRangeFill.style.left = `${(cut.start / max) * 100}%`;
+    cutRangeFill.style.width = `${((cut.end - cut.start) / max) * 100}%`;
+    cutStartLabel.textContent = formatTime(cut.start);
+    cutEndLabel.textContent = formatTime(cut.end);
+    cutDurationLabel.textContent = formatTime(Math.max(cut.end - cut.start, 0));
+
+    const transition = parseFloat(document.getElementById('transition').value) || 0;
+    const kept = (cut.start - parseFloat(trimStartHandle.value))
+      + (parseFloat(trimEndHandle.value) - cut.end) - transition;
+    cutResultLabel.textContent = formatTime(Math.max(kept, 0));
+
+    const problem = cutProblem();
+    cutWarning.hidden = !problem;
+    if (problem) cutWarning.textContent = problem;
   }
 
   function setTrimRange(start, end) {
@@ -1377,13 +1438,113 @@
   // close, for precision a mouse drag on a slider spanning a multi-hour file can't give.
   // Reuses the same 'input'/'change' handlers as dragging, so nudging gets the identical
   // live-scrub-then-snippet-preview feedback.
+  const NUDGE_HANDLES = {
+    start: () => trimStartHandle,
+    end: () => trimEndHandle,
+    cutStart: () => cutStartHandle,
+    cutEnd: () => cutEndHandle,
+  };
+
+  document.getElementById('transition').addEventListener('input', () => {
+    updateCutUI();
+    updateRenderButton();
+  });
+
   document.querySelectorAll('.nudge-btn').forEach((btn) => {
     btn.addEventListener('click', () => {
-      const handle = btn.dataset.handle === 'start' ? trimStartHandle : trimEndHandle;
+      const handle = (NUDGE_HANDLES[btn.dataset.handle] || NUDGE_HANDLES.end)();
       handle.value = parseFloat(handle.value) + parseFloat(btn.dataset.delta);
       handle.dispatchEvent(new Event('input', { bubbles: true }));
       handle.dispatchEvent(new Event('change', { bubbles: true }));
     });
+  });
+
+  // --- Removing a section from the middle ---
+  const MIN_CUT_GAP = 0.5;
+
+  function clampCutHandles(movedEnd) {
+    const lo = parseFloat(trimStartHandle.value);
+    const hi = parseFloat(trimEndHandle.value);
+    let start = Math.min(Math.max(parseFloat(cutStartHandle.value), lo), hi);
+    let end = Math.min(Math.max(parseFloat(cutEndHandle.value), lo), hi);
+    // Whichever handle was dragged keeps its position; the other gives way, so a handle never
+    // silently jumps out from under the cursor.
+    if (end - start < MIN_CUT_GAP) {
+      if (movedEnd) start = Math.max(lo, end - MIN_CUT_GAP);
+      else end = Math.min(hi, start + MIN_CUT_GAP);
+    }
+    cutStartHandle.value = start;
+    cutEndHandle.value = end;
+  }
+
+  function showCutControls(on) {
+    cutControls.hidden = !on;
+    cutStartHandle.hidden = !on;
+    cutEndHandle.hidden = !on;
+    updateCutUI();
+    updateRenderButton();
+  }
+
+  removeMiddleCheckbox.addEventListener('change', () => {
+    if (removeMiddleCheckbox.checked) {
+      // Opens on a sensible default rather than a zero-width cut at 0:00: a minute in the
+      // middle of whatever is currently trimmed, which is usually near the clip being removed.
+      const lo = parseFloat(trimStartHandle.value);
+      const hi = parseFloat(trimEndHandle.value);
+      const mid = (lo + hi) / 2;
+      const half = Math.min(30, Math.max((hi - lo) / 10, MIN_CUT_GAP) / 2);
+      cutStartHandle.min = 0;
+      cutStartHandle.max = state.videoDuration;
+      cutEndHandle.min = 0;
+      cutEndHandle.max = state.videoDuration;
+      cutStartHandle.value = Math.max(lo, mid - half);
+      cutEndHandle.value = Math.min(hi, mid + half);
+      clampCutHandles(false);
+    }
+    showCutControls(removeMiddleCheckbox.checked);
+    scheduleLoudnessCheck();
+  });
+
+  cutStartHandle.addEventListener('input', () => {
+    clampCutHandles(false);
+    updateCutUI();
+    scrubTo(parseFloat(cutStartHandle.value));
+  });
+  cutEndHandle.addEventListener('input', () => {
+    clampCutHandles(true);
+    updateCutUI();
+    scrubTo(parseFloat(cutEndHandle.value));
+  });
+  const onCutSettled = (handle) => {
+    updateCutUI();
+    updateRenderButton();
+    scheduleLoudnessCheck();
+    const at = parseFloat(handle.value);
+    playRange(Math.max(at - SNIPPET_SECONDS, 0), at + SNIPPET_SECONDS);
+  };
+  cutStartHandle.addEventListener('change', () => onCutSettled(cutStartHandle));
+  cutEndHandle.addEventListener('change', () => onCutSettled(cutEndHandle));
+
+  previewCutStartBtn.addEventListener('click', () => {
+    const at = parseFloat(cutStartHandle.value);
+    playRange(Math.max(at - PREVIEW_END_SECONDS, 0), at);
+  });
+  previewCutEndBtn.addEventListener('click', () => {
+    const at = parseFloat(cutEndHandle.value);
+    playRange(at, at + PREVIEW_END_SECONDS);
+  });
+  // The join can't be played from the source - the two moments are minutes apart in the file -
+  // so this plays the run-up to the cut, then jumps to just after it, which is what the
+  // crossfade will actually stitch together.
+  previewJoinBtn.addEventListener('click', () => {
+    const from = parseFloat(cutStartHandle.value);
+    const to = parseFloat(cutEndHandle.value);
+    playRange(Math.max(from - SNIPPET_SECONDS, 0), from);
+    const jump = () => {
+      videoPreview.removeEventListener('pause', jump);
+      playRange(to, to + SNIPPET_SECONDS);
+    };
+    videoPreview.addEventListener('pause', jump, { once: true });
   });
 
   previewStartBtn.addEventListener('click', () => {
@@ -1980,6 +2141,8 @@
     // Both paths only matter - and are only required - once "save locally" is checked. Both are
     // asked for now, since a render always produces an MP4 and an MP3; skipping the MP3 happens
     // later, in the SoundCloud step, by which point this has long since been satisfied.
+    const cutIssue = cutProblem();
+    if (cutIssue) missing.push('a workable section to remove');
     if (saveLocallyCheckbox.checked) {
       if (!document.getElementById('videoSavePath').value.trim()) missing.push('a folder to save the MP4 to');
       if (!document.getElementById('audioSavePath').value.trim()) {
@@ -2144,6 +2307,12 @@
     formData.append('normalizeAudio', normalizeAudioCheckbox.checked);
     formData.append('targetLufs', targetLufsSelect.value);
     formData.append('exportMp3', exportMp3);
+    const cut = currentCut();
+    formData.append('removeMiddle', !!cut);
+    if (cut) {
+      formData.append('cutStart', cut.start);
+      formData.append('cutEnd', cut.end);
+    }
     formData.append('trimStart', trimStartHandle.value);
     formData.append('trimEnd', trimEndHandle.value);
     formData.append('publishToVimeo', publishToVimeo);

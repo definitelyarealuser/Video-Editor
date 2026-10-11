@@ -103,6 +103,31 @@ async function probe(filePath) {
  * renderAudio below) - it doesn't touch the PNG or video streams at all, so it renders
  * much faster than the full MP4 and can be saved/published while the video is still going.
  */
+// Works out the pieces of source material a render is built from. With no section removed
+// that's one span; with one removed it's the part before the cut and the part after it, and the
+// sermon's combined length is the two added together less the crossfade that joins them.
+//
+// Returns the segments as explicit [start, end] spans so the caller can turn each into its own
+// ffmpeg input, plus the combined length everything downstream measures itself against.
+function planMainSegments({ trimStart, trimEnd, cutStart, cutEnd, transition }) {
+  const hasCut = cutStart != null && cutEnd != null;
+  if (!hasCut) {
+    const segments = trimStart != null && trimEnd != null ? [[trimStart, trimEnd]] : [];
+    return {
+      segments,
+      duration: segments.length ? trimEnd - trimStart : null,
+      midCutAfterSeconds: null,
+    };
+  }
+  const beforeCut = cutStart - trimStart;
+  const afterCut = trimEnd - cutEnd;
+  return {
+    segments: [[trimStart, cutStart], [cutEnd, trimEnd]],
+    duration: beforeCut + afterCut - transition,
+    midCutAfterSeconds: beforeCut,
+  };
+}
+
 function buildFilterGraph({
   width,
   height,
@@ -116,6 +141,11 @@ function buildFilterGraph({
   crossfadeAudio,
   normalize,
   targetLufs,
+  // Seconds of sermon before the join, when a section has been cut out of the middle. The two
+  // kept pieces arrive as separate inputs (1 and 3) and are crossfaded into one here, so
+  // everything downstream - bookends, normalizing, the fade-out - carries on working against a
+  // single stretch of sermon and doesn't need to know a cut happened at all.
+  midCutAfterSeconds = null,
 }) {
   const totalDuration = startDuration + endDuration + videoDuration - 2 * transition;
   const offset1 = startDuration - transition;
@@ -124,20 +154,41 @@ function buildFilterGraph({
 
   const scalePad = `scale=${width}:${height}:force_original_aspect_ratio=decrease,pad=${width}:${height}:(ow-iw)/2:(oh-ih)/2:color=black,setsar=1,fps=${fps},format=yuv420p`;
 
+  const mainVideoSource = midCutAfterSeconds === null
+    ? [`[1:v]fps=${fps},format=yuv420p[mainv]`]
+    : [
+        `[1:v]fps=${fps},format=yuv420p[mainv1]`,
+        `[3:v]fps=${fps},format=yuv420p[mainv2]`,
+        // The join lands `transition` seconds before the first piece ends, so the two overlap
+        // exactly as long as the bookend crossfades do.
+        `[mainv1][mainv2]xfade=transition=fade:duration=${transition}:offset=${midCutAfterSeconds - transition}[mainv]`,
+      ];
+
   const videoChain = [
     `[0:v]${scalePad}[img1v]`,
     `[2:v]${scalePad}[img2v]`,
-    `[1:v]fps=${fps},format=yuv420p[mainv]`,
+    ...mainVideoSource,
     `[img1v][mainv]xfade=transition=fade:duration=${transition}:offset=${offset1}[xv1]`,
     `[xv1][img2v]xfade=transition=fade:duration=${transition}:offset=${offset2}[xv2]`,
     `[xv2]fade=t=out:st=${fadeStart}:d=${fadeOut}:color=black[vout]`,
   ];
 
-  const mainAudioSource = hasAudio
-    ? `[1:a]aformat=sample_rates=48000:channel_layouts=stereo[maina]`
-    : `anullsrc=channel_layout=stereo:sample_rate=48000,atrim=0:${videoDuration},asetpts=PTS-STARTPTS[maina]`;
+  // Silent source material is built at the combined length, so a mid-cut needs no special case
+  // here - there is nothing to join.
+  const silentMain = `anullsrc=channel_layout=stereo:sample_rate=48000,atrim=0:${videoDuration},asetpts=PTS-STARTPTS[maina]`;
+  const mainAudioSource = !hasAudio
+    ? [silentMain]
+    : midCutAfterSeconds === null
+      ? [`[1:a]aformat=sample_rates=48000:channel_layouts=stereo[maina]`]
+      : [
+          `[1:a]aformat=sample_rates=48000:channel_layouts=stereo[maina1]`,
+          `[3:a]aformat=sample_rates=48000:channel_layouts=stereo[maina2]`,
+          // acrossfade overlaps the two by `transition` and outputs their combined length minus
+          // that overlap - the same arithmetic the video join above does.
+          `[maina1][maina2]acrossfade=d=${transition}[maina]`,
+        ];
 
-  const audioChain = [mainAudioSource];
+  const audioChain = [...mainAudioSource];
 
   // Normalized before the silent bookend holds are attached, not after. loudnorm here runs in its
   // single-pass streaming mode, where it adapts as audio flows through it - so feeding it several
@@ -187,12 +238,21 @@ function buildFilterGraph({
  * end - mirroring the crossfade the picture does in the full render, regardless of that
  * render's own audio-crossfade toggle - with optional loudness normalization.
  */
-function buildAudioOnlyFilterGraph({ videoDuration, hasAudio, transition, normalize, targetLufs }) {
-  const mainAudioSource = hasAudio
-    ? `[0:a]aformat=sample_rates=48000:channel_layouts=stereo[maina]`
-    : `anullsrc=channel_layout=stereo:sample_rate=48000,atrim=0:${videoDuration},asetpts=PTS-STARTPTS[maina]`;
+function buildAudioOnlyFilterGraph({ videoDuration, hasAudio, transition, normalize, targetLufs, midCut = false }) {
+  // Mirrors the video pass: with a section cut out, the two kept pieces arrive as inputs 0 and 1
+  // and are crossfaded into one before anything else touches them, so the MP3 gets the same join
+  // at the same moment as the video does.
+  const mainAudioSource = !hasAudio
+    ? [`anullsrc=channel_layout=stereo:sample_rate=48000,atrim=0:${videoDuration},asetpts=PTS-STARTPTS[maina]`]
+    : midCut
+      ? [
+          `[0:a]aformat=sample_rates=48000:channel_layouts=stereo[maina1]`,
+          `[1:a]aformat=sample_rates=48000:channel_layouts=stereo[maina2]`,
+          `[maina1][maina2]acrossfade=d=${transition}[maina]`,
+        ]
+      : [`[0:a]aformat=sample_rates=48000:channel_layouts=stereo[maina]`];
 
-  const chain = [mainAudioSource];
+  const chain = [...mainAudioSource];
   let label = 'maina';
   if (normalize) {
     chain.push(`[maina]loudnorm=I=${targetLufs}:TP=-1.5:LRA=11[mainan]`);
@@ -265,6 +325,8 @@ function render({
   outputPath,
   trimStart,
   trimEnd,
+  cutStart,
+  cutEnd,
   startDuration,
   endDuration,
   transition,
@@ -276,11 +338,13 @@ function render({
   videoCrf = VIDEO_QUALITY_PRESETS.high,
   onProgress,
 }) {
+  const plan = planMainSegments({ trimStart, trimEnd, cutStart, cutEnd, transition });
+
   const { filterComplex, totalDuration } = buildFilterGraph({
     width: videoInfo.width,
     height: videoInfo.height,
     fps: videoInfo.fps,
-    videoDuration: videoInfo.duration,
+    videoDuration: plan.duration != null ? plan.duration : videoInfo.duration,
     hasAudio: videoInfo.hasAudio,
     startDuration,
     endDuration,
@@ -289,18 +353,21 @@ function render({
     crossfadeAudio,
     normalize,
     targetLufs,
+    midCutAfterSeconds: plan.midCutAfterSeconds,
   });
 
-  const videoInputArgs =
-    trimStart != null && trimEnd != null
-      ? ['-ss', String(trimStart), '-to', String(trimEnd), '-i', videoPath]
-      : ['-i', videoPath];
+  const segmentInput = ([from, to]) => ['-ss', String(from), '-to', String(to), '-i', videoPath];
+  const firstSegment = plan.segments.length ? segmentInput(plan.segments[0]) : ['-i', videoPath];
+  // The second piece goes on the end rather than next to the first, so the bookend PNGs keep
+  // input indices 0 and 2 and the filter graph's existing labels stay put.
+  const secondSegment = plan.segments.length > 1 ? segmentInput(plan.segments[1]) : [];
 
   const args = [
     '-y',
     '-loop', '1', '-t', String(startDuration), '-i', pngPath,
-    ...videoInputArgs,
+    ...firstSegment,
     '-loop', '1', '-t', String(endDuration), '-i', pngPath,
+    ...secondSegment,
     '-filter_complex', filterComplex,
     '-map', '[vout]',
     '-map', '[aout]',
@@ -341,6 +408,8 @@ function renderAudio({
   outputPath,
   trimStart,
   trimEnd,
+  cutStart,
+  cutEnd,
   transition,
   normalize,
   targetLufs,
@@ -348,18 +417,21 @@ function renderAudio({
   mp3Bitrate = 192,
   onProgress,
 }) {
+  const plan = planMainSegments({ trimStart, trimEnd, cutStart, cutEnd, transition });
+
   const { filterComplex } = buildAudioOnlyFilterGraph({
-    videoDuration: videoInfo.duration,
+    videoDuration: plan.duration != null ? plan.duration : videoInfo.duration,
     hasAudio: videoInfo.hasAudio,
     transition,
     normalize,
     targetLufs,
+    midCut: plan.midCutAfterSeconds !== null,
   });
 
-  const videoInputArgs =
-    trimStart != null && trimEnd != null
-      ? ['-ss', String(trimStart), '-to', String(trimEnd), '-i', videoPath]
-      : ['-i', videoPath];
+  const segmentInput = ([from, to]) => ['-ss', String(from), '-to', String(to), '-i', videoPath];
+  const videoInputArgs = plan.segments.length
+    ? plan.segments.flatMap(segmentInput)
+    : ['-i', videoPath];
 
   const args = [
     '-y',
@@ -381,35 +453,6 @@ function renderAudio({
   );
 }
 
-/**
- * Encodes a short sample from the middle of the trimmed range at the given CRF and extrapolates
- * a full-length size estimate from the sample's actual encoded size. CRF encoding has no fixed
- * bitrate - how well a video compresses depends entirely on its content (a static talking-head
- * shot vs. a busy, high-motion worship set), so a real sample is the only way to get an estimate
- * that means anything for this specific file, as opposed to a generic guess.
- */
-async function estimateVideoSampleSize({ videoPath, sampleStart, sampleSeconds, totalSeconds, width, height, fps, videoCrf }) {
-  const tmpPath = path.join(os.tmpdir(), `size-estimate-${crypto.randomUUID()}.mp4`);
-  const args = [
-    '-y',
-    '-ss', String(sampleStart), '-t', String(sampleSeconds), '-i', videoPath,
-    '-vf', `scale=${width}:${height}:force_original_aspect_ratio=decrease,pad=${width}:${height}:(ow-iw)/2:(oh-ih)/2:color=black,setsar=1,fps=${fps},format=yuv420p`,
-    '-c:v', 'libx264',
-    '-preset', 'medium',
-    '-crf', String(videoCrf),
-    '-pix_fmt', 'yuv420p',
-    '-an',
-    tmpPath,
-  ];
-  try {
-    await run('ffmpeg', args);
-    const stat = await fs.promises.stat(tmpPath);
-    const bytesPerSecond = stat.size / sampleSeconds;
-    return Math.round(bytesPerSecond * totalSeconds);
-  } finally {
-    fs.promises.rm(tmpPath, { force: true }).catch(() => {});
-  }
-}
 
 
 
@@ -681,6 +724,7 @@ module.exports = {
   render,
   renderAudio,
   checkFfmpegAvailable,
+  planMainSegments,
   analyzeLoudness,
   recommendNormalization,
   planLoudnessSampling,

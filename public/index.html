@@ -93,8 +93,11 @@
         <div class="trim-slider" id="trim-slider">
           <div class="trim-track"></div>
           <div class="trim-range-fill" id="trim-range-fill"></div>
+          <div class="cut-range-fill" id="cut-range-fill" hidden></div>
           <input type="range" id="trim-start-handle" min="0" max="0" step="0.1" value="0" />
           <input type="range" id="trim-end-handle" min="0" max="0" step="0.1" value="0" />
+          <input type="range" id="cut-start-handle" class="cut-handle" min="0" max="0" step="0.1" value="0" hidden />
+          <input type="range" id="cut-end-handle" class="cut-handle" min="0" max="0" step="0.1" value="0" hidden />
         </div>
         <div class="trim-readout">
           <span id="trim-start-label">0:00</span> – <span id="trim-end-label">0:00</span>
@@ -126,6 +129,45 @@
           <button type="button" id="preview-start-btn" class="playback-btn">Preview Start</button>
           <button type="button" id="play-pause-btn" class="playback-btn playback-btn-primary">▶ Play</button>
           <button type="button" id="preview-end-btn" class="playback-btn">Preview End</button>
+        </div>
+
+        <div class="cut-section">
+          <label class="inline-check">
+            <input type="checkbox" id="removeMiddle" />
+            Remove a section from the middle
+          </label>
+          <div id="cut-controls" hidden>
+            <div class="trim-readout">
+              Removing <span id="cut-start-label">0:00</span> – <span id="cut-end-label">0:00</span>
+              <span class="trim-duration">(<span id="cut-duration-label">0:00</span> cut, <span id="cut-result-label">0:00</span> left)</span>
+            </div>
+            <div class="fine-tune">
+              <div class="fine-tune-row">
+                <span class="fine-tune-label">Cut from</span>
+                <button type="button" class="nudge-btn" data-handle="cutStart" data-delta="-5">-5s</button>
+                <button type="button" class="nudge-btn" data-handle="cutStart" data-delta="-1">-1s</button>
+                <button type="button" class="nudge-btn" data-handle="cutStart" data-delta="-0.1">-0.1s</button>
+                <button type="button" class="nudge-btn" data-handle="cutStart" data-delta="0.1">+0.1s</button>
+                <button type="button" class="nudge-btn" data-handle="cutStart" data-delta="1">+1s</button>
+                <button type="button" class="nudge-btn" data-handle="cutStart" data-delta="5">+5s</button>
+              </div>
+              <div class="fine-tune-row">
+                <span class="fine-tune-label">Cut to</span>
+                <button type="button" class="nudge-btn" data-handle="cutEnd" data-delta="-5">-5s</button>
+                <button type="button" class="nudge-btn" data-handle="cutEnd" data-delta="-1">-1s</button>
+                <button type="button" class="nudge-btn" data-handle="cutEnd" data-delta="-0.1">-0.1s</button>
+                <button type="button" class="nudge-btn" data-handle="cutEnd" data-delta="0.1">+0.1s</button>
+                <button type="button" class="nudge-btn" data-handle="cutEnd" data-delta="1">+1s</button>
+                <button type="button" class="nudge-btn" data-handle="cutEnd" data-delta="5">+5s</button>
+              </div>
+            </div>
+            <div class="playback-controls">
+              <button type="button" id="preview-cut-start-btn" class="playback-btn">Preview Cut Start</button>
+              <button type="button" id="preview-join-btn" class="playback-btn playback-btn-primary">▶ Preview the Join</button>
+              <button type="button" id="preview-cut-end-btn" class="playback-btn">Preview Cut End</button>
+            </div>
+            <div id="cut-warning" class="cut-warning" hidden></div>
+          </div>
         </div>
 
         <div class="trim-panel-settings">

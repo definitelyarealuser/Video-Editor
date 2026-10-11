@@ -183,6 +183,36 @@ function resolveTrimRange(rawStart, rawEnd, fullDuration) {
   return { trimStart: start, trimEnd: end };
 }
 
+/**
+ * Resolves the section to drop out of the middle - the copyright-bound video clip played during
+ * a sermon, typically - against the trim range it has to sit inside.
+ *
+ * Returns `{ cutStart: null, cutEnd: null }` when nothing is being removed, or an `error` naming
+ * what's wrong. Both kept pieces have to outlast the crossfade that joins them, since that's an
+ * overlap: asking ffmpeg to blend two seconds of material across a three-second fade doesn't
+ * produce a short fade, it produces a filter-graph error halfway through a long render.
+ */
+function resolveCutRange(rawStart, rawEnd, { trimStart, trimEnd, transition }) {
+  const none = { cutStart: null, cutEnd: null };
+  const start = toNonNegativeFloat(rawStart, NaN);
+  const end = toNonNegativeFloat(rawEnd, NaN);
+  if (!isFinite(start) || !isFinite(end)) return { ...none, error: 'The section to remove needs a start and an end.' };
+  if (end - start < 0.1) return { ...none, error: 'The section to remove is empty - drag its end past its start.' };
+  if (start < trimStart || end > trimEnd) {
+    return { ...none, error: 'The section to remove has to sit inside the trimmed sermon.' };
+  }
+
+  const before = start - trimStart;
+  const after = trimEnd - end;
+  if (before <= transition || after <= transition) {
+    return {
+      ...none,
+      error: `Both kept pieces have to be longer than the ${transition}s crossfade that joins them - this leaves ${before.toFixed(1)}s before the cut and ${after.toFixed(1)}s after.`,
+    };
+  }
+  return { cutStart: start, cutEnd: end };
+}
+
 const MIN_LUFS = -20;
 const MAX_LUFS = -10;
 
@@ -306,11 +336,36 @@ app.post('/api/render/:jobId', useJobIdFromParams, renderUpload, async (req, res
       await cleanupUploadedExtras();
       return res.status(400).json({ error: 'The trimmed range is too short.' });
     }
-    const effectiveDuration = isTrimmed ? trimEnd - trimStart : fullDuration;
+
 
     const startDuration = toPositiveFloat(req.body.startDuration, 5);
     const endDuration = toPositiveFloat(req.body.endDuration, 5);
     const transition = toPositiveFloat(req.body.transition, 1);
+
+    // An optional section removed from the middle, the two remaining pieces crossfaded together.
+    // Validated here rather than left to ffmpeg: a bad range is a filter-graph failure minutes
+    // into a long render, where this is an immediate, readable answer.
+    const removeMiddle = toBool(req.body.removeMiddle, false);
+    const cut = removeMiddle
+      ? resolveCutRange(req.body.cutStart, req.body.cutEnd, { trimStart, trimEnd, transition })
+      : { cutStart: null, cutEnd: null };
+    if (cut.error) {
+      await cleanupUploadedExtras();
+      return res.status(400).json({ error: cut.error });
+    }
+    const { cutStart, cutEnd } = cut;
+
+    // What the render actually produces: both kept pieces, less the crossfade they overlap by.
+    // Everything downstream measures against this - progress, the fade-to-black position, and
+    // the check below that the fade still fits.
+    const keptDuration = cutStart !== null
+      ? (cutStart - trimStart) + (trimEnd - cutEnd) - transition
+      : trimEnd - trimStart;
+    if (keptDuration < 1) {
+      await cleanupUploadedExtras();
+      return res.status(400).json({ error: 'Removing that section leaves too little of the sermon to render.' });
+    }
+    const effectiveDuration = isTrimmed || cutStart !== null ? keptDuration : fullDuration;
     const fadeOut = toPositiveFloat(req.body.fadeOut, 1.5);
     const outputName = sanitizeFilename(req.body.outputName);
     // Kept apart from the filename on purpose: the published title should read exactly as typed,
@@ -407,8 +462,10 @@ app.post('/api/render/:jobId', useJobIdFromParams, renderUpload, async (req, res
           await renderAudio({
             videoPath: job.videoPath,
             outputPath: mp3OutputPath,
-            trimStart: isTrimmed ? trimStart : null,
-            trimEnd: isTrimmed ? trimEnd : null,
+            trimStart: isTrimmed || cutStart !== null ? trimStart : null,
+            trimEnd: isTrimmed || cutStart !== null ? trimEnd : null,
+            cutStart,
+            cutEnd,
             transition,
             normalize,
             targetLufs,
@@ -468,8 +525,10 @@ app.post('/api/render/:jobId', useJobIdFromParams, renderUpload, async (req, res
         videoCrf,
         videoPath: job.videoPath,
         outputPath,
-        trimStart: isTrimmed ? trimStart : null,
-        trimEnd: isTrimmed ? trimEnd : null,
+        trimStart: isTrimmed || cutStart !== null ? trimStart : null,
+        trimEnd: isTrimmed || cutStart !== null ? trimEnd : null,
+        cutStart,
+        cutEnd,
         startDuration,
         endDuration,
         transition,
