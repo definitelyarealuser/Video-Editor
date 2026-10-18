@@ -2,10 +2,17 @@
  * Turns a sermon transcript into a handful of short title suggestions, without sending anything
  * anywhere. No model, no API key - just the words that were actually said.
  *
- * The method is deliberately plain: a sermon says its theme out loud, repeatedly. Phrases the
- * preacher returns to are what the sermon is about, so repeated multi-word phrases - weighted by
- * how often they recur and how substantial they are - make reasonable titles. Scripture the
- * passage keeps naming is treated the same way.
+ * The method is deliberately plain, and it works theme first. A sermon says what it is about out
+ * loud and keeps coming back to it, so the words that carry its themes are the ones that are both
+ * frequent and spread right across it - a word used throughout is a theme, where a word used
+ * heavily for one minute is an anecdote. Those themes are ranked, and each one is given a
+ * suggestion of its own: a real phrase, said in the sermon, containing that word. Taking the best
+ * phrase per theme rather than the best phrases overall is what stops the list being seven
+ * rewordings of whichever sentence the preacher happened to repeat most. Scripture the passage
+ * keeps naming is treated as a theme of its own.
+ *
+ * Nothing here is invented: every suggestion is words that were actually said, in the order they
+ * were said in. It is a thematic choice among real phrases, not a generated sentence.
  *
  * This will never write as well as a person would. It is meant to be a starting point that is
  * usually in the right territory, not a finished title, which is why the app offers several and
@@ -31,8 +38,11 @@ wouldnt yeah yes yet you your yours yourself
 
 // Sermon-specific filler. These recur constantly and would otherwise dominate, but they describe
 // the act of preaching rather than what is being preached.
+// Note what is NOT here: "brother", "father", "son" and the like. They look like forms of address
+// and they are, half the time - but they are also what half the parables are about, and excluding
+// "brother" quietly cost a sermon on the prodigal son its entire second half.
 const SERMON_FILLER = new Set(`
-amen bible brother chapter church congregation friends morning scripture sermon verse verses
+amen bible chapter church congregation friends morning scripture sermon verse verses
 pastor passage preaching read reading says text today together turn week sunday
 `.trim().split(/\s+/));
 
@@ -46,7 +56,7 @@ by in for from with through without into
 // Words that give away a phrase as the middle of a sentence rather than a whole thought. "love with
 // which he loved" is a grammatical offcut, not a title.
 const MID_SENTENCE = new Set(`
-that which who whom whose because though although unless whether therefore but
+that which who whom whose because though although unless whether therefore but than
 according regarding concerning including instead anyway maybe probably basically
 cant dont didnt doesnt isnt wasnt arent werent hasnt havent wont wouldnt couldnt shouldnt
 yeah okay ok oh um uh
@@ -63,6 +73,7 @@ what how why when where whenever however if i am
 const CANNOT_END = new Set(`
 supposed going trying able willing meant used gonna wanna
 talking saying telling asking wondering thinking looking
+hammering pointing bringing holding keeping putting showing giving taking making
 `.trim().split(/\s+/));
 
 const BOOKS_OF_THE_BIBLE = `
@@ -73,11 +84,19 @@ matthew mark luke john acts romans corinthians galatians ephesians philippians c
 thessalonians timothy titus philemon hebrews james peter jude revelation
 `.trim().split(/\s+/);
 
+// Three, not two. Two-word phrases were tried and made the list worse rather than longer: they
+// add no themes the three-word ones miss, and being shorter they score above the fuller phrase
+// and then crowd it out - "Older Brother" winning over "The Older Brother", which is the title
+// anyone would actually write.
 const MIN_WORDS = 3;
 const MAX_WORDS = 6;
-const MAX_SUGGESTIONS = 7;
-// How few repeated phrases it takes before the weaker, said-once candidates are worth offering.
-const MIN_BEFORE_GUESSING = 4;
+const MAX_SUGGESTIONS = 10;
+// How few real suggestions it takes before the weaker, said-once candidates are worth offering.
+const MIN_BEFORE_GUESSING = 6;
+// A theme is a word the sermon keeps returning to across the whole of it. Measuring "across the
+// whole of it" means cutting the transcript into stretches and counting how many a word turns up
+// in - ten is enough to tell a theme from a story told once at length.
+const SPREAD_BUCKETS = 10;
 
 // Stands in for the end of a sentence once the punctuation itself is gone. Phrases are not allowed
 // to run across one: "...gave it to his son. Now Jesus says..." is two thoughts, and the words
@@ -188,8 +207,34 @@ function overlapsWith(candidate, chosen, { looseness }) {
 }
 
 /**
- * Returns up to seven suggestions, best first. Fewer if the transcript is too thin to get that
- * many distinct ones - the caller shows what it gets rather than padding with rubbish.
+ * The words this sermon is about, strongest first.
+ *
+ * Frequency alone picks up whatever the longest story in the sermon was about. What separates a
+ * theme from an anecdote is that the preacher keeps coming back to it, so a word's weight is how
+ * often it was said multiplied by how much of the sermon it was said across. A word spread over
+ * eight stretches of ten beats one said twice as often but all in the same two.
+ */
+function themeWords(words) {
+  const bucketSize = Math.max(1, Math.ceil(words.length / SPREAD_BUCKETS));
+  const stats = new Map();
+  words.forEach((word, i) => {
+    if (!isContentWord(word)) return;
+    if (!stats.has(word)) stats.set(word, { count: 0, buckets: new Set() });
+    const entry = stats.get(word);
+    entry.count += 1;
+    entry.buckets.add(Math.floor(i / bucketSize));
+  });
+  return [...stats.entries()]
+    // Said once in one place is not a theme, whatever else is true of it.
+    .filter(([, { count }]) => count > 1)
+    .map(([word, { count, buckets }]) => ({ word, weight: count * Math.sqrt(buckets.size) }))
+    .sort((a, b) => b.weight - a.weight)
+    .map(({ word }) => word);
+}
+
+/**
+ * Returns up to ten suggestions, best first. Fewer if the transcript is too thin to get that many
+ * distinct ones - the caller shows what it gets rather than padding with rubbish.
  */
 function suggestTitles(transcript) {
   const text = normalise(transcript);
@@ -209,10 +254,22 @@ function suggestTitles(transcript) {
     })
     .sort((a, b) => b.score - a.score);
 
-  // Take the clearly distinct ones first. If that leaves empty slots, go round again accepting
-  // anything that is not a restatement of a title already taken - better a near neighbour in slot
-  // six than six suggestions when seven were asked for.
+  // One suggestion per theme, strongest theme first: the best real phrase the sermon said about
+  // it. Going theme by theme rather than straight down the list of phrases is what makes the ten
+  // suggestions ten different angles on the sermon instead of one sentence worded ten ways.
   const chosen = [];
+  for (const theme of themeWords(words)) {
+    if (chosen.length >= MAX_SUGGESTIONS) break;
+    const best = scored.find(({ phrase }) => (
+      phrase.split(' ').includes(theme)
+      && !chosen.includes(phrase)
+      && !chosen.some((existing) => overlapsWith(phrase, existing, { looseness: 0.5 }))
+    ));
+    if (best) chosen.push(best.phrase);
+  }
+
+  // Then anything strong that no theme happened to claim. The first pass takes only the clearly
+  // distinct ones; the second accepts near neighbours rather than leaving the list short.
   for (const looseness of [0.5, 1]) {
     for (const { phrase } of scored) {
       if (chosen.length >= MAX_SUGGESTIONS) break;

@@ -112,7 +112,7 @@ Optional, off by default, and needs a SoundCloud **Artist-Pro** subscription - S
 
 That's the whole setup, and it only needs doing once per machine - reopen the panel any time to change the playlists, or click **Disconnect SoundCloud** to sign out (keeping the saved Client ID/Secret) or **Forget these credentials** to clear everything and start over. (Advanced/scripted installs can instead set `SOUNDCLOUD_CLIENT_ID`/`SOUNDCLOUD_CLIENT_SECRET` as environment variables in `.env` - see `.env.example` - which take priority over the in-app panel and lock those two fields; this isn't needed for normal use. `SOUNDCLOUD_PLAYLIST_IDS`/`VIMEO_SHOWCASE_IDS` behave differently: they only seed the list for an install that has never touched the in-app controls, and the app takes over permanently the first time a playlist or showcase is added or removed there. Managing those lists is routine work, so the app always wins.)
 
-With SoundCloud connected, clicking **Render Video** shows a **"Publish to SoundCloud?"** dialog - separately from Vimeo's, right after it, and only when **Also render an MP3** is checked (SoundCloud is audio-only, so there's nothing to offer otherwise). Same shape as Vimeo's dialog: a Private/Public privacy choice (defaults to Private), checkboxes for which configured playlists to add it to, and **Cancel** / **Render Only** / **Render & Publish to SoundCloud** buttons that behave exactly like Vimeo's equivalents. The square graphic from the main form's SoundCloud artwork dropzone is uploaded as the track's cover art at the same time. A results panel shows the track link and which playlists succeeded or failed.
+With SoundCloud connected, clicking **Render Video** shows a **"Publish to SoundCloud?"** dialog - separately from Vimeo's, right after it. SoundCloud is audio-only, and **Skip the MP3** in that dialog is also how you render the video on its own. Same shape as Vimeo's dialog: a Public/Private privacy choice (defaults to Public, as Vimeo's does), checkboxes for which configured playlists to add it to, and **Cancel** / **Render Only** / **Render & Publish to SoundCloud** buttons that behave exactly like Vimeo's equivalents. The square graphic from the main form's SoundCloud artwork dropzone is uploaded as the track's cover art at the same time. A results panel shows the track link and which playlists succeeded or failed.
 
 Everything entered in the SoundCloud setup panel is saved locally to `data/soundcloud-app-config.json` and `data/soundcloud-tokens.json` (both gitignored, never committed) - never to `.env`, and never anywhere that gets copied to GitHub.
 
@@ -135,7 +135,7 @@ Every render feeds a small local history (`data/history.json`, gitignored - noth
 
 Under the **Sermon Title** field there's a **Suggest a title** button. It reads the sermon back and
 offers a title from what was actually preached. Press it again for the next suggestion; there are up
-to seven, and it rolls back round to the first rather than running out. Nothing is filled in unless
+to ten, and it rolls back round to the first rather than running out. Nothing is filled in unless
 the button is pressed, and whatever it puts there can be typed over.
 
 Suggestions are always made from the whole sermon, never from the part transcribed so far - a title
@@ -168,9 +168,15 @@ they belong to.
 The toggle under the button chooses where suggestions come from. Both read the same local
 transcript; they differ in what turns it into a title.
 
-- **This Mac** (the default): no account, no API key, nothing sent anywhere, instant. It looks for
-  the multi-word phrases the preacher came back to, on the basis that a sermon says its theme out
-  loud repeatedly, and scores them by how often they recur and how much they carry. Phrases are not
+- **This Mac** (the default): no account, no API key, nothing sent anywhere, instant. It works
+  theme first. The words carrying a sermon's themes are the ones that are both frequent *and*
+  spread right across it - a word used throughout is a theme, a word used heavily for one minute is
+  an anecdote - so it ranks words by how often they were said multiplied by how much of the sermon
+  they were said across, and then gives each theme a suggestion of its own: the best real phrase
+  the sermon said about it. Taking the best phrase per theme rather than the best phrases overall
+  is what makes the list ten different angles on the sermon instead of one sentence worded ten
+  ways. Nothing is invented - every suggestion is words that were actually said, in the order they
+  were said in. Phrases are not
   allowed to run across a sentence boundary or to be the tail end of a longer phrase, which is what
   separates "By Grace You Have Been Saved" from "Grace You Have Been Saved". Nor may they read as
   the middle of a sentence someone was quoting: a relative pronoun or a stray "what"/"why"/"I"
@@ -178,14 +184,17 @@ transcript; they differ in what turns it into a title.
   turns "Ask What Am I Supposed" into something nobody would publish, so those are thrown out. If
   the sermon doesn't repeat itself enough - a short clip, say - it falls back to phrases said once
   whose every word is one the sermon dwells on, and then to the book of the Bible being preached
-  ("A Study in Ephesians"); but only far enough to offer four, because seven suggestions with a
-  clunker at number five is worse than four good ones. Seven is a limit, not a quota. It will never
-  write as well as a person; it is a starting point that is usually in the right territory.
+  ("A Study in Ephesians"); but only far enough to offer six, because ten suggestions with a
+  clunker at number five is worse than seven good ones. Ten is a limit, not a quota, and a short or
+  narrative sermon will often give seven or eight rather than ten. It will never write as well as a
+  person; it is a starting point that is usually in the right territory.
 - **Claude**: better titles, because it actually reads the sermon rather than counting it. It needs
   an Anthropic API key (the app walks you through getting one, and saves it to
   `data/claude-config.json`, gitignored) and it sends the transcript to Anthropic to be read, which
-  is the real difference between the two - a suggestion costs a few cents. All seven come back in
-  one request, so cycling through them is free.
+  is the real difference between the two - a suggestion costs a few cents. It is asked to settle
+  what the sermon is about before writing anything, and to make the ten cover the sermon's
+  different threads rather than one idea reworded. All ten come back in one request, so cycling
+  through them is free.
 
 Both are offered so they can be compared on actual sermons. The choice is remembered in the browser
 and is never changed for you.

@@ -402,7 +402,9 @@ app.post('/api/render/:jobId', useJobIdFromParams, renderUpload, async (req, res
     const soundcloudPlaylistIds = req.body.soundcloudPlaylistIds !== undefined
       ? String(req.body.soundcloudPlaylistIds).split(',').map((s) => s.trim()).filter(Boolean)
       : undefined;
-    const soundcloudPrivacy = String(req.body.soundcloudPrivacy || 'private');
+    // Public by default, matching the dialog and matching Vimeo above - a sermon is published to
+    // be listened to, and a track quietly uploaded private is one nobody finds.
+    const soundcloudPrivacy = String(req.body.soundcloudPrivacy || 'public');
     // Optional local folders (on this same machine, since the server runs on your own computer)
     // to also copy the finished file(s) into, on top of whatever Vimeo/SoundCloud publishing was
     // requested - copyToFolder() below is already a no-op when either is blank, so there's
