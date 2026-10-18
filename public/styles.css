@@ -29,6 +29,38 @@ body {
   padding: 40px 24px 80px;
 }
 
+/* Sits above everything, only once there is actually something to update to. Deliberately not
+   a modal or a toast: it is never urgent, and it should be possible to ignore it mid-edit. */
+.update-banner {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+  margin-bottom: 24px;
+  padding: 12px 16px;
+  border: 1px solid color-mix(in srgb, var(--accent) 45%, var(--border));
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--accent) 12%, var(--panel));
+  font-size: 0.9rem;
+}
+
+#update-banner-text { flex: 1; min-width: 200px; }
+
+.update-apply-btn {
+  flex: none;
+  background: var(--accent);
+  border: none;
+  color: white;
+  border-radius: 8px;
+  padding: 8px 16px;
+  font-size: 0.88rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.update-apply-btn:hover:not(:disabled) { background: var(--accent-hover); }
+.update-apply-btn:disabled { opacity: 0.6; cursor: default; }
+
 header h1 {
   margin: 0 0 8px;
   font-size: 1.8rem;
@@ -346,6 +378,66 @@ header h1 {
 .inline-action-btn:disabled {
   opacity: 0.5;
   cursor: default;
+}
+
+/* Title suggestions, under the Sermon Title field: the button, the choice of where suggestions
+   come from, and one line of plain text saying where things stand. */
+.title-suggest {
+  margin-top: 8px;
+}
+
+.title-suggest-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.engine-toggle {
+  display: inline-flex;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.engine-option {
+  background: transparent;
+  border: 0;
+  color: var(--muted);
+  font-size: 0.78rem;
+  padding: 5px 11px;
+  cursor: pointer;
+}
+
+.engine-option + .engine-option {
+  border-left: 1px solid var(--border);
+}
+
+.engine-option:hover:not(.is-active) {
+  color: var(--text);
+}
+
+.engine-option.is-active {
+  background: color-mix(in srgb, var(--accent) 18%, var(--panel));
+  color: var(--accent);
+}
+
+.title-suggest-note {
+  font-size: 0.78rem;
+  color: var(--muted);
+  margin-top: 6px;
+  min-height: 1.1em;
+  line-height: 1.4;
+}
+
+.setup-note {
+  font-size: 0.82rem;
+  color: var(--muted);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 8px 10px;
+  margin-bottom: 12px;
 }
 
 .folder-browser-path {

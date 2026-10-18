@@ -1050,6 +1050,9 @@
   // finishes - dropping it would leave a figure on screen describing a range nobody selected.
   function scheduleLoudnessCheck() {
     if (!state.videoJobId) return;
+    // The transcript behind the title suggestions follows the trim for the same reason this
+    // measurement does, and every place that moves the trim already calls this.
+    scheduleTranscriptRefresh();
     clearTimeout(loudnessDebounceTimer);
     // Whatever is running measures a range that no longer exists, so it is dropped rather than
     // waited out - the server kills the ffmpeg behind it when the request goes away.
@@ -1136,6 +1139,318 @@
     if (!loudnessResult.hidden && state.videoJobId) runLoudnessCheck();
   });
 
+  // --- Suggesting a sermon title ---
+  // The sermon is transcribed quietly in the background while the trim is being worked out, and
+  // the button then turns those words into a title. Two engines are offered side by side: the
+  // local one reads back the phrases the preacher repeated, Claude actually reads the sermon.
+  // Which one does better is a matter of opinion about real sermons, so the choice is a toggle
+  // rather than a decision made here.
+  const titleSuggestBlock = document.getElementById('title-suggest');
+  const suggestTitleBtn = document.getElementById('suggest-title-btn');
+  const titleSuggestNote = document.getElementById('title-suggest-note');
+  const sermonTitleInput = document.getElementById('sermonTitle');
+  const engineButtons = Array.from(document.querySelectorAll('.engine-option'));
+
+  const ENGINE_LABELS = { local: 'this Mac', claude: 'Claude' };
+  let titleEngine = localStorage.getItem('titleEngine') === 'claude' ? 'claude' : 'local';
+  let engineStatus = null;
+  let suggestions = [];
+  let suggestionIndex = -1;
+  // What the current list was made from. A different trim, cut or engine means the list is about
+  // something else and pressing the button should ask again instead of cycling.
+  let suggestionsFor = '';
+  let transcriptDebounce = null;
+  let transcriptPollTimer = null;
+  let transcriptState = null;
+
+  function suggestionContext() {
+    const cut = currentCut();
+    return [
+      titleEngine,
+      parseFloat(trimStartHandle.value).toFixed(1),
+      parseFloat(trimEndHandle.value).toFixed(1),
+      cut ? `${cut.start.toFixed(1)}-${cut.end.toFixed(1)}` : 'nocut',
+    ].join('|');
+  }
+
+  function transcriptRequestBody() {
+    const cut = currentCut();
+    return {
+      trimStart: trimStartHandle.value,
+      trimEnd: trimEndHandle.value,
+      removeMiddle: !!cut,
+      cutStart: cut ? cut.start : null,
+      cutEnd: cut ? cut.end : null,
+    };
+  }
+
+  async function refreshEngineStatus() {
+    try {
+      const res = await fetch('/api/title-engines');
+      engineStatus = await res.json();
+    } catch {
+      engineStatus = null;
+    }
+    showEngineChoice();
+  }
+
+  function showEngineChoice() {
+    engineButtons.forEach((btn) => {
+      btn.classList.toggle('is-active', btn.dataset.engine === titleEngine);
+    });
+    updateTitleNote();
+  }
+
+  // One line under the button, describing only what someone would want to know before pressing
+  // it: how much of the sermon has been listened to, and where in the list of suggestions they
+  // are. Everything else - the setup, the failures - gets said when it happens.
+  function updateTitleNote(override) {
+    if (override) {
+      titleSuggestNote.textContent = override;
+      return;
+    }
+    const parts = [];
+    if (suggestions.length) {
+      parts.push(`Suggestion ${suggestionIndex + 1} of ${suggestions.length} from ${ENGINE_LABELS[titleEngine]}`);
+    }
+    if (transcriptState) {
+      if (transcriptState.downloadingModel) {
+        const percent = transcriptState.modelPercent;
+        parts.push(`Downloading the language model${percent ? ` (${percent}%)` : ''} - this happens once`);
+      } else if (transcriptState.available === false) {
+        parts.push(transcriptState.reason || 'Transcription is not set up on this Mac yet');
+      } else if (transcriptState.windowsTotal) {
+        const done = `${transcriptState.minutesTranscribed || 0} of ${Math.round((transcriptState.windowsTotal * 5))} minutes`;
+        parts.push(transcriptState.working ? `Listening to the sermon - ${done} so far` : `Listened to ${done}`);
+      }
+    }
+    titleSuggestNote.textContent = parts.join(' · ');
+  }
+
+  // Transcribing follows the trim, like the loudness check does, because the words that belong to
+  // the sermon change when its boundaries do. It is incremental on the server, so this is far
+  // cheaper than it sounds: a nudged handle usually transcribes nothing at all.
+  function scheduleTranscriptRefresh() {
+    if (!state.videoJobId) return;
+    clearTimeout(transcriptDebounce);
+    transcriptDebounce = setTimeout(refreshTranscript, 1500);
+  }
+
+  async function refreshTranscript() {
+    if (!state.videoJobId) return;
+    clearTimeout(transcriptPollTimer);
+    try {
+      const res = await fetch(`/api/transcript/${state.videoJobId}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(transcriptRequestBody()),
+      });
+      transcriptState = await res.json();
+    } catch {
+      // Nothing worth saying: the button still works, it will just have to wait for the words.
+      return;
+    }
+    updateTitleNote();
+    // Keep checking while there is work in flight, so the note fills in on its own and the
+    // button stops being a guess about whether it is ready.
+    if (transcriptState && (transcriptState.working || transcriptState.downloadingModel)) {
+      transcriptPollTimer = setTimeout(refreshTranscript, 5000);
+    }
+  }
+
+  function applySuggestion() {
+    sermonTitleInput.value = suggestions[suggestionIndex];
+    // The file name and description previews listen for input events, so they have to be told.
+    sermonTitleInput.dispatchEvent(new Event('input', { bubbles: true }));
+    updateTitleNote();
+  }
+
+  async function fetchSuggestions() {
+    const context = suggestionContext();
+    suggestTitleBtn.disabled = true;
+    updateTitleNote(titleEngine === 'claude' ? 'Asking Claude…' : 'Reading the transcript…');
+    try {
+      const res = await fetch(`/api/suggest-titles/${state.videoJobId}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...transcriptRequestBody(), engine: titleEngine }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        // A transcript that is not ready yet is the normal early case, not a failure - so the
+        // message says what is happening and the poll carries on filling in behind it.
+        transcriptState = { ...(transcriptState || {}), ...data, available: data.needs ? false : true };
+        updateTitleNote(data.error);
+        if (data.needs) openWhisperSetup(data.error);
+        refreshTranscript();
+        return;
+      }
+      suggestions = data.titles || [];
+      suggestionIndex = 0;
+      suggestionsFor = context;
+      transcriptState = {
+        available: true,
+        working: data.stillListening,
+        windowsTotal: data.windowsTotal,
+        windowsDone: data.windowsDone,
+        minutesTranscribed: data.minutesTranscribed,
+      };
+      applySuggestion();
+      if (data.stillListening) refreshTranscript();
+    } catch (err) {
+      updateTitleNote(`Could not suggest a title: ${err.message}`);
+    } finally {
+      suggestTitleBtn.disabled = false;
+    }
+  }
+
+  suggestTitleBtn.addEventListener('click', async () => {
+    if (!state.videoJobId) return;
+    if (titleEngine === 'claude' && !(engineStatus && engineStatus.claude && engineStatus.claude.configured)) {
+      openClaudeKeyDialog();
+      return;
+    }
+    // Pressing it again moves through the list already in hand and wraps round at the end -
+    // instant, and in the case of Claude, not another API call for titles already paid for.
+    if (suggestions.length && suggestionsFor === suggestionContext()) {
+      suggestionIndex = (suggestionIndex + 1) % suggestions.length;
+      applySuggestion();
+      return;
+    }
+    await fetchSuggestions();
+  });
+
+  // No video, nothing to transcribe: the controls go away and any polling behind them stops.
+  function stopTitleSuggestions() {
+    clearTimeout(transcriptDebounce);
+    clearTimeout(transcriptPollTimer);
+    titleSuggestBlock.hidden = true;
+    suggestions = [];
+    suggestionIndex = -1;
+    suggestionsFor = '';
+    transcriptState = null;
+    updateTitleNote();
+  }
+
+  engineButtons.forEach((btn) => {
+    btn.addEventListener('click', () => {
+      if (btn.dataset.engine === titleEngine) return;
+      titleEngine = btn.dataset.engine;
+      localStorage.setItem('titleEngine', titleEngine);
+      // The other engine's list is not this engine's list, so the next press asks afresh.
+      suggestions = [];
+      suggestionIndex = -1;
+      suggestionsFor = '';
+      showEngineChoice();
+      if (titleEngine === 'claude' && !(engineStatus && engineStatus.claude && engineStatus.claude.configured)) {
+        openClaudeKeyDialog();
+      }
+    });
+  });
+
+  // --- The Anthropic API key, entered in the app like every other credential here ---
+  const claudeKeyOverlay = document.getElementById('claude-key-overlay');
+  const claudeKeyInput = document.getElementById('claude-api-key');
+  const claudeKeySaveBtn = document.getElementById('claude-key-save-btn');
+  const claudeKeyCancelBtn = document.getElementById('claude-key-cancel-btn');
+  const claudeKeyForgetBtn = document.getElementById('claude-key-forget-btn');
+  const claudeKeySaved = document.getElementById('claude-key-saved');
+  const claudeKeyError = document.getElementById('claude-key-error');
+
+  function openClaudeKeyDialog() {
+    const claude = (engineStatus && engineStatus.claude) || {};
+    claudeKeyInput.value = '';
+    claudeKeyError.hidden = true;
+    claudeKeySaved.hidden = !claude.configured;
+    if (claude.configured) {
+      claudeKeySaved.textContent = claude.source === 'environment'
+        ? 'A key is already set in this app\'s environment file, and takes priority over anything saved here.'
+        : `A key ending ${claude.keyHint} is already saved. Entering a new one replaces it.`;
+    }
+    claudeKeyForgetBtn.hidden = !claude.configured || claude.source === 'environment';
+    claudeKeyOverlay.hidden = false;
+    claudeKeyInput.focus();
+  }
+
+  function closeClaudeKeyDialog() {
+    claudeKeyOverlay.hidden = true;
+    // Nothing is kept in the field: it is a credential, and the dialog is not where it lives.
+    claudeKeyInput.value = '';
+  }
+
+  claudeKeySaveBtn.addEventListener('click', async () => {
+    claudeKeyError.hidden = true;
+    claudeKeySaveBtn.disabled = true;
+    try {
+      const res = await fetch('/api/claude-config', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ apiKey: claudeKeyInput.value }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Could not save the API key.');
+      engineStatus = { ...(engineStatus || {}), claude: data };
+      closeClaudeKeyDialog();
+      showEngineChoice();
+    } catch (err) {
+      claudeKeyError.hidden = false;
+      claudeKeyError.textContent = err.message;
+    } finally {
+      claudeKeySaveBtn.disabled = false;
+    }
+  });
+
+  claudeKeyForgetBtn.addEventListener('click', async () => {
+    const res = await fetch('/api/claude-config', { method: 'DELETE' });
+    engineStatus = { ...(engineStatus || {}), claude: await res.json() };
+    // Without a key there is nothing for the Claude engine to do, so the choice goes back to the
+    // one that always works rather than sitting on a button that would only re-ask for the key.
+    titleEngine = 'local';
+    localStorage.setItem('titleEngine', 'local');
+    suggestions = [];
+    suggestionIndex = -1;
+    closeClaudeKeyDialog();
+    showEngineChoice();
+  });
+
+  claudeKeyCancelBtn.addEventListener('click', closeClaudeKeyDialog);
+  bindOverlayDismiss(claudeKeyOverlay, closeClaudeKeyDialog);
+  bindEnterToClick([claudeKeyInput], claudeKeySaveBtn);
+
+  // --- Whisper, which both engines need: it is what turns the sermon into words ---
+  const whisperSetupOverlay = document.getElementById('whisper-setup-overlay');
+  const whisperSetupReason = document.getElementById('whisper-setup-reason');
+  const whisperSetupStatus = document.getElementById('whisper-setup-status');
+  const whisperSetupCheckBtn = document.getElementById('whisper-setup-check-btn');
+  const whisperSetupCloseBtn = document.getElementById('whisper-setup-close-btn');
+
+  function openWhisperSetup(reason) {
+    whisperSetupReason.textContent = reason || '';
+    whisperSetupReason.hidden = !reason;
+    whisperSetupStatus.hidden = true;
+    whisperSetupOverlay.hidden = false;
+  }
+
+  whisperSetupCheckBtn.addEventListener('click', async () => {
+    whisperSetupCheckBtn.disabled = true;
+    await refreshEngineStatus();
+    const whisper = (engineStatus && engineStatus.whisper) || {};
+    whisperSetupStatus.hidden = false;
+    whisperSetupStatus.textContent = whisper.available
+      ? 'Found it - transcription is ready. You can close this.'
+      : whisper.reason || 'Still not finding Whisper on this Mac.';
+    if (whisper.available) {
+      refreshTranscript();
+      setTimeout(() => { whisperSetupOverlay.hidden = true; }, 1200);
+    }
+    whisperSetupCheckBtn.disabled = false;
+  });
+  whisperSetupCloseBtn.addEventListener('click', () => { whisperSetupOverlay.hidden = true; });
+  bindOverlayDismiss(whisperSetupOverlay, () => { whisperSetupOverlay.hidden = true; });
+
+  showEngineChoice();
+  refreshEngineStatus();
+
   // An MP3 is made on every render now, so the label is fixed. Opting out happens in the
   // SoundCloud step, by which point this button has already been pressed.
   function idleRenderLabel() {
@@ -1221,6 +1536,73 @@
       // Non-critical - just leave the HTML defaults in place.
     }
   })();
+
+  // --- Updating without closing the app ---
+  // The app already pulls updates at launch; this covers one landing while it is open, which
+  // otherwise sits unnoticed until someone next quits and reopens.
+  const updateBanner = document.getElementById('update-banner');
+  const updateBannerText = document.getElementById('update-banner-text');
+  const updateApplyBtn = document.getElementById('update-apply-btn');
+  const UPDATE_CHECK_INTERVAL_MS = 15 * 60 * 1000;
+
+  async function checkForUpdate() {
+    // Never shows an error: the check needs the network, the app is perfectly usable without
+    // it, and there is nothing anyone would do about a failed check anyway.
+    try {
+      const res = await fetch('/api/update/check');
+      const data = await res.json();
+      if (!data.updateAvailable) return;
+      updateBanner.hidden = false;
+      updateBannerText.textContent = data.latest && data.latest.message
+        ? `A new version of the app is available: "${data.latest.message}"`
+        : 'A new version of the app is available.';
+    } catch {
+      // Offline, most likely. Try again on the next tick.
+    }
+  }
+
+  // Waits for the restarted server to start answering again, then reloads into the new code.
+  // The page can't simply reload straight away - the server is still on its way down, and the
+  // reload would land on a dead port.
+  async function reloadWhenServerIsBack(attempt = 0) {
+    if (attempt > 120) {
+      updateBannerText.textContent = 'The update was applied, but the app is taking a while to come back. Reload the page in a moment.';
+      updateApplyBtn.disabled = false;
+      return;
+    }
+    try {
+      const res = await fetch(`/api/update/status?t=${Date.now()}`, { cache: 'no-store' });
+      if (res.ok) {
+        window.location.reload();
+        return;
+      }
+    } catch {
+      // Still restarting.
+    }
+    setTimeout(() => reloadWhenServerIsBack(attempt + 1), 1000);
+  }
+
+  updateApplyBtn.addEventListener('click', async () => {
+    updateApplyBtn.disabled = true;
+    updateBannerText.textContent = 'Updating…';
+    try {
+      const res = await fetch('/api/update/apply', { method: 'POST' });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Could not apply the update.');
+      if (data.restarting) {
+        updateBannerText.textContent = 'Updated - restarting the app…';
+        reloadWhenServerIsBack();
+        return;
+      }
+      updateBannerText.textContent = 'Updated. Quit and reopen the app to load the new version.';
+    } catch (err) {
+      updateBannerText.textContent = err.message;
+      updateApplyBtn.disabled = false;
+    }
+  });
+
+  checkForUpdate();
+  setInterval(checkForUpdate, UPDATE_CHECK_INTERVAL_MS);
 
   // --- Trim panel ---
   const trimPanel = document.getElementById('trim-panel');
@@ -2023,6 +2405,15 @@
     checkLoudnessBtn.disabled = false;
     scheduleLoudnessCheck();
 
+    // A different video means different words, so nothing carries over. Re-checking what the two
+    // engines need here as well as at startup catches Whisper having been installed in between.
+    titleSuggestBlock.hidden = false;
+    suggestions = [];
+    suggestionIndex = -1;
+    suggestionsFor = '';
+    transcriptState = null;
+    refreshEngineStatus();
+
     updateRenderButton();
   }
 
@@ -2083,6 +2474,7 @@
     if (loudnessAbort) loudnessAbort.abort();
     checkLoudnessBtn.disabled = true;
     loudnessResult.hidden = true;
+    stopTitleSuggestions();
     updateRenderButton();
   });
 
@@ -2247,6 +2639,7 @@
     showDzState(dzVideo, 'dz-empty');
     inputVideo.value = '';
     trimPanel.hidden = true;
+    stopTitleSuggestions();
     updateRenderButton();
   }
 

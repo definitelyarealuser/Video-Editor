@@ -17,6 +17,9 @@ const squareArtImages = require('./squareArtImages');
 const savePaths = require('./savePaths');
 const nativeFolderPicker = require('./nativeFolderPicker');
 const gitUpdate = require('./gitUpdate');
+const transcribe = require('./transcribe');
+const { suggestTitles } = require('./suggestTitles');
+const claudeTitles = require('./claudeTitles');
 
 const PORT = process.env.PORT || 3000;
 const ROOT = path.join(__dirname, '..');
@@ -151,6 +154,8 @@ function toNonNegativeFloat(value, fallback) {
 
 function toBool(value, fallback) {
   if (value === undefined || value === null) return fallback;
+  // Form fields arrive as strings; the JSON routes send real booleans.
+  if (typeof value === 'boolean') return value;
   return value === 'true' || value === '1' || value === 'on';
 }
 
@@ -1145,6 +1150,170 @@ app.get('/api/update/status', async (req, res) => {
   }
 });
 
+// Asks GitHub whether this branch has moved on. Separate from /api/update/status above, which
+// only reads local state: this one fetches, so it's the slower, network-dependent half and is
+// called on a timer rather than on every page load.
+//
+// A failed check answers "no update" rather than an error. The app works perfectly well on the
+// code already on disk, and a banner that says something went wrong checking for updates is
+// worse than no banner at all - there is nothing the person reading it would do about it.
+app.get('/api/update/check', async (req, res) => {
+  try {
+    const result = await gitUpdate.checkForUpdate();
+    res.json({
+      updateAvailable: result.updateAvailable,
+      latest: result.updateAvailable ? result.latest : undefined,
+    });
+  } catch {
+    res.json({ updateAvailable: false });
+  }
+});
+
+// Pulls the update and restarts into it. The same thing that happens automatically at launch -
+// this just makes it available without closing and reopening the app, for an update that lands
+// while it's already open.
+app.post('/api/update/apply', async (req, res) => {
+  // Refuses mid-render: applying an update hard-resets the working tree and restarts the
+  // process, which would abandon a render in progress along with whatever it was about to
+  // publish. There is no hurry - the update keeps.
+  const busy = [...jobs.jobs.values()].some((job) => job.status === 'rendering' || job.status === 'publishing');
+  if (busy) {
+    return res.status(409).json({ error: 'A render is still going - update once it has finished.' });
+  }
+  try {
+    await gitUpdate.applyUpdate();
+    const willRestart = canSelfRestart();
+    res.json({ ok: true, restarting: willRestart, manualRestartNeeded: !willRestart });
+    if (willRestart) setTimeout(() => process.exit(42), 500);
+  } catch (err) {
+    res.status(500).json({ error: err.message || 'Could not apply the update.' });
+  }
+});
+
+// --- Suggesting a sermon title from what was actually preached ---
+
+// Which stretches of the source file the published sermon will actually contain. Deliberately
+// lenient about the cut, unlike the render route's resolveCutRange: this only decides which audio
+// to listen to, so a half-finished cut is worth working around rather than refusing.
+function keptRanges(body, job) {
+  const { trimStart, trimEnd } = resolveTrimRange(body.trimStart, body.trimEnd, job.videoInfo.duration);
+  const cutStart = toNonNegativeFloat(body.cutStart, NaN);
+  const cutEnd = toNonNegativeFloat(body.cutEnd, NaN);
+  const hasCut = toBool(body.removeMiddle, false)
+    && isFinite(cutStart) && isFinite(cutEnd)
+    && cutEnd > cutStart && cutStart >= trimStart && cutEnd <= trimEnd;
+  return hasCut ? [[trimStart, cutStart], [cutEnd, trimEnd]] : [[trimStart, trimEnd]];
+}
+
+// Starts (or continues) transcribing the trimmed sermon in the background and reports how far it
+// has got. The client calls this whenever the trim settles, so by the time anyone asks for a title
+// the words are usually already there. Transcribing is incremental - see server/transcribe.js -
+// so a nudged trim handle normally costs nothing at all.
+app.post('/api/transcript/:jobId', useJobIdFromParams, (req, res) => {
+  const job = jobs.get(req.jobId);
+  if (!job || !job.videoPath) {
+    return res.status(404).json({ error: 'Upload a video first (this session may have expired - try re-uploading).' });
+  }
+  if (!job.videoInfo.hasAudio) {
+    return res.json({ available: false, reason: 'This video has no audio track to transcribe.' });
+  }
+  try {
+    const state = transcribe.requestTranscript({ videoPath: job.videoPath, ranges: keptRanges(req.body, job) });
+    // The words themselves are of no use to the browser - titles are made server-side - and a
+    // sermon transcript is a lot of text to ship on every poll.
+    const { text, ...progress } = state;
+    res.json({ ...progress, words: text ? text.split(/\s+/).length : 0 });
+  } catch (err) {
+    res.status(500).json({ error: err.message || 'Could not start transcribing.' });
+  }
+});
+
+// What the two engines need before they can be used at all, so the UI can explain itself rather
+// than offering a button that fails.
+app.get('/api/title-engines', (req, res) => {
+  const whisper = transcribe.getStatus();
+  res.json({
+    // Where the binary and model actually live is of no interest to the browser.
+    whisper: {
+      available: whisper.available,
+      needs: whisper.needs || null,
+      reason: whisper.reason || null,
+      modelName: whisper.modelName || null,
+      modelDownload: transcribe.modelDownloadProgress(),
+    },
+    claude: claudeTitles.getStatus(),
+  });
+});
+
+app.post('/api/claude-config', (req, res) => {
+  try {
+    res.json(claudeTitles.saveApiKey(req.body.apiKey));
+  } catch (err) {
+    res.status(400).json({ error: err.message || 'Could not save the API key.' });
+  }
+});
+
+app.delete('/api/claude-config', (req, res) => {
+  claudeTitles.clearApiKey();
+  res.json(claudeTitles.getStatus());
+});
+
+// Suggests titles from the transcript so far. Returns the whole list in one go and lets the client
+// cycle through it: pressing the button again should be instant, and should keep coming back round
+// the same suggestions rather than billing an API call per press.
+app.post('/api/suggest-titles/:jobId', useJobIdFromParams, async (req, res) => {
+  const job = jobs.get(req.jobId);
+  if (!job || !job.videoPath) {
+    return res.status(404).json({ error: 'Upload a video first (this session may have expired - try re-uploading).' });
+  }
+  const engine = req.body.engine === 'claude' ? 'claude' : 'local';
+  if (!job.videoInfo.hasAudio) {
+    return res.status(400).json({ error: 'This video has no audio track to suggest a title from.' });
+  }
+
+  let state;
+  try {
+    state = transcribe.requestTranscript({ videoPath: job.videoPath, ranges: keptRanges(req.body, job) });
+  } catch (err) {
+    return res.status(500).json({ error: err.message || 'Could not read the sermon audio.' });
+  }
+  if (!state.available) return res.status(400).json({ error: state.reason, needs: state.needs });
+  if (!state.text) {
+    return res.status(409).json({
+      error: state.error || 'Still listening to the sermon - try again in a moment.',
+      working: state.working,
+      windowsDone: state.windowsDone,
+      windowsTotal: state.windowsTotal,
+    });
+  }
+
+  const progress = {
+    engine,
+    minutesTranscribed: state.minutesTranscribed,
+    windowsDone: state.windowsDone,
+    windowsTotal: state.windowsTotal,
+    stillListening: state.working,
+  };
+
+  if (engine === 'local') {
+    const titles = suggestTitles(state.text);
+    if (!titles.length) {
+      return res.status(409).json({
+        error: 'Not enough of the sermon transcribed yet to spot a theme - try again in a minute.',
+        ...progress,
+      });
+    }
+    return res.json({ titles, ...progress });
+  }
+
+  try {
+    const titles = await claudeTitles.suggestTitlesWithClaude(state.text);
+    res.json({ titles, ...progress });
+  } catch (err) {
+    res.status(502).json({ error: err.message || 'Claude could not suggest titles.', ...progress });
+  }
+});
+
 // Error handler for anything thrown before/inside a route handler that isn't caught there -
 // most importantly multer's own rejections (bad mimetype), which happen in middleware before
 // the route body ever runs. MUST stay below every route: Express only routes errors to an error
@@ -1208,6 +1377,8 @@ setInterval(() => {
   const now = Date.now();
   for (const job of jobs.jobs.values()) {
     if (now - job.createdAt > MAX_JOB_AGE_MS) {
+      // Before the video goes, so its cached transcript can still be found by it.
+      if (job.videoPath) transcribe.forget(job.videoPath);
       fs.promises.rm(path.join(UPLOAD_DIR, job.id), { recursive: true, force: true }).catch(() => {});
       if (job.outputPath) fs.promises.rm(job.outputPath, { force: true }).catch(() => {});
       if (job.mp3OutputPath) fs.promises.rm(job.mp3OutputPath, { force: true }).catch(() => {});
@@ -1246,6 +1417,8 @@ async function cleanupUploadsAndExit(signal) {
         .filter((name) => name !== '.gitkeep')
         .map((name) => fs.promises.rm(path.join(UPLOAD_DIR, name), { recursive: true, force: true }))
     );
+    // The transcripts belong to those uploads and are keyed to them, so they go the same way.
+    transcribe.forgetAll();
   } catch {
     // Non-critical - the app is exiting either way.
   }

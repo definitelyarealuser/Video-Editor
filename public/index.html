@@ -8,6 +8,11 @@
 </head>
 <body>
   <main class="page">
+    <div id="update-banner" class="update-banner" hidden>
+      <span id="update-banner-text">A new version of the app is available.</span>
+      <button type="button" id="update-apply-btn" class="update-apply-btn">Update &amp; Reload</button>
+    </div>
+
     <header>
       <h1>Sermon Video Editor</h1>
       <p class="subtitle">Bookend a video with a title graphic: fade in from the graphic, crossfade into your video, crossfade back to the graphic, then fade to black.</p>
@@ -202,6 +207,16 @@
         <div class="field">
           <label for="sermonTitle">Sermon Title</label>
           <input type="text" id="sermonTitle" name="sermonTitle" placeholder="Sermon Title" />
+          <div id="title-suggest" class="title-suggest" hidden>
+            <div class="title-suggest-row">
+              <button type="button" id="suggest-title-btn" class="inline-action-btn">Suggest a title</button>
+              <div class="engine-toggle" role="group" aria-label="Where suggestions come from">
+                <button type="button" class="engine-option is-active" data-engine="local">This Mac</button>
+                <button type="button" class="engine-option" data-engine="claude">Claude</button>
+              </div>
+            </div>
+            <div id="title-suggest-note" class="title-suggest-note"></div>
+          </div>
         </div>
         <div class="field">
           <label for="speakerName">Speaker's Name</label>
@@ -493,6 +508,46 @@
         <button type="button" id="soundcloud-skip-mp3-btn" class="modal-btn-ghost">Skip the MP3</button>
         <button type="button" id="soundcloud-render-only-btn" class="modal-btn-secondary">Render Only</button>
         <button type="button" id="soundcloud-render-publish-btn" class="modal-btn-primary">Render &amp; Publish to SoundCloud</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal-overlay" id="claude-key-overlay" hidden>
+    <div class="modal-dialog claude-key-dialog">
+      <h3>Use Claude for title suggestions</h3>
+      <p class="modal-hint">Suggestions from this Mac are free and nothing leaves the building. Claude usually writes better titles, but it needs an Anthropic API key, and the sermon transcript is sent to Anthropic to be read. A suggestion costs a few cents.</p>
+      <ol class="vimeo-setup-steps">
+        <li>Go to <a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noopener">console.anthropic.com/settings/keys</a> and sign in (or create an account).</li>
+        <li>Click <strong>Create Key</strong>, give it any name, and copy the key it shows you - it starts with <code>sk-ant-</code> and is only shown once.</li>
+        <li>Paste it below. It's saved on this Mac only, and you won't be asked again.</li>
+      </ol>
+      <div class="field">
+        <label for="claude-api-key">Anthropic API key</label>
+        <input type="password" id="claude-api-key" placeholder="sk-ant-…" autocomplete="off" spellcheck="false" />
+      </div>
+      <div id="claude-key-saved" class="setup-note" hidden></div>
+      <div id="claude-key-error" class="error-box" hidden></div>
+      <div class="modal-actions">
+        <button type="button" id="claude-key-forget-btn" class="modal-btn-secondary" hidden>Forget this key</button>
+        <button type="button" id="claude-key-cancel-btn" class="modal-btn-secondary">Cancel</button>
+        <button type="button" id="claude-key-save-btn" class="modal-btn-primary">Save key</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal-overlay" id="whisper-setup-overlay" hidden>
+    <div class="modal-dialog">
+      <h3>Set up transcription</h3>
+      <p class="modal-hint" id="whisper-setup-reason"></p>
+      <p class="modal-hint">Title suggestions come from the words of the sermon, so the app needs to turn the audio into text first. That happens on this Mac, using Whisper - the recording isn't uploaded anywhere, whichever suggestion engine you pick.</p>
+      <ol class="vimeo-setup-steps">
+        <li>Open Terminal and run <code>brew install whisper-cpp</code>. (If <code>brew</code> isn't installed, get it from <a href="https://brew.sh" target="_blank" rel="noopener">brew.sh</a> first.)</li>
+        <li>Come back here and press Check again - the app will download the language model it needs by itself the first time it transcribes.</li>
+      </ol>
+      <div id="whisper-setup-status" class="setup-note" hidden></div>
+      <div class="modal-actions">
+        <button type="button" id="whisper-setup-close-btn" class="modal-btn-secondary">Close</button>
+        <button type="button" id="whisper-setup-check-btn" class="modal-btn-primary">Check again</button>
       </div>
     </div>
   </div>

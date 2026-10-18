@@ -719,6 +719,26 @@ function recommendNormalization({ integratedLufs, truePeakDb, loudnessRange, sam
   return { verdict, headline, gainDb, reasons };
 }
 
+/**
+ * Pulls one stretch of the sermon out as speech-recognition audio: 16 kHz mono 16-bit WAV, which is
+ * the only format Whisper actually works in - hand it anything else and it resamples internally to
+ * exactly this. Decodes no video at all (`-vn`), so a five-minute window costs about a second.
+ */
+async function extractSpeechWav({ videoPath, start, duration, outPath, signal }) {
+  await runKeepingStderrTail([
+    '-nostats', '-hide_banner',
+    '-ss', String(start),
+    '-t', String(duration),
+    '-i', videoPath,
+    '-vn',
+    '-ac', '1',
+    '-ar', '16000',
+    '-c:a', 'pcm_s16le',
+    '-y', outPath,
+  ], { signal });
+  return outPath;
+}
+
 module.exports = {
   probe,
   render,
@@ -728,5 +748,6 @@ module.exports = {
   analyzeLoudness,
   recommendNormalization,
   planLoudnessSampling,
+  extractSpeechWav,
   VIDEO_QUALITY_PRESETS,
 };

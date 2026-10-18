@@ -44,6 +44,15 @@ Then open http://localhost:3000.
 
 Fully automatic - no button, no steps. Every time you start the app (via the Desktop shortcut or `start.command`), it checks GitHub for a newer version before it even opens the browser tab. If one's available, it pulls it down, reinstalls dependencies if they changed, and restarts itself once to load the new code - you'll just see a few extra seconds of startup, then the app comes up already current. Works the same way on every machine you've installed it on. The self-restart needs the app to have been started via `start.command` (which the Desktop shortcut and manual double-click both use) - that's the loop that relaunches the server process after it exits to apply an update. Started some other way (a bare `npm start`, say), the update is still downloaded and applied, but the running process keeps serving the older code and says so - it takes effect the next time the app starts, rather than the app exiting into nothing.
 
+For an update that lands while the app is already open, a bar appears at the top of the page naming
+what changed, with an **Update & Reload** button. It does exactly what startup does - pull, reinstall
+if needed, restart - and then waits for the server to come back and reloads the page into the new
+version, so a long-running session doesn't have to be closed to pick up a fix. The page checks every
+fifteen minutes; a failed check shows nothing at all, since the app works perfectly well on the code
+already on disk and there would be nothing to do about it. It refuses to update mid-render: applying
+one resets the working tree and restarts the process, which would abandon the render and whatever it
+was about to publish.
+
 ### About the installer app
 
 `Sermon Video Editor Installer.app` (source in `installer/`, built as `dist/Sermon-Video-Editor-Installer.zip`) is a thin wrapper: double-clicking it just opens Terminal and runs `/bin/bash -c "$(curl -fsSL .../setup.command)"` for you, the same command as the Terminal option above. It fetches `setup.command` fresh from GitHub every time it runs rather than bundling a copy, so it doesn't need rebuilding when `setup.command`'s own logic changes - only rebuild and re-commit the zip if `installer/Sermon Video Editor Installer.app/Contents/{Info.plist,MacOS/run,Resources/bootstrap.command}` themselves change, or once this branch merges to `main` (`bootstrap.command` has the same branch-name `NOTE:` as `setup.command`). To rebuild: `cd installer && zip -r -X ../dist/Sermon-Video-Editor-Installer.zip "Sermon Video Editor Installer.app"`. It's unsigned/not notarized (no Apple Developer account involved), so macOS Gatekeeper blocks a plain double-click the first time - the right-click → Open step in the instructions above is how a user gets past that one-time warning.
@@ -121,6 +130,53 @@ Every render feeds a small local history (`data/history.json`, gitignored - noth
   - Speed: clips up to an hour are measured straight through, which is exact. Longer ones are sampled at up to 120 short windows spread evenly across the trimmed range, seeked to directly and concatenated into one pass, so the answer arrives in seconds whatever the length. The line under the recommendation says which of the two happened and how long it took. Measured on a 4-core machine, a 45-minute service takes ~10s exact (it was 35s before the analysis moved off `loudnorm` onto `ebur128`, which reports the same figures about three times faster).
   - Why many short windows and not one long chunk, on the sampled path: coverage is what catches a one-off loud moment. Sampling a 45-minute test clip with 12 x 20s windows walked straight past a 60-second burst and under-read its peak by 17 dB; ~90 short windows caught it to within 0.3 dB, for about the same total audio. A sampled peak is still a lower bound - if it says peaks are too hot they certainly are, but a brief spike between windows can be missed. Anything an hour or under avoids that entirely by being measured in full.
 - **Render MP3**: exports a second file alongside the MP4 containing just the main clip's audio — the PNG-hold silence at the start and end is excluded, but the clip still fades up from silence and back down over the crossfade duration, so it sounds like a clean standalone edit rather than an abrupt cut. This applies regardless of the "apply crossfade to audio too" setting above (which only affects the audio inside the full MP4). An MP3 is made on every render - there is no setting for it. To skip it, use **Skip the MP3** in the SoundCloud step, which renders the video on its own. That step is the natural home for the choice because skipping the MP3 and not publishing are the same decision: there is nothing to upload without a file. If SoundCloud isn't connected that step never appears, and an MP3 is always made.
+
+## Suggesting a sermon title
+
+Under the **Sermon Title** field there's a **Suggest a title** button. It reads the sermon back and
+offers a title from what was actually preached. Press it again for the next suggestion; there are up
+to seven, and it rolls back round to the first rather than running out. Nothing is filled in unless
+the button is pressed, and whatever it puts there can be typed over.
+
+The sermon has to be turned into text first, which happens on this Mac with
+[Whisper](https://github.com/ggerganov/whisper.cpp) - the recording is never uploaded for this.
+Install it once with `brew install whisper-cpp`; the app finds it on its own and downloads the
+142 MB language model it needs the first time it transcribes. Until then the button explains what is
+missing instead of failing.
+
+Transcribing runs in the background while you trim, so by the time the title matters the words are
+usually already there. The line under the button says how much has been listened to so far. It is
+incremental: the source file is cut into five-minute windows on a fixed grid and each window's text
+is cached against the file it came from, so nudging a trim handle re-uses everything already
+transcribed and normally costs nothing. A window has to be at least three-quarters inside the
+trimmed range to count, which keeps the pre-roll announcements and the post-service chatter out of
+the transcript - the cost is up to a minute of the sermon's own words at each end, which is a good
+trade for a title. A section removed from the middle is left out too. Transcripts live in
+`data/transcripts/` (gitignored) and are cleared when the app shuts down, along with the uploads
+they belong to.
+
+### The two suggestion engines
+
+The toggle under the button chooses where suggestions come from. Both read the same local
+transcript; they differ in what turns it into a title.
+
+- **This Mac** (the default): no account, no API key, nothing sent anywhere, instant. It looks for
+  the multi-word phrases the preacher came back to, on the basis that a sermon says its theme out
+  loud repeatedly, and scores them by how often they recur and how much they carry. Phrases are not
+  allowed to run across a sentence boundary or to be the tail end of a longer phrase, which is what
+  separates "By Grace You Have Been Saved" from "Grace You Have Been Saved". If the sermon doesn't
+  repeat itself enough - a short clip, or a transcript still filling in - it falls back to phrases
+  said once whose every word is one the sermon dwells on, and then to the book of the Bible being
+  preached ("A Study in Ephesians"). It will never write as well as a person; it is a starting point
+  that is usually in the right territory.
+- **Claude**: better titles, because it actually reads the sermon rather than counting it. It needs
+  an Anthropic API key (the app walks you through getting one, and saves it to
+  `data/claude-config.json`, gitignored) and it sends the transcript to Anthropic to be read, which
+  is the real difference between the two - a suggestion costs a few cents. All seven come back in
+  one request, so cycling through them is free.
+
+Both are offered so they can be compared on actual sermons. The choice is remembered in the browser
+and is never changed for you.
 
 ## Output quality
 
