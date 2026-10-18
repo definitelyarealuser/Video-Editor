@@ -47,8 +47,22 @@ by in for from with through without into
 // which he loved" is a grammatical offcut, not a title.
 const MID_SENTENCE = new Set(`
 that which who whom whose because though although unless whether therefore but
+according regarding concerning including instead anyway maybe probably basically
 cant dont didnt doesnt isnt wasnt arent werent hasnt havent wont wouldnt couldnt shouldnt
 yeah okay ok oh um uh
+`.trim().split(/\s+/));
+
+// Fine at the front of a title, a seam anywhere else. "What God Requires" is a title; "Ask what am
+// I supposed" is the middle of a sentence someone was quoting.
+const OPENERS_ONLY = new Set(`
+what how why when where whenever however if i am
+`.trim().split(/\s+/));
+
+// A title cannot end on a word that is still waiting for the rest of its sentence. "Ask What Am I
+// Supposed" ends mid-thought; so would "Dead in Your Trespasses Trying".
+const CANNOT_END = new Set(`
+supposed going trying able willing meant used gonna wanna
+talking saying telling asking wondering thinking looking
 `.trim().split(/\s+/));
 
 const BOOKS_OF_THE_BIBLE = `
@@ -62,6 +76,8 @@ thessalonians timothy titus philemon hebrews james peter jude revelation
 const MIN_WORDS = 3;
 const MAX_WORDS = 6;
 const MAX_SUGGESTIONS = 7;
+// How few repeated phrases it takes before the weaker, said-once candidates are worth offering.
+const MIN_BEFORE_GUESSING = 4;
 
 // Stands in for the end of a sentence once the punctuation itself is gone. Phrases are not allowed
 // to run across one: "...gave it to his son. Now Jesus says..." is two thoughts, and the words
@@ -88,7 +104,12 @@ function isContentWord(word) {
 /** Is this run of words shaped like a title rather than a slice out of the middle of a sentence? */
 function readsAsTitle(phrase) {
   if (phrase.includes(BREAK)) return false;
+  // "I Am the Bread of Life" and the rest of John's I AM sayings are the one place a second-word
+  // opener belongs, and they get preached often enough to be worth the exception.
+  const isIAm = (word, i) => i === 1 && word === 'am' && phrase[0] === 'i';
+  if (phrase.some((word, i) => i > 0 && OPENERS_ONLY.has(word) && !isIAm(word, i))) return false;
   const last = phrase[phrase.length - 1];
+  if (CANNOT_END.has(last)) return false;
   // Must end on something meaningful - "the kingdom of God" reads as a title, "of the kingdom of"
   // does not.
   if (!isContentWord(last)) return false;
@@ -206,7 +227,11 @@ function suggestTitles(transcript) {
   // phrases said only once are allowed in, judged by how central their words are to the sermon
   // as a whole rather than by their own repetition. A phrase built from the words this sermon
   // keeps coming back to is still about the sermon.
-  if (chosen.length < MAX_SUGGESTIONS) {
+  //
+  // Only up to a handful, though, and never to fill all seven: these are the weakest candidates
+  // this makes, and seven suggestions with a clunker at number five is worse than four good ones.
+  // Seven is a limit, not a quota.
+  if (chosen.length < MIN_BEFORE_GUESSING) {
     const wordCounts = new Map();
     for (const word of words) {
       if (isContentWord(word)) wordCounts.set(word, (wordCounts.get(word) || 0) + 1);
@@ -224,7 +249,7 @@ function suggestTitles(transcript) {
       .sort((a, b) => b.score - a.score);
 
     for (const { phrase } of onceOnly) {
-      if (chosen.length >= MAX_SUGGESTIONS) break;
+      if (chosen.length >= MIN_BEFORE_GUESSING) break;
       if (chosen.some((existing) => overlapsWith(phrase, existing, { looseness: 0.5 }))) continue;
       chosen.push(phrase);
     }

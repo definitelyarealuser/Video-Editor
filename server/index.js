@@ -1245,6 +1245,20 @@ app.get('/api/title-engines', (req, res) => {
   });
 });
 
+// Starts fetching the language model and reports where the download has got to. The same download
+// starts on its own the first time anything is transcribed; this is for the setup dialog, where
+// someone who has just installed Whisper is waiting to be told the last piece is on its way rather
+// than being told again that it is missing.
+app.post('/api/whisper/model', (req, res) => {
+  const status = transcribe.getStatus();
+  if (status.available) return res.json({ available: true, modelName: status.modelName });
+  if (!status.binary) {
+    return res.status(400).json({ available: false, needs: 'binary', error: status.reason });
+  }
+  transcribe.startModelDownload();
+  res.json({ available: false, needs: 'model', ...transcribe.modelDownloadProgress() });
+});
+
 app.post('/api/claude-config', (req, res) => {
   try {
     res.json(claudeTitles.saveApiKey(req.body.apiKey));

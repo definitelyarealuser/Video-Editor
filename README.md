@@ -138,11 +138,19 @@ offers a title from what was actually preached. Press it again for the next sugg
 to seven, and it rolls back round to the first rather than running out. Nothing is filled in unless
 the button is pressed, and whatever it puts there can be typed over.
 
+Suggestions are always made from the whole sermon, never from the part transcribed so far - a title
+drawn from the first five minutes is a title about the introduction. Press the button before the
+transcript has finished and the request is held rather than refused: the button says it's waiting,
+and the title appears on its own the moment the last of the sermon has been heard. Pressing it again
+while it waits calls it off; transcribing carries on either way.
+
 The sermon has to be turned into text first, which happens on this Mac with
 [Whisper](https://github.com/ggerganov/whisper.cpp) - the recording is never uploaded for this.
-Install it once with `brew install whisper-cpp`; the app finds it on its own and downloads the
-142 MB language model it needs the first time it transcribes. Until then the button explains what is
-missing instead of failing.
+Install it once with `brew install whisper-cpp`; the app finds it on its own. The 142 MB language
+model is the app's own job - it fetches it the first time it transcribes, and the setup dialog
+starts it and shows the percentage rather than reporting the model as missing again. Until Whisper
+itself is installed the button explains what to run instead of failing. If the download can't get
+through, it says so and stops rather than sitting at 0%.
 
 Transcribing runs in the background while you trim, so by the time the title matters the words are
 usually already there. The line under the button says how much has been listened to so far. It is
@@ -164,11 +172,15 @@ transcript; they differ in what turns it into a title.
   the multi-word phrases the preacher came back to, on the basis that a sermon says its theme out
   loud repeatedly, and scores them by how often they recur and how much they carry. Phrases are not
   allowed to run across a sentence boundary or to be the tail end of a longer phrase, which is what
-  separates "By Grace You Have Been Saved" from "Grace You Have Been Saved". If the sermon doesn't
-  repeat itself enough - a short clip, or a transcript still filling in - it falls back to phrases
-  said once whose every word is one the sermon dwells on, and then to the book of the Bible being
-  preached ("A Study in Ephesians"). It will never write as well as a person; it is a starting point
-  that is usually in the right territory.
+  separates "By Grace You Have Been Saved" from "Grace You Have Been Saved". Nor may they read as
+  the middle of a sentence someone was quoting: a relative pronoun or a stray "what"/"why"/"I"
+  anywhere but the first word, or a last word still waiting for the rest of its sentence, is what
+  turns "Ask What Am I Supposed" into something nobody would publish, so those are thrown out. If
+  the sermon doesn't repeat itself enough - a short clip, say - it falls back to phrases said once
+  whose every word is one the sermon dwells on, and then to the book of the Bible being preached
+  ("A Study in Ephesians"); but only far enough to offer four, because seven suggestions with a
+  clunker at number five is worse than four good ones. Seven is a limit, not a quota. It will never
+  write as well as a person; it is a starting point that is usually in the right territory.
 - **Claude**: better titles, because it actually reads the sermon rather than counting it. It needs
   an Anthropic API key (the app walks you through getting one, and saves it to
   `data/claude-config.json`, gitignored) and it sends the transcript to Anthropic to be read, which

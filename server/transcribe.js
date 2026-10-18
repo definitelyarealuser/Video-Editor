@@ -140,9 +140,14 @@ function getStatus() {
 // nobody's idea of a fun manual step, so the app fetches it itself the first time it needs it.
 let modelDownload = null;
 
+// Long enough for a slow connection to get going, short enough that a download which is never
+// going to arrive says so instead of sitting at 0% indefinitely. It applies to inactivity, not to
+// the whole transfer, so a slow-but-moving download is never cut off.
+const DOWNLOAD_STALL_MS = 30000;
+
 function downloadModel(url, destination, state, redirectsLeft = 5) {
   return new Promise((resolve, reject) => {
-    https.get(url, (response) => {
+    const request = https.get(url, { timeout: DOWNLOAD_STALL_MS }, (response) => {
       if ([301, 302, 303, 307, 308].includes(response.statusCode) && response.headers.location) {
         response.resume();
         if (!redirectsLeft) return reject(new Error('Too many redirects fetching the language model.'));
@@ -170,7 +175,13 @@ function downloadModel(url, destination, state, redirectsLeft = 5) {
         }
       });
       response.pipe(file);
-    }).on('error', (err) => reject(new Error(`Could not reach the language model download: ${err.message}`)));
+    });
+    request.on('timeout', () => {
+      request.destroy(new Error('the connection stopped responding'));
+    });
+    request.on('error', (err) => {
+      reject(new Error(`Could not download the language model (${err.message}). Check this Mac's internet connection.`));
+    });
   });
 }
 
@@ -377,7 +388,7 @@ function requestTranscript({ videoPath, ranges }) {
       return {
         available: false,
         needs: 'model',
-        reason: `Could not download the language model: ${download.error}`,
+        reason: download.error,
         windowsDone: 0,
         windowsTotal: 0,
       };
@@ -461,6 +472,7 @@ module.exports = {
   getStatus,
   requestTranscript,
   modelDownloadProgress,
+  startModelDownload,
   forget,
   forgetAll,
   windowsForRanges,

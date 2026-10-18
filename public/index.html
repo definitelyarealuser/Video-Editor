@@ -541,8 +541,8 @@
       <p class="modal-hint" id="whisper-setup-reason"></p>
       <p class="modal-hint">Title suggestions come from the words of the sermon, so the app needs to turn the audio into text first. That happens on this Mac, using Whisper - the recording isn't uploaded anywhere, whichever suggestion engine you pick.</p>
       <ol class="vimeo-setup-steps">
-        <li>Open Terminal and run <code>brew install whisper-cpp</code>. (If <code>brew</code> isn't installed, get it from <a href="https://brew.sh" target="_blank" rel="noopener">brew.sh</a> first.)</li>
-        <li>Come back here and press Check again - the app will download the language model it needs by itself the first time it transcribes.</li>
+        <li id="whisper-step-install">Open Terminal and run <code>brew install whisper-cpp</code>. (If <code>brew</code> isn't installed, get it from <a href="https://brew.sh" target="_blank" rel="noopener">brew.sh</a> first.)</li>
+        <li id="whisper-step-model">Come back here and press Check again. The app downloads the language model itself - about 142 MB, once - and you can carry on editing while it does.</li>
       </ol>
       <div id="whisper-setup-status" class="setup-note" hidden></div>
       <div class="modal-actions">

@@ -1162,6 +1162,13 @@
   let transcriptDebounce = null;
   let transcriptPollTimer = null;
   let transcriptState = null;
+  // Whatever was last worth saying in words - an error, or "asking Claude". Kept until something
+  // replaces it, rather than being overwritten by the next progress tick.
+  let titleMessage = '';
+  // Set when a title was asked for before the transcript was finished: the ask is held, not
+  // refused, and fires on its own once the whole sermon has been heard.
+  let waitingForTranscript = false;
+  const SUGGEST_LABEL = 'Suggest a title';
 
   function suggestionContext() {
     const cut = currentCut();
@@ -1204,12 +1211,16 @@
   // One line under the button, describing only what someone would want to know before pressing
   // it: how much of the sermon has been listened to, and where in the list of suggestions they
   // are. Everything else - the setup, the failures - gets said when it happens.
-  function updateTitleNote(override) {
-    if (override) {
-      titleSuggestNote.textContent = override;
-      return;
-    }
+  function updateTitleNote(message) {
+    // A message stays up until something actually changes it. It used to be written straight over
+    // the note, which the next poll - a second later - quietly replaced with the progress line, so
+    // pressing the button on a transcript that was not ready yet looked like it did nothing.
+    if (message !== undefined) titleMessage = message;
     const parts = [];
+    if (titleMessage) parts.push(titleMessage);
+    // Said on every re-render rather than once, so switching engine or nudging the trim while it
+    // waits doesn't quietly drop the only explanation of what it is doing.
+    if (waitingForTranscript) parts.push('Listening to the rest of the sermon first - the title will appear by itself');
     if (suggestions.length) {
       parts.push(`Suggestion ${suggestionIndex + 1} of ${suggestions.length} from ${ENGINE_LABELS[titleEngine]}`);
     }
@@ -1254,8 +1265,49 @@
     // Keep checking while there is work in flight, so the note fills in on its own and the
     // button stops being a guess about whether it is ready.
     if (transcriptState && (transcriptState.working || transcriptState.downloadingModel)) {
-      transcriptPollTimer = setTimeout(refreshTranscript, 5000);
+      // Somebody asked for a title before the sermon had been listened to in full - so the ask is
+      // held rather than refused, and checking goes faster than the idle rate while they wait.
+      transcriptPollTimer = setTimeout(refreshTranscript, waitingForTranscript ? 2000 : 5000);
+      return;
     }
+    if (waitingForTranscript) finishWaiting();
+  }
+
+  // Suggestions are always made from the whole sermon, never from the part of it transcribed so
+  // far: a title drawn from the first five minutes is a title about the introduction.
+  function transcriptIsComplete() {
+    return !!transcriptState
+      && transcriptState.available !== false
+      && transcriptState.windowsTotal > 0
+      && transcriptState.windowsDone >= transcriptState.windowsTotal
+      && !transcriptState.working;
+  }
+
+  function startWaiting() {
+    waitingForTranscript = true;
+    suggestTitleBtn.textContent = 'Waiting for the transcript…';
+    updateTitleNote('');
+    refreshTranscript();
+  }
+
+  function stopWaiting() {
+    waitingForTranscript = false;
+    suggestTitleBtn.textContent = SUGGEST_LABEL;
+  }
+
+  // The transcript stopped moving. Either it is done, in which case this is the suggestion that
+  // was asked for minutes ago, or it stopped for a reason worth saying out loud.
+  function finishWaiting() {
+    stopWaiting();
+    if (transcriptIsComplete()) {
+      fetchSuggestions();
+      return;
+    }
+    const reason = (transcriptState && transcriptState.reason)
+      || 'The sermon could not be transcribed, so there is nothing to suggest a title from.';
+    updateTitleNote(reason);
+    // Whisper missing or half-installed is a thing to be walked through, not just reported.
+    if (transcriptState && transcriptState.needs) openWhisperSetup(reason);
   }
 
   function applySuggestion() {
@@ -1288,6 +1340,7 @@
       suggestions = data.titles || [];
       suggestionIndex = 0;
       suggestionsFor = context;
+      titleMessage = '';
       transcriptState = {
         available: true,
         working: data.stillListening,
@@ -1306,6 +1359,12 @@
 
   suggestTitleBtn.addEventListener('click', async () => {
     if (!state.videoJobId) return;
+    // Pressing it again while it is waiting is how you change your mind about waiting.
+    if (waitingForTranscript) {
+      stopWaiting();
+      updateTitleNote('');
+      return;
+    }
     if (titleEngine === 'claude' && !(engineStatus && engineStatus.claude && engineStatus.claude.configured)) {
       openClaudeKeyDialog();
       return;
@@ -1317,6 +1376,12 @@
       applySuggestion();
       return;
     }
+    // Asked for before the sermon has been heard in full: hold the request rather than turning it
+    // down. Transcribing carries on either way, and the suggestion lands when it finishes.
+    if (!transcriptIsComplete()) {
+      startWaiting();
+      return;
+    }
     await fetchSuggestions();
   });
 
@@ -1325,11 +1390,12 @@
     clearTimeout(transcriptDebounce);
     clearTimeout(transcriptPollTimer);
     titleSuggestBlock.hidden = true;
+    stopWaiting();
     suggestions = [];
     suggestionIndex = -1;
     suggestionsFor = '';
     transcriptState = null;
-    updateTitleNote();
+    updateTitleNote('');
   }
 
   engineButtons.forEach((btn) => {
@@ -1341,6 +1407,7 @@
       suggestions = [];
       suggestionIndex = -1;
       suggestionsFor = '';
+      titleMessage = '';
       showEngineChoice();
       if (titleEngine === 'claude' && !(engineStatus && engineStatus.claude && engineStatus.claude.configured)) {
         openClaudeKeyDialog();
@@ -1424,29 +1491,99 @@
   const whisperSetupCheckBtn = document.getElementById('whisper-setup-check-btn');
   const whisperSetupCloseBtn = document.getElementById('whisper-setup-close-btn');
 
+  let modelPollTimer = null;
+
   function openWhisperSetup(reason) {
     whisperSetupReason.textContent = reason || '';
     whisperSetupReason.hidden = !reason;
     whisperSetupStatus.hidden = true;
     whisperSetupOverlay.hidden = false;
+    showWhisperSteps();
+    // Whisper installed and only the model missing is not something to be told twice - it is the
+    // app's own job, so opening this dialog starts it rather than reporting it again.
+    if (((engineStatus && engineStatus.whisper) || {}).needs === 'model') fetchModel();
+  }
+
+  // Only the step that is still outstanding. Telling someone to install Whisper when the dialog
+  // has just said Whisper is installed is how you end up pressing a button in a loop.
+  function showWhisperSteps() {
+    const needs = ((engineStatus && engineStatus.whisper) || {}).needs;
+    document.getElementById('whisper-step-install').hidden = needs === 'model';
+    document.getElementById('whisper-step-model').hidden = needs === 'binary';
+  }
+
+  function sayWhisperStatus(text) {
+    whisperSetupStatus.hidden = false;
+    whisperSetupStatus.textContent = text;
+  }
+
+  // Kicks the download off and follows it to the end, so the dialog shows a number moving rather
+  // than a state to keep re-checking.
+  async function fetchModel() {
+    clearTimeout(modelPollTimer);
+    try {
+      const res = await fetch('/api/whisper/model', { method: 'POST' });
+      const data = await res.json();
+      if (data.available) return whisperReady();
+      showDownloadProgress(data);
+    } catch {
+      sayWhisperStatus('Could not reach the app to start the download. Try Check again.');
+    }
+  }
+
+  // Watching only - a download that failed has to say so and stay said. Polling the route that
+  // starts one would quietly start it again every second and a half, and the reason it failed
+  // would never be on screen long enough to read.
+  async function pollModel() {
+    clearTimeout(modelPollTimer);
+    try {
+      const res = await fetch('/api/title-engines');
+      const data = await res.json();
+      engineStatus = data;
+      if (data.whisper && data.whisper.available) return whisperReady();
+      showDownloadProgress((data.whisper && data.whisper.modelDownload) || {});
+    } catch {
+      modelPollTimer = setTimeout(pollModel, 3000);
+    }
+  }
+
+  function showDownloadProgress(progress) {
+    if (progress.error) {
+      sayWhisperStatus(`${progress.error} Then press Check again.`);
+      return;
+    }
+    sayWhisperStatus(progress.percent
+      ? `Downloading the language model - ${progress.percent}%.`
+      : 'Downloading the language model…');
+    modelPollTimer = setTimeout(pollModel, 1500);
+  }
+
+  function whisperReady() {
+    clearTimeout(modelPollTimer);
+    sayWhisperStatus('Ready - transcription is set up. You can close this.');
+    refreshEngineStatus();
+    refreshTranscript();
+    setTimeout(() => { whisperSetupOverlay.hidden = true; }, 1500);
   }
 
   whisperSetupCheckBtn.addEventListener('click', async () => {
     whisperSetupCheckBtn.disabled = true;
     await refreshEngineStatus();
     const whisper = (engineStatus && engineStatus.whisper) || {};
-    whisperSetupStatus.hidden = false;
-    whisperSetupStatus.textContent = whisper.available
-      ? 'Found it - transcription is ready. You can close this.'
-      : whisper.reason || 'Still not finding Whisper on this Mac.';
-    if (whisper.available) {
-      refreshTranscript();
-      setTimeout(() => { whisperSetupOverlay.hidden = true; }, 1200);
-    }
+    showWhisperSteps();
+    if (whisper.available) whisperReady();
+    else if (whisper.needs === 'model') await fetchModel();
+    else sayWhisperStatus(whisper.reason || 'Still not finding Whisper on this Mac.');
     whisperSetupCheckBtn.disabled = false;
   });
-  whisperSetupCloseBtn.addEventListener('click', () => { whisperSetupOverlay.hidden = true; });
-  bindOverlayDismiss(whisperSetupOverlay, () => { whisperSetupOverlay.hidden = true; });
+  // Closing only stops watching the download - it carries on in the background, and the line under
+  // the Suggest a title button keeps reporting it.
+  function closeWhisperSetup() {
+    clearTimeout(modelPollTimer);
+    whisperSetupOverlay.hidden = true;
+  }
+  whisperSetupCloseBtn.addEventListener('click', closeWhisperSetup);
+  bindOverlayDismiss(whisperSetupOverlay, closeWhisperSetup);
 
   showEngineChoice();
   refreshEngineStatus();
@@ -2408,10 +2545,12 @@
     // A different video means different words, so nothing carries over. Re-checking what the two
     // engines need here as well as at startup catches Whisper having been installed in between.
     titleSuggestBlock.hidden = false;
+    stopWaiting();
     suggestions = [];
     suggestionIndex = -1;
     suggestionsFor = '';
     transcriptState = null;
+    titleMessage = '';
     refreshEngineStatus();
 
     updateRenderButton();
