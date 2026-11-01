@@ -2733,18 +2733,11 @@
 
   const sermonDateText = document.getElementById('sermonDateText');
 
-  /** What the box shows, and what the church has always called its sermons. */
-  function formatTwoDigitYear(date) {
-    const mm = String(date.getMonth() + 1).padStart(2, '0');
-    const dd = String(date.getDate()).padStart(2, '0');
-    return `${mm} ${dd} ${String(date.getFullYear()).slice(-2)}`;
-  }
-
-  /** What goes into the file name, with the year written out. */
+  /** MM DD YY: what the box shows, and what the file is called. One format, not two. */
   function formatSermonDate(date) {
     const mm = String(date.getMonth() + 1).padStart(2, '0');
     const dd = String(date.getDate()).padStart(2, '0');
-    return `${mm} ${dd} ${date.getFullYear()}`;
+    return `${mm} ${dd} ${String(date.getFullYear()).slice(-2)}`;
   }
 
   function mostRecentSunday() {
@@ -2773,7 +2766,7 @@
   }
 
   function setSermonDate(date) {
-    sermonDateText.value = formatTwoDigitYear(date);
+    sermonDateText.value = formatSermonDate(date);
     sermonDateInput.value = formatSermonDate(date);
     updateRenderButton();
   }
@@ -2789,7 +2782,7 @@
   // Tidies up what was typed once they move on: "3/9/26" becomes "03 09 26".
   sermonDateText.addEventListener('blur', () => {
     const date = parseTypedDate(sermonDateText.value);
-    if (date) sermonDateText.value = formatTwoDigitYear(date);
+    if (date) sermonDateText.value = formatSermonDate(date);
   });
 
   document.getElementById('use-today-btn').addEventListener('click', () => {
