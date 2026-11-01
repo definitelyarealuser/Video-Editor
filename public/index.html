@@ -13,86 +13,122 @@
       <button type="button" id="update-apply-btn" class="update-apply-btn">Update &amp; Reload</button>
     </div>
 
-    <header>
-      <h1>Sermon Video Editor</h1>
-      <p class="subtitle">Bookend a video with a title graphic: fade in from the graphic, crossfade into your video, crossfade back to the graphic, then fade to black.</p>
+    <header class="app-header">
+      <div class="app-header-text">
+        <h1>Sermon Video Editor</h1>
+        <p class="subtitle">Turn a Sunday recording into a finished sermon video, ready to publish.</p>
+      </div>
+      <button type="button" id="open-settings-btn" class="settings-btn" title="Settings">⚙ Settings</button>
     </header>
 
     <form id="render-form">
-      <div class="dropzones">
-        <div class="image-uploads-column">
-          <div class="image-upload-group">
-            <div class="dropzone" id="dz-png" data-kind="png">
-              <input type="file" id="input-png" accept="image/*" hidden />
-              <div class="dz-empty">
-                <div class="dz-icon">🖼️</div>
-                <div class="dz-label">Drop bookend image here</div>
-                <div class="dz-sub">or click to browse</div>
-                <div class="dz-library" id="png-library" hidden>
-                  <div class="dz-library-header">
-                    <div class="dz-library-label">Or choose from your library:</div>
-                    <button type="button" id="png-library-edit-btn" class="dz-library-edit-btn">Edit…</button>
-                  </div>
-                  <div class="dz-library-thumbs" id="png-library-thumbs"></div>
-                </div>
-              </div>
-              <div class="dz-filled" hidden>
-                <img id="png-preview" alt="PNG preview" />
-                <div class="dz-filename" id="png-filename"></div>
-                <button type="button" class="dz-clear" data-target="png">Remove</button>
-              </div>
-            </div>
-            <div class="image-upload-caption">Bookend image and Vimeo Thumbnail</div>
-          </div>
 
-          <div class="image-upload-group">
-            <div class="dropzone dropzone-compact" id="dz-square-art" data-kind="squareArt">
-              <input type="file" id="input-square-art" accept="image/*" hidden />
-              <div class="dz-empty">
-                <div class="dz-icon">🖼️</div>
-                <div class="dz-label">Drop square graphic here</div>
-                <div class="dz-sub">or click to browse</div>
-                <div class="dz-library" id="square-art-library" hidden>
-                  <div class="dz-library-header">
-                    <div class="dz-library-label">Or choose from your library:</div>
-                    <button type="button" id="square-art-library-edit-btn" class="dz-library-edit-btn">Edit…</button>
-                  </div>
-                  <div class="dz-library-thumbs" id="square-art-library-thumbs"></div>
-                </div>
-              </div>
-              <div class="dz-filled" hidden>
-                <img id="square-art-preview" alt="Square graphic preview" />
-                <div class="dz-filename" id="square-art-filename"></div>
-                <button type="button" class="dz-clear" data-target="squareArt">Remove</button>
-              </div>
-            </div>
-            <div class="image-upload-caption">Soundcloud Thumbnail</div>
+      <!-- ─────────────────────────────── 1. Graphics ─────────────────────────────── -->
+      <section class="step" id="step-graphics">
+        <div class="step-head">
+          <span class="step-number">1</span>
+          <div class="step-titles">
+            <h2>Graphics</h2>
+            <p class="step-explainer">The pictures shown at the start and end of the video. These stay the same most weeks, so last week's are already filled in.</p>
           </div>
+          <span class="step-tick" id="tick-graphics" hidden>✓</span>
         </div>
 
-        <div class="dropzone" id="dz-video" data-kind="video">
-          <input type="file" id="input-video" accept="video/*" hidden />
-          <div class="dz-empty">
-            <div class="dz-icon">🎬</div>
-            <div class="dz-label">Drop full length video here</div>
-            <div class="dz-sub">or click to browse</div>
+        <div class="dropzones">
+          <div class="image-uploads-column">
+            <div class="image-upload-group">
+              <div class="dropzone" id="dz-png" data-kind="png">
+                <input type="file" id="input-png" accept="image/*" hidden />
+                <div class="dz-empty">
+                  <div class="dz-icon">🖼️</div>
+                  <div class="dz-label">Drop the title picture here</div>
+                  <div class="dz-sub">or click to choose a file</div>
+                  <div class="dz-library" id="png-library" hidden>
+                    <div class="dz-library-header">
+                      <div class="dz-library-label">Or pick one you've used before:</div>
+                    </div>
+                    <div class="dz-library-thumbs" id="png-library-thumbs"></div>
+                  </div>
+                </div>
+                <div class="dz-filled" hidden>
+                  <img id="png-preview" alt="Title picture preview" />
+                  <div class="dz-filename" id="png-filename"></div>
+                  <button type="button" class="dz-clear" data-target="png">Change</button>
+                </div>
+              </div>
+              <div class="image-upload-caption">Title picture — also used as the Vimeo thumbnail</div>
+            </div>
+
+            <div class="image-upload-group">
+              <div class="dropzone dropzone-compact" id="dz-square-art" data-kind="squareArt">
+                <input type="file" id="input-square-art" accept="image/*" hidden />
+                <div class="dz-empty">
+                  <div class="dz-icon">🖼️</div>
+                  <div class="dz-label">Drop the square picture here</div>
+                  <div class="dz-sub">or click to choose a file</div>
+                  <div class="dz-library" id="square-art-library" hidden>
+                    <div class="dz-library-header">
+                      <div class="dz-library-label">Or pick one you've used before:</div>
+                    </div>
+                    <div class="dz-library-thumbs" id="square-art-library-thumbs"></div>
+                  </div>
+                </div>
+                <div class="dz-filled" hidden>
+                  <img id="square-art-preview" alt="Square picture preview" />
+                  <div class="dz-filename" id="square-art-filename"></div>
+                  <button type="button" class="dz-clear" data-target="squareArt">Change</button>
+                </div>
+              </div>
+              <div class="image-upload-caption">Square picture — the cover art on SoundCloud</div>
+            </div>
           </div>
-          <div class="dz-uploading" hidden>
-            <div class="dz-icon">⏳</div>
-            <div class="dz-label">Uploading… <span id="video-upload-pct">0%</span></div>
-            <div class="progress-track"><div class="progress-fill" id="video-upload-fill"></div></div>
-          </div>
-          <div class="dz-filled" hidden>
-            <div class="dz-current-file-label">Current file:</div>
-            <div class="dz-filename dz-filename-current" id="video-filename"></div>
-            <button type="button" class="dz-clear" data-target="video">Remove</button>
+
+          <!-- ─────────────────────────── 2. The recording ─────────────────────────── -->
+          <div class="step step-inline" id="step-video">
+            <div class="step-head">
+              <span class="step-number">2</span>
+              <div class="step-titles">
+                <h2>The recording</h2>
+                <p class="step-explainer">The whole service, straight off the camera. Trimming happens in the next step.</p>
+              </div>
+              <span class="step-tick" id="tick-video" hidden>✓</span>
+            </div>
+            <div class="dropzone" id="dz-video" data-kind="video">
+              <input type="file" id="input-video" accept="video/*" hidden />
+              <div class="dz-empty">
+                <div class="dz-icon">🎬</div>
+                <div class="dz-label">Drop the recording here</div>
+                <div class="dz-sub">or click to choose a file</div>
+              </div>
+              <div class="dz-uploading" hidden>
+                <div class="dz-icon">⏳</div>
+                <div class="dz-label">Copying in… <span id="video-upload-pct">0%</span></div>
+                <div class="progress-track"><div class="progress-fill" id="video-upload-fill"></div></div>
+              </div>
+              <div class="dz-filled" hidden>
+                <div class="dz-current-file-label">Using:</div>
+                <div class="dz-filename dz-filename-current" id="video-filename"></div>
+                <button type="button" class="dz-clear" data-target="video">Change</button>
+              </div>
+            </div>
           </div>
         </div>
-      </div>
+      </section>
 
-      <section class="trim-panel" id="trim-panel" hidden>
-        <h3>Trim to just the sermon <span class="trim-panel-hint">(optional — leave as-is to use the whole file)</span></h3>
+      <!-- ─────────────────────────── 3. Trim to the sermon ─────────────────────────── -->
+      <section class="step" id="trim-step">
+        <div class="step-head">
+          <span class="step-number">3</span>
+          <div class="step-titles">
+            <h2>Trim to just the sermon</h2>
+            <p class="step-explainer">Drag the two handles to where the sermon starts and ends. Leave them alone to keep the whole recording.</p>
+          </div>
+          <span class="step-tick" id="tick-trim" hidden>✓</span>
+        </div>
 
+        <!-- Kept on the page, rather than appearing from nowhere, so the steps read 1-2-3-4-5
+             before a recording is added instead of skipping a number. -->
+        <div class="trim-panel" id="trim-panel" hidden>
         <video id="video-preview" muted></video>
 
         <div class="trim-slider" id="trim-slider">
@@ -111,48 +147,50 @@
 
         <div class="fine-tune">
           <div class="fine-tune-row">
-            <span class="fine-tune-label">Start</span>
+            <span class="fine-tune-label">Sermon starts at</span>
             <button type="button" class="nudge-btn" data-handle="start" data-delta="-5">-5s</button>
             <button type="button" class="nudge-btn" data-handle="start" data-delta="-1">-1s</button>
-            <button type="button" class="nudge-btn" data-handle="start" data-delta="-0.1">-0.1s</button>
-            <button type="button" class="nudge-btn" data-handle="start" data-delta="0.1">+0.1s</button>
+            <button type="button" class="nudge-btn nudge-fine" data-handle="start" data-delta="-0.1" hidden>-0.1s</button>
+            <button type="button" class="nudge-btn nudge-fine" data-handle="start" data-delta="0.1" hidden>+0.1s</button>
             <button type="button" class="nudge-btn" data-handle="start" data-delta="1">+1s</button>
             <button type="button" class="nudge-btn" data-handle="start" data-delta="5">+5s</button>
           </div>
           <div class="fine-tune-row">
-            <span class="fine-tune-label">End</span>
+            <span class="fine-tune-label">Sermon ends at</span>
             <button type="button" class="nudge-btn" data-handle="end" data-delta="-5">-5s</button>
             <button type="button" class="nudge-btn" data-handle="end" data-delta="-1">-1s</button>
-            <button type="button" class="nudge-btn" data-handle="end" data-delta="-0.1">-0.1s</button>
-            <button type="button" class="nudge-btn" data-handle="end" data-delta="0.1">+0.1s</button>
+            <button type="button" class="nudge-btn nudge-fine" data-handle="end" data-delta="-0.1" hidden>-0.1s</button>
+            <button type="button" class="nudge-btn nudge-fine" data-handle="end" data-delta="0.1" hidden>+0.1s</button>
             <button type="button" class="nudge-btn" data-handle="end" data-delta="1">+1s</button>
             <button type="button" class="nudge-btn" data-handle="end" data-delta="5">+5s</button>
           </div>
+          <button type="button" id="finer-nudges-btn" class="finer-btn">finer</button>
         </div>
 
         <div class="playback-controls">
-          <button type="button" id="preview-start-btn" class="playback-btn">Preview Start</button>
+          <button type="button" id="preview-start-btn" class="playback-btn">Hear the start</button>
           <button type="button" id="play-pause-btn" class="playback-btn playback-btn-primary">▶ Play</button>
-          <button type="button" id="preview-end-btn" class="playback-btn">Preview End</button>
+          <button type="button" id="preview-end-btn" class="playback-btn">Hear the end</button>
         </div>
 
         <div class="cut-section">
           <label class="inline-check">
             <input type="checkbox" id="removeMiddle" />
-            Remove a section from the middle
+            Take a section out of the middle
           </label>
+          <p class="step-explainer step-explainer-indent">For a video clip played during the service that can't be published. The two halves are joined with a fade.</p>
           <div id="cut-controls" hidden>
             <div class="trim-readout">
-              Removing <span id="cut-start-label">0:00</span> – <span id="cut-end-label">0:00</span>
-              <span class="trim-duration">(<span id="cut-duration-label">0:00</span> cut, <span id="cut-result-label">0:00</span> left)</span>
+              Taking out <span id="cut-start-label">0:00</span> – <span id="cut-end-label">0:00</span>
+              <span class="trim-duration">(<span id="cut-duration-label">0:00</span> removed, <span id="cut-result-label">0:00</span> of sermon left)</span>
             </div>
             <div class="fine-tune">
               <div class="fine-tune-row">
                 <span class="fine-tune-label">Cut from</span>
                 <button type="button" class="nudge-btn" data-handle="cutStart" data-delta="-5">-5s</button>
                 <button type="button" class="nudge-btn" data-handle="cutStart" data-delta="-1">-1s</button>
-                <button type="button" class="nudge-btn" data-handle="cutStart" data-delta="-0.1">-0.1s</button>
-                <button type="button" class="nudge-btn" data-handle="cutStart" data-delta="0.1">+0.1s</button>
+                <button type="button" class="nudge-btn nudge-fine" data-handle="cutStart" data-delta="-0.1" hidden>-0.1s</button>
+                <button type="button" class="nudge-btn nudge-fine" data-handle="cutStart" data-delta="0.1" hidden>+0.1s</button>
                 <button type="button" class="nudge-btn" data-handle="cutStart" data-delta="1">+1s</button>
                 <button type="button" class="nudge-btn" data-handle="cutStart" data-delta="5">+5s</button>
               </div>
@@ -160,354 +198,463 @@
                 <span class="fine-tune-label">Cut to</span>
                 <button type="button" class="nudge-btn" data-handle="cutEnd" data-delta="-5">-5s</button>
                 <button type="button" class="nudge-btn" data-handle="cutEnd" data-delta="-1">-1s</button>
-                <button type="button" class="nudge-btn" data-handle="cutEnd" data-delta="-0.1">-0.1s</button>
-                <button type="button" class="nudge-btn" data-handle="cutEnd" data-delta="0.1">+0.1s</button>
+                <button type="button" class="nudge-btn nudge-fine" data-handle="cutEnd" data-delta="-0.1" hidden>-0.1s</button>
+                <button type="button" class="nudge-btn nudge-fine" data-handle="cutEnd" data-delta="0.1" hidden>+0.1s</button>
                 <button type="button" class="nudge-btn" data-handle="cutEnd" data-delta="1">+1s</button>
                 <button type="button" class="nudge-btn" data-handle="cutEnd" data-delta="5">+5s</button>
               </div>
             </div>
             <div class="playback-controls">
-              <button type="button" id="preview-cut-start-btn" class="playback-btn">Preview Cut Start</button>
-              <button type="button" id="preview-join-btn" class="playback-btn playback-btn-primary">▶ Preview the Join</button>
-              <button type="button" id="preview-cut-end-btn" class="playback-btn">Preview Cut End</button>
+              <button type="button" id="preview-cut-start-btn" class="playback-btn">Hear the cut start</button>
+              <button type="button" id="preview-join-btn" class="playback-btn playback-btn-primary">▶ Hear the join</button>
+              <button type="button" id="preview-cut-end-btn" class="playback-btn">Hear the cut end</button>
             </div>
             <div id="cut-warning" class="cut-warning" hidden></div>
           </div>
         </div>
+        </div>
+        <p class="trim-placeholder" id="trim-placeholder">Add the recording above and the trimming controls appear here.</p>
+      </section>
 
-        <div class="trim-panel-settings">
+      <!-- ─────────────────────────────── 4. Name it ─────────────────────────────── -->
+      <section class="step" id="step-name">
+        <div class="step-head">
+          <span class="step-number">4</span>
+          <div class="step-titles">
+            <h2>Name it</h2>
+            <p class="step-explainer">These four become the file name and the title on Vimeo and SoundCloud. Any of them can be left blank.</p>
+          </div>
+          <span class="step-tick" id="tick-name" hidden>✓</span>
+        </div>
+
+        <div class="settings">
           <div class="field">
-            <label for="startDuration">Start PNG duration (seconds)</label>
-            <input type="number" id="startDuration" name="startDuration" value="5" min="0.5" step="0.5" required />
+            <label for="seriesName">Series</label>
+            <input type="text" id="seriesName" name="seriesName" placeholder="Series" />
           </div>
           <div class="field">
-            <label for="endDuration">End PNG duration (seconds)</label>
-            <input type="number" id="endDuration" name="endDuration" value="5" min="0.5" step="0.5" required />
+            <label for="sermonTitle">Sermon title</label>
+            <input type="text" id="sermonTitle" name="sermonTitle" placeholder="Sermon title" />
+            <div id="title-suggest" class="title-suggest" hidden>
+              <div class="title-suggest-row">
+                <button type="button" id="suggest-title-btn" class="inline-action-btn">Suggest a title</button>
+                <button type="button" id="title-engine-swap" class="link-btn" hidden>try Claude instead</button>
+              </div>
+              <div id="title-suggest-note" class="title-suggest-note"></div>
+            </div>
           </div>
           <div class="field">
-            <label for="transition">Crossfade duration (seconds)</label>
-            <input type="number" id="transition" name="transition" value="1" min="0.1" step="0.1" required />
-            <label class="inline-check">
-              <input type="checkbox" id="crossfadeAudio" checked />
-              Apply crossfade to audio too
+            <label for="speakerName">Who preached</label>
+            <input type="text" id="speakerName" name="speakerName" placeholder="Speaker's name" />
+          </div>
+          <div class="field">
+            <label for="sermonDatePicker">Date preached</label>
+            <div class="date-input">
+              <input type="date" id="sermonDatePicker" />
+              <button type="button" id="use-today-btn" class="use-today-btn">Today</button>
+            </div>
+            <input type="hidden" id="sermonDate" name="sermonDate" />
+            <div class="field-hint" id="sermonDateHint"></div>
+          </div>
+          <div class="field field-wide">
+            <label>The file will be called</label>
+            <div class="preview-text" id="outputNamePreview">sermon-final.mp4</div>
+          </div>
+          <div class="field field-wide">
+            <label for="coreText" class="core-text-label">
+              <span class="core-text-label-title">Description</span>
+              <span class="field-optional">shown under the video on Vimeo and SoundCloud</span>
             </label>
-          </div>
-          <div class="field">
-            <label for="fadeOut">Final fade-to-black (seconds)</label>
-            <input type="number" id="fadeOut" name="fadeOut" value="1.5" min="0.1" step="0.1" required />
+            <textarea id="coreText" name="coreText" rows="2" placeholder="e.g. Ephesians 2:1-10"></textarea>
+            <div class="core-text-preview-note">What people will read</div>
+            <div class="preview-text" id="coreTextPreview"></div>
           </div>
         </div>
       </section>
 
-      <div class="settings">
-        <div class="field">
-          <label for="seriesName">Series</label>
-          <input type="text" id="seriesName" name="seriesName" placeholder="Series" />
-        </div>
-        <div class="field">
-          <label for="sermonTitle">Sermon Title</label>
-          <input type="text" id="sermonTitle" name="sermonTitle" placeholder="Sermon Title" />
-          <div id="title-suggest" class="title-suggest" hidden>
-            <div class="title-suggest-row">
-              <button type="button" id="suggest-title-btn" class="inline-action-btn">Suggest a title</button>
-              <div class="engine-toggle" role="group" aria-label="Where suggestions come from">
-                <button type="button" class="engine-option is-active" data-engine="local">This Mac</button>
-                <button type="button" class="engine-option" data-engine="claude">Claude</button>
-              </div>
-            </div>
-            <div id="title-suggest-note" class="title-suggest-note"></div>
+      <!-- ─────────────────────────── 5. Where this goes ─────────────────────────── -->
+      <section class="step" id="step-destinations">
+        <div class="step-head">
+          <span class="step-number">5</span>
+          <div class="step-titles">
+            <h2>Where this goes</h2>
+            <p class="step-explainer">Everything switched on here happens by itself once the video is made.</p>
           </div>
+          <span class="step-tick" id="tick-destinations" hidden>✓</span>
         </div>
-        <div class="field">
-          <label for="speakerName">Speaker's Name</label>
-          <input type="text" id="speakerName" name="speakerName" placeholder="Speaker's Name" />
-        </div>
-        <div class="field">
-          <label for="sermonDate">Sermon Date (MM DD YY)</label>
-          <div class="date-input">
-            <input type="text" id="sermonDate" name="sermonDate" placeholder="MM DD YY" />
-            <button type="button" id="use-today-btn" class="use-today-btn">Today</button>
-          </div>
-        </div>
-        <div class="field field-wide">
-          <label>File name preview</label>
-          <div class="preview-text" id="outputNamePreview">Series - Sermon Title - Speaker's Name - Sermon Date.mp4</div>
-        </div>
-        <div class="field field-wide">
-          <label for="coreText" class="core-text-label">
-            <span class="core-text-label-title">Core Text</span>
-            <span class="field-optional">(description for Vimeo &amp; SoundCloud)</span>
+
+        <div class="destination" id="destination-vimeo">
+          <label class="inline-check destination-switch">
+            <input type="checkbox" id="publishVimeo" />
+            <span class="destination-name">Put it on Vimeo</span>
           </label>
-          <textarea id="coreText" name="coreText" rows="2" placeholder="Fill in the blank"></textarea>
-          <div class="core-text-preview-note">Description preview</div>
-          <div class="preview-text" id="coreTextPreview">Core text:</div>
-        </div>
-      </div>
-
-      <div id="vimeo-setup-section" class="vimeo-setup-section">
-        <div id="vimeo-status-row" class="soundcloud-connect-section">
-          <span id="vimeo-connect-status"></span>
-          <a id="vimeo-connect-btn" href="/api/vimeo/connect" class="vimeo-rect-btn" hidden>Connect to Vimeo</a>
-          <button type="button" id="vimeo-toggle-setup-btn" class="vimeo-rect-btn">Set up Vimeo publishing…</button>
-        </div>
-
-        <div id="vimeo-setup-form" class="modal-overlay" hidden>
-          <div class="modal-dialog vimeo-setup-dialog">
-            <h3>Set up Vimeo publishing</h3>
-            <p class="vimeo-setup-intro">To let this app upload directly to Vimeo, create a small (free) "app" on Vimeo's site - a one-time step. This is just how Vimeo lets an outside program connect to an account; you won't need to come back to Vimeo's site again once it's done.</p>
-            <ol class="vimeo-setup-steps">
-              <li>Go to <a href="https://developer.vimeo.com/apps" target="_blank" rel="noopener">developer.vimeo.com/apps</a> and log in with the Vimeo account you want to publish to. (Requires a Vimeo Pro, Business, or Premium plan - the free plan doesn't allow this kind of connection.)</li>
-              <li>Click <strong>Create App</strong>. Give it any name (e.g. "Sermon Video Editor") - the details don't matter, it's just for your own use.</li>
-              <li>On the new app's page, find <strong>Redirect URIs</strong> (under "Authentication") and add exactly this, then save: <code>http://localhost:3000/api/vimeo/oauth-callback</code></li>
-              <li>Still on that page, copy the <strong>Client Identifier</strong> and <strong>Client Secret</strong> into the two boxes below.</li>
-              <li>Click <strong>Connect to Vimeo</strong> below and log in with your Vimeo account when it asks - that saves what you entered and finishes the connection in one step.</li>
-            </ol>
-
+          <div class="destination-body" id="vimeo-options" hidden>
             <div class="field">
-              <label for="vimeo-client-id-input">Client Identifier</label>
-              <input type="text" id="vimeo-client-id-input" autocomplete="off" placeholder="Paste it here" />
+              <label for="vimeo-privacy">Who can watch it</label>
+              <select id="vimeo-privacy">
+                <option value="nobody">Only me</option>
+                <option value="unlisted">Anyone with the link</option>
+                <option value="anybody" selected>Anybody</option>
+              </select>
             </div>
             <div class="field">
-              <label for="vimeo-client-secret-input">Client Secret</label>
-              <input type="password" id="vimeo-client-secret-input" autocomplete="off" placeholder="Paste it here" />
-            </div>
-            <div class="field">
-              <label>Showcases <span class="field-optional">(optional - every published video gets added to these automatically)</span></label>
-              <div id="vimeo-showcase-rows" class="id-manager"></div>
-              <div class="id-manager-add">
-                <input type="text" id="vimeo-showcase-add-input" autocomplete="off" placeholder="Paste a showcase link or ID" />
-                <button type="button" id="vimeo-showcase-add-btn" class="modal-btn-ghost">Add</button>
-              </div>
-              <div class="vimeo-setup-hint">On vimeo.com, open <strong>Showcases</strong> in the sidebar and click the one you want, then copy the web address from your browser's address bar - it looks like <code>vimeo.com/showcase/<strong>1234567</strong></code>. Paste the whole address in above (or just that number, if you already have it).</div>
-              <div id="vimeo-showcase-add-status" class="vimeo-setup-hint" hidden></div>
-              <div id="vimeo-showcase-env-note" class="vimeo-setup-hint locked-note" hidden>This list came from a setting made outside the app when it was installed. Adding or removing a showcase here takes over from it for good.</div>
-            </div>
-
-            <div id="vimeo-setup-locked-note" class="vimeo-setup-hint" hidden>The Client Identifier and Secret are set on this machine outside the app and can't be edited here.</div>
-            <div id="vimeo-setup-error" class="error-box" hidden></div>
-
-            <div class="vimeo-setup-actions">
-              <button type="button" id="vimeo-setup-reset-btn" class="modal-btn-ghost" hidden>Forget these credentials</button>
-              <button type="button" id="vimeo-setup-disconnect-btn" class="modal-btn-ghost" hidden>Disconnect Vimeo</button>
-              <button type="button" id="vimeo-setup-cancel-btn" class="modal-btn-ghost">Cancel</button>
-              <button type="button" id="vimeo-setup-save-btn" class="modal-btn-primary">Connect to Vimeo</button>
+              <label>Add it to</label>
+              <div id="vimeo-showcase-checks" class="vimeo-showcase-checks"></div>
             </div>
           </div>
-        </div>
-      </div>
-
-      <div id="soundcloud-setup-section" class="vimeo-setup-section">
-        <div id="soundcloud-status-row" class="soundcloud-connect-section">
-          <span id="soundcloud-connect-status"></span>
-          <a id="soundcloud-connect-btn" href="/api/soundcloud/connect" class="vimeo-rect-btn" hidden>Connect to SoundCloud</a>
-          <button type="button" id="soundcloud-toggle-setup-btn" class="vimeo-rect-btn">Set up SoundCloud publishing…</button>
-        </div>
-
-        <div id="soundcloud-setup-form" class="modal-overlay" hidden>
-          <div class="modal-dialog vimeo-setup-dialog">
-            <h3>Set up SoundCloud publishing</h3>
-            <p class="vimeo-setup-intro">To let this app upload directly to SoundCloud, create a small (free) "app" on SoundCloud's site - a one-time step. This is just how SoundCloud lets an outside program connect to an account; you won't need to come back to SoundCloud's site again once it's done. Requires an <strong>Artist Pro</strong> SoundCloud account - lower tiers don't allow this kind of connection.</p>
-            <ol class="vimeo-setup-steps">
-              <li>Go to <a href="https://developers.soundcloud.com" target="_blank" rel="noopener">developers.soundcloud.com</a> and log in with the SoundCloud account you want to publish to.</li>
-              <li>Register a new app. Give it any name (e.g. "Sermon Video Editor") - the details don't matter, it's just for your own use.</li>
-              <li>On the app's page, find <strong>Redirect URI</strong> (or "Callback URL") and add exactly this, then save: <code>http://localhost:3000/api/soundcloud/oauth-callback</code></li>
-              <li>Still on that page, copy the <strong>Client ID</strong> and <strong>Client Secret</strong> into the two boxes below.</li>
-              <li>Click <strong>Connect to SoundCloud</strong> below and log in with your SoundCloud account when it asks - that saves what you entered and finishes the connection in one step.</li>
-            </ol>
-
-            <div class="field">
-              <label for="soundcloud-client-id-input">Client ID</label>
-              <input type="text" id="soundcloud-client-id-input" autocomplete="off" placeholder="Paste it here" />
-            </div>
-            <div class="field">
-              <label for="soundcloud-client-secret-input">Client Secret</label>
-              <input type="password" id="soundcloud-client-secret-input" autocomplete="off" placeholder="Paste it here" />
-            </div>
-            <div class="field">
-              <label>Playlists <span class="field-optional">(optional - every published track gets added to these automatically)</span></label>
-              <div id="soundcloud-playlist-rows" class="id-manager"></div>
-              <div class="id-manager-add">
-                <input type="text" id="soundcloud-playlist-add-input" autocomplete="off" placeholder="Paste a playlist link" />
-                <button type="button" id="soundcloud-playlist-add-btn" class="modal-btn-ghost">Add</button>
-              </div>
-              <div class="vimeo-setup-hint">On soundcloud.com, open your playlist and copy the web address from your browser's address bar - it looks like <code>soundcloud.com/your-account/sets/sermons-2026</code>. Paste the whole address in above; the app looks up the rest. (Only works once connected.)</div>
-              <div id="soundcloud-playlist-add-status" class="vimeo-setup-hint" hidden></div>
-              <div id="soundcloud-playlist-env-note" class="vimeo-setup-hint locked-note" hidden>This list came from a setting made outside the app when it was installed. Adding or removing a playlist here takes over from it for good.</div>
-            </div>
-
-            <div id="soundcloud-setup-locked-note" class="vimeo-setup-hint" hidden>The Client ID and Secret are set on this machine outside the app and can't be edited here.</div>
-            <div id="soundcloud-setup-error" class="error-box" hidden></div>
-
-            <div class="vimeo-setup-actions">
-              <button type="button" id="soundcloud-setup-reset-btn" class="modal-btn-ghost" hidden>Forget these credentials</button>
-              <button type="button" id="soundcloud-setup-disconnect-btn" class="modal-btn-ghost" hidden>Disconnect SoundCloud</button>
-              <button type="button" id="soundcloud-setup-cancel-btn" class="modal-btn-ghost">Cancel</button>
-              <button type="button" id="soundcloud-setup-save-btn" class="modal-btn-primary">Connect to SoundCloud</button>
-            </div>
+          <div class="destination-unavailable" id="vimeo-unavailable" hidden>
+            <span id="vimeo-unavailable-text">Vimeo isn't set up on this computer yet.</span>
+            <button type="button" class="link-btn" data-open-settings="vimeo">Set it up</button>
           </div>
         </div>
-      </div>
 
-      <div class="settings">
-        <div class="field field-wide">
-          <label class="inline-check">
+        <div class="destination" id="destination-soundcloud">
+          <label class="inline-check destination-switch">
+            <input type="checkbox" id="publishSoundcloud" />
+            <span class="destination-name">Put the audio on SoundCloud</span>
+          </label>
+          <div class="destination-body" id="soundcloud-options" hidden>
+            <div class="field">
+              <label for="soundcloud-privacy">Who can listen</label>
+              <select id="soundcloud-privacy">
+                <option value="public" selected>Anybody</option>
+                <option value="private">Only me</option>
+              </select>
+            </div>
+            <div class="field">
+              <label>Add it to</label>
+              <div id="soundcloud-playlist-checks" class="vimeo-showcase-checks"></div>
+            </div>
+          </div>
+          <div class="destination-unavailable" id="soundcloud-unavailable" hidden>
+            <span id="soundcloud-unavailable-text">SoundCloud isn't set up on this computer yet.</span>
+            <button type="button" class="link-btn" data-open-settings="soundcloud">Set it up</button>
+          </div>
+        </div>
+
+        <div class="destination">
+          <label class="inline-check destination-switch">
             <input type="checkbox" id="saveLocally" />
-            Also save a copy to a folder on this computer
+            <span class="destination-name">Keep a copy on this computer</span>
           </label>
-        </div>
-        <div class="field field-wide save-path-block" id="videoSavePathBlock" hidden>
-          <label for="videoSavePath">Save the MP4 to this folder on this computer</label>
-          <div class="path-input">
-            <input type="text" id="videoSavePath" name="videoSavePath" placeholder="Click Browse… to choose, or type a folder path" />
-            <button type="button" class="browse-btn" data-target="videoSavePath">Browse…</button>
+          <div class="destination-body" id="save-locally-body" hidden>
+            <div class="field-hint" id="save-folder-summary"></div>
+            <button type="button" class="link-btn" data-open-settings="folders">Change the folders</button>
           </div>
         </div>
-        <div class="field field-wide save-path-block" id="audioSavePathBlock" hidden>
-          <label for="audioSavePath">Save the MP3 to this folder on this computer</label>
-          <div class="path-input">
-            <input type="text" id="audioSavePath" name="audioSavePath" placeholder="Click Browse… to choose, or type a folder path" />
-            <button type="button" class="browse-btn" data-target="audioSavePath">Browse…</button>
-          </div>
-        </div>
-      </div>
 
+        <div class="destination">
+          <label class="inline-check destination-switch">
+            <input type="checkbox" id="exportMp3" checked />
+            <span class="destination-name">Make an audio-only MP3 as well</span>
+          </label>
+          <div class="field-hint" id="mp3-forced-note" hidden>SoundCloud needs the MP3, so it's made whenever that's switched on.</div>
+        </div>
+      </section>
+
+      <!-- ───────────────────────── Sound level, then advanced ───────────────────────── -->
       <section class="quality-panel audio-level-panel" id="audio-level-panel" hidden>
-        <h3>Audio level</h3>
+        <h3>Sound level</h3>
         <div id="loudnessResult" class="loudness-result" hidden>
           <div class="loudness-headline"><span id="loudnessIcon" class="loudness-icon"></span><span id="loudnessHeadline"></span></div>
           <ul id="loudnessReasons" class="loudness-reasons"></ul>
           <div class="loudness-measured" id="loudnessMeasured"></div>
-          <button type="button" id="applyNormalizeBtn" class="loudness-apply" hidden>Turn on normalizing</button>
-        </div>
-        <div class="toggle-row">
-          <label class="inline-check">
-            <input type="checkbox" id="normalizeAudio" />
-            Normalize audio to
-          </label>
-          <select id="targetLufs">
-            <option value="-20">-20</option>
-            <option value="-19">-19</option>
-            <option value="-18">-18</option>
-            <option value="-17">-17</option>
-            <option value="-16">-16</option>
-            <option value="-15">-15</option>
-            <option value="-14" selected>-14 (Default)</option>
-            <option value="-13">-13</option>
-            <option value="-12">-12</option>
-            <option value="-11">-11</option>
-            <option value="-10">-10</option>
-          </select>
-          <span class="toggle-hint">LUFS</span>
-          <button type="button" id="checkLoudnessBtn" class="inline-action-btn" disabled>Re-check</button>
+          <button type="button" id="applyNormalizeBtn" class="loudness-apply" hidden>Even out the volume</button>
         </div>
       </section>
 
+      <details class="advanced-panel" id="advanced-panel">
+        <summary>
+          <span class="advanced-title">Advanced settings</span>
+          <span class="advanced-summary" id="advanced-summary"></span>
+        </summary>
+        <div class="advanced-body">
+          <p class="step-explainer">These are remembered from your last video, so they're usually already right.</p>
+          <div class="trim-panel-settings">
+            <div class="field">
+              <label for="startDuration">Seconds the picture shows at the start</label>
+              <input type="number" id="startDuration" name="startDuration" value="5" min="0.5" step="0.5" required />
+            </div>
+            <div class="field">
+              <label for="endDuration">Seconds the picture shows at the end</label>
+              <input type="number" id="endDuration" name="endDuration" value="5" min="0.5" step="0.5" required />
+            </div>
+            <div class="field">
+              <label for="transition">Seconds the fade between them takes</label>
+              <input type="number" id="transition" name="transition" value="1" min="0.1" step="0.1" required />
+              <label class="inline-check">
+                <input type="checkbox" id="crossfadeAudio" checked />
+                Fade the sound along with the picture
+              </label>
+            </div>
+            <div class="field">
+              <label for="fadeOut">Seconds to fade to black at the end</label>
+              <input type="number" id="fadeOut" name="fadeOut" value="1.5" min="0.1" step="0.1" required />
+            </div>
+          </div>
+          <div class="toggle-row">
+            <label class="inline-check">
+              <input type="checkbox" id="normalizeAudio" />
+              Even out the volume, to
+            </label>
+            <select id="targetLufs">
+              <option value="-20">-20</option>
+              <option value="-19">-19</option>
+              <option value="-18">-18</option>
+              <option value="-17">-17</option>
+              <option value="-16">-16</option>
+              <option value="-15">-15</option>
+              <option value="-14" selected>-14 (Default)</option>
+              <option value="-13">-13</option>
+              <option value="-12">-12</option>
+              <option value="-11">-11</option>
+              <option value="-10">-10</option>
+            </select>
+            <span class="toggle-hint">LUFS</span>
+            <button type="button" id="checkLoudnessBtn" class="inline-action-btn" disabled>Measure again</button>
+          </div>
+        </div>
+      </details>
+
       <div id="render-requirements" class="render-requirements" hidden></div>
-      <button type="submit" id="render-btn" disabled>Render Video</button>
+      <button type="submit" id="render-btn" disabled>Make the video</button>
     </form>
 
-    <section id="progress-section" hidden>
-      <div class="progress-track">
-        <div class="progress-fill" id="progress-fill"></div>
-      </div>
-      <div class="progress-label" id="progress-label">Starting…</div>
-      <div class="progress-time" id="progress-time" hidden></div>
-      <div class="progress-safe-note">Safe to close this tab if you need to - rendering continues on this computer, and the finished file(s) will land in your chosen folder(s) either way. You just won't see this progress bar if you come back.</div>
-    </section>
+    <!-- ─────────────────────────── While it runs, and after ─────────────────────────── -->
+    <section id="done-panel" class="done-panel" hidden>
+      <section id="progress-section" hidden>
+        <div class="progress-track">
+          <div class="progress-fill" id="progress-fill"></div>
+        </div>
+        <div class="progress-label" id="progress-label">Starting…</div>
+        <div class="progress-time" id="progress-time" hidden></div>
+        <div class="progress-safe-note">You can close this tab if you need to - the video keeps being made on this computer, and still lands wherever you asked for it. You just won't see this progress bar if you come back.</div>
+      </section>
 
-    <!-- The MP3 (when requested) renders first and finishes well before the video, so its
-         download link and save status appear here as soon as it's ready - independent of
-         #result-section below, which is about the video and only appears once that's done. -->
-    <div class="audio-result-group">
-      <a id="download-mp3-link" class="download-btn download-btn-secondary" download hidden>Download MP3</a>
-      <div id="audio-save-status" class="save-status audio-save-status-standalone" hidden></div>
-    </div>
-
-    <section id="result-section" hidden>
-      <h2>Your video is ready</h2>
-      <video id="result-preview" controls playsinline preload="metadata"></video>
-      <div class="download-row">
-        <a id="download-link" class="download-btn" download>Download MP4</a>
+      <div class="audio-result-group">
+        <a id="download-mp3-link" class="download-btn download-btn-secondary" download hidden>Save the MP3</a>
+        <div id="audio-save-status" class="save-status audio-save-status-standalone" hidden></div>
       </div>
-      <div id="video-save-status" class="save-status" hidden></div>
-    </section>
 
-    <section id="vimeo-status-section" class="vimeo-status-section" hidden>
-      <div class="progress-track"><div class="progress-fill" id="vimeo-progress-fill"></div></div>
-      <div class="progress-label" id="vimeo-status-label">Publishing to Vimeo…</div>
-      <div id="vimeo-result" class="vimeo-result" hidden>
-        <a id="vimeo-result-link" href="#" target="_blank" rel="noopener"></a>
-        <ul id="vimeo-showcase-list" class="vimeo-showcase-list"></ul>
-      </div>
-      <div id="vimeo-error" class="error-box" hidden></div>
-    </section>
+      <section id="result-section" hidden>
+        <h2>Your video is ready</h2>
+        <video id="result-preview" controls playsinline preload="metadata"></video>
+        <div class="download-row">
+          <a id="download-link" class="download-btn" download>Save the video</a>
+        </div>
+        <div id="video-save-status" class="save-status" hidden></div>
+      </section>
 
-    <section id="soundcloud-status-section" class="vimeo-status-section" hidden>
-      <div class="progress-track"><div class="progress-fill" id="soundcloud-progress-fill"></div></div>
-      <div class="progress-label" id="soundcloud-status-label">Publishing to SoundCloud…</div>
-      <div id="soundcloud-result" class="vimeo-result" hidden>
-        <a id="soundcloud-result-link" href="#" target="_blank" rel="noopener"></a>
-        <ul id="soundcloud-playlist-list" class="vimeo-showcase-list"></ul>
-      </div>
-      <div id="soundcloud-error" class="error-box" hidden></div>
+      <section id="vimeo-status-section" class="vimeo-status-section" hidden>
+        <div class="progress-track"><div class="progress-fill" id="vimeo-progress-fill"></div></div>
+        <div class="progress-label" id="vimeo-status-label">Putting it on Vimeo…</div>
+        <div id="vimeo-result" class="vimeo-result" hidden>
+          <a id="vimeo-result-link" href="#" target="_blank" rel="noopener"></a>
+          <ul id="vimeo-showcase-list" class="vimeo-showcase-list"></ul>
+        </div>
+        <div id="vimeo-error" class="error-box" hidden></div>
+      </section>
+
+      <section id="soundcloud-status-section" class="vimeo-status-section" hidden>
+        <div class="progress-track"><div class="progress-fill" id="soundcloud-progress-fill"></div></div>
+        <div class="progress-label" id="soundcloud-status-label">Putting the audio on SoundCloud…</div>
+        <div id="soundcloud-result" class="vimeo-result" hidden>
+          <a id="soundcloud-result-link" href="#" target="_blank" rel="noopener"></a>
+          <ul id="soundcloud-playlist-list" class="vimeo-showcase-list"></ul>
+        </div>
+        <div id="soundcloud-error" class="error-box" hidden></div>
+      </section>
+
+      <section id="start-over-section" hidden>
+        <button type="button" id="reedit-btn" class="start-over-btn" hidden>Edit this video again</button>
+        <button type="button" id="start-over-btn" class="start-over-btn">Start with a new video</button>
+      </section>
     </section>
 
     <section id="error-section" hidden>
       <div class="error-box" id="error-message"></div>
     </section>
-
-    <section id="start-over-section" hidden>
-      <button type="button" id="start-over-btn" class="start-over-btn">Start Over</button>
-      <button type="button" id="reedit-btn" class="start-over-btn" hidden>Re-Edit</button>
-    </section>
   </main>
 
-  <div class="modal-overlay" id="vimeo-confirm-overlay" hidden>
-    <div class="modal-dialog">
-      <h3>Publish to Vimeo?</h3>
-      <p class="modal-hint">This choice applies to this render only - you'll be asked again next time.</p>
-      <p class="modal-hint">Title and description come from the form (file name and Core Text).</p>
+  <!-- ═══════════════════════════════ Settings ═══════════════════════════════ -->
+  <div class="settings-panel" id="settings-panel" hidden>
+    <div class="settings-sheet">
+      <div class="settings-header">
+        <h2>Settings</h2>
+        <button type="button" id="close-settings-btn" class="modal-btn-primary">Done</button>
+      </div>
+      <p class="modal-hint">Set up once on this computer. Nothing here needs changing week to week.</p>
 
-      <label for="vimeo-privacy">Privacy</label>
-      <select id="vimeo-privacy">
-        <option value="nobody">Private - only you (and anyone granted access)</option>
-        <option value="unlisted">Unlisted - only people with the link</option>
-        <option value="anybody" selected>Public - anybody can view</option>
-      </select>
+      <ul class="setup-checklist" id="setup-checklist"></ul>
 
-      <label>Add to showcases</label>
-      <div id="vimeo-showcase-checks" class="vimeo-showcase-checks"></div>
+      <section class="settings-section" id="settings-vimeo">
+        <h3>Vimeo</h3>
+        <div id="vimeo-status-row" class="soundcloud-connect-section">
+          <span id="vimeo-connect-status"></span>
+          <a id="vimeo-connect-btn" href="/api/vimeo/connect" class="vimeo-rect-btn" hidden>Connect to Vimeo</a>
+          <button type="button" id="vimeo-toggle-setup-btn" class="vimeo-rect-btn">Set up Vimeo publishing…</button>
+        </div>
+      </section>
 
-      <div class="modal-actions">
-        <button type="button" id="vimeo-cancel-btn" class="modal-btn-ghost">Cancel</button>
-        <button type="button" id="render-only-btn" class="modal-btn-secondary">Render Only</button>
-        <button type="button" id="render-publish-btn" class="modal-btn-primary">Render &amp; Publish to Vimeo</button>
+      <section class="settings-section" id="settings-soundcloud">
+        <h3>SoundCloud</h3>
+        <div id="soundcloud-status-row" class="soundcloud-connect-section">
+          <span id="soundcloud-connect-status"></span>
+          <a id="soundcloud-connect-btn" href="/api/soundcloud/connect" class="vimeo-rect-btn" hidden>Connect to SoundCloud</a>
+          <button type="button" id="soundcloud-toggle-setup-btn" class="vimeo-rect-btn">Set up SoundCloud publishing…</button>
+        </div>
+      </section>
+
+      <section class="settings-section" id="settings-folders">
+        <h3>Where copies get saved</h3>
+        <p class="modal-hint">Used when "Keep a copy on this computer" is switched on.</p>
+        <div class="field">
+          <label for="videoSavePath">Folder for the video</label>
+          <div class="path-input">
+            <input type="text" id="videoSavePath" name="videoSavePath" placeholder="Click Choose… to pick a folder" />
+            <button type="button" class="browse-btn" data-target="videoSavePath">Choose…</button>
+          </div>
+        </div>
+        <div class="field">
+          <label for="audioSavePath">Folder for the MP3</label>
+          <div class="path-input">
+            <input type="text" id="audioSavePath" name="audioSavePath" placeholder="Click Choose… to pick a folder" />
+            <button type="button" class="browse-btn" data-target="audioSavePath">Choose…</button>
+          </div>
+        </div>
+      </section>
+
+      <section class="settings-section" id="settings-transcription">
+        <h3>Title suggestions</h3>
+        <p class="modal-hint">The app can listen to the sermon and suggest a title from what was preached. The listening always happens on this computer.</p>
+        <div class="field">
+          <label for="title-engine-default">Where suggestions come from</label>
+          <select id="title-engine-default">
+            <option value="local">This computer - free, instant, nothing sent anywhere</option>
+            <option value="claude">Claude - better titles, needs an API key, sends the transcript</option>
+          </select>
+        </div>
+        <div class="soundcloud-connect-section">
+          <span id="transcription-status"></span>
+          <button type="button" id="open-whisper-setup-btn" class="vimeo-rect-btn">Set up listening…</button>
+          <button type="button" id="open-claude-key-btn" class="vimeo-rect-btn">Claude API key…</button>
+        </div>
+      </section>
+
+      <section class="settings-section" id="settings-library">
+        <h3>Saved graphics</h3>
+        <p class="modal-hint">Pictures you've used before, offered in step 1. Deleting one here doesn't affect anything already made.</p>
+        <div class="soundcloud-connect-section">
+          <button type="button" id="png-library-edit-btn" class="vimeo-rect-btn">Title pictures…</button>
+          <button type="button" id="square-art-library-edit-btn" class="vimeo-rect-btn">Square pictures…</button>
+        </div>
+      </section>
+
+      <section class="settings-section" id="settings-version">
+        <h3>Version</h3>
+        <div id="version-status" class="modal-hint"></div>
+      </section>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════ Dialogs ═══════════════════════════════ -->
+
+  <div id="vimeo-setup-form" class="modal-overlay" hidden>
+    <div class="modal-dialog vimeo-setup-dialog">
+      <h3>Set up Vimeo publishing</h3>
+      <p class="vimeo-setup-intro">To let this app put videos on Vimeo, you make a small (free) "app" on Vimeo's own website. It's a one-time job, and it's just how Vimeo lets another program use an account. You won't need to go back to Vimeo's site again afterwards.</p>
+      <ol class="vimeo-setup-steps">
+        <li>Go to <a href="https://developer.vimeo.com/apps" target="_blank" rel="noopener">developer.vimeo.com/apps</a> and log in with the Vimeo account the sermons go to. (This needs a paid Vimeo plan - Pro, Business or Premium. The free plan won't allow it.)</li>
+        <li>Click <strong>Create App</strong>. Give it any name, such as "Sermon Video Editor" - nothing else on that form matters.</li>
+        <li>On the new app's page, find <strong>Redirect URIs</strong> (under "Authentication"), add exactly this line, and save: <code>http://localhost:3000/api/vimeo/oauth-callback</code></li>
+        <li>Still on that page you'll see a <strong>Client Identifier</strong> and a <strong>Client Secret</strong> - two long strings of letters and numbers. Copy each one into the matching box below.</li>
+        <li>Click <strong>Connect to Vimeo</strong> below. Vimeo will ask you to log in and allow it; that finishes the job.</li>
+      </ol>
+
+      <div class="field">
+        <label for="vimeo-client-id-input">Client Identifier</label>
+        <input type="text" id="vimeo-client-id-input" autocomplete="off" placeholder="Paste it here" />
+      </div>
+      <div class="field">
+        <label for="vimeo-client-secret-input">Client Secret</label>
+        <input type="password" id="vimeo-client-secret-input" autocomplete="off" placeholder="Paste it here" />
+      </div>
+      <div class="field">
+        <label>Showcases <span class="field-optional">optional - sermons get added to these automatically</span></label>
+        <div id="vimeo-showcase-rows" class="id-manager"></div>
+        <div class="id-manager-add">
+          <input type="text" id="vimeo-showcase-add-input" autocomplete="off" placeholder="Paste a showcase link" />
+          <button type="button" id="vimeo-showcase-add-btn" class="modal-btn-ghost">Add</button>
+        </div>
+        <div class="vimeo-setup-hint">On vimeo.com, open <strong>Showcases</strong> in the sidebar, click the one you want, then copy the web address at the top of your browser - it looks like <code>vimeo.com/showcase/<strong>1234567</strong></code>. Paste the whole address in above.</div>
+        <div id="vimeo-showcase-add-status" class="vimeo-setup-hint" hidden></div>
+        <div id="vimeo-showcase-env-note" class="vimeo-setup-hint locked-note" hidden>This list came from a setting made outside the app when it was installed. Adding or removing a showcase here takes over from it for good.</div>
+      </div>
+
+      <div id="vimeo-setup-locked-note" class="vimeo-setup-hint" hidden>The Client Identifier and Secret are set on this machine outside the app and can't be edited here.</div>
+      <div id="vimeo-setup-error" class="error-box" hidden></div>
+
+      <div class="vimeo-setup-actions">
+        <button type="button" id="vimeo-setup-reset-btn" class="modal-btn-ghost" hidden>Forget these details</button>
+        <button type="button" id="vimeo-setup-disconnect-btn" class="modal-btn-ghost" hidden>Disconnect Vimeo</button>
+        <button type="button" id="vimeo-setup-cancel-btn" class="modal-btn-ghost">Cancel</button>
+        <button type="button" id="vimeo-setup-save-btn" class="modal-btn-primary">Connect to Vimeo</button>
       </div>
     </div>
   </div>
 
-  <div class="modal-overlay" id="soundcloud-confirm-overlay" hidden>
-    <div class="modal-dialog soundcloud-confirm-dialog">
-      <h3>Publish to SoundCloud?</h3>
-      <p class="modal-hint">This choice applies to this render only - you'll be asked again next time.</p>
-      <p class="modal-hint">Title and description come from the form (file name and Core Text).</p>
+  <div id="soundcloud-setup-form" class="modal-overlay" hidden>
+    <div class="modal-dialog vimeo-setup-dialog">
+      <h3>Set up SoundCloud publishing</h3>
+      <p class="vimeo-setup-intro">To let this app put audio on SoundCloud, you make a small (free) "app" on SoundCloud's own website. It's a one-time job, and it's just how SoundCloud lets another program use an account. This needs an <strong>Artist Pro</strong> SoundCloud account - lower tiers won't allow it.</p>
+      <ol class="vimeo-setup-steps">
+        <li>Go to <a href="https://developers.soundcloud.com" target="_blank" rel="noopener">developers.soundcloud.com</a> and log in with the SoundCloud account the sermons go to.</li>
+        <li>Register a new app. Give it any name, such as "Sermon Video Editor" - nothing else on that form matters.</li>
+        <li>On the app's page, find <strong>Redirect URI</strong> (sometimes called "Callback URL"), add exactly this line, and save: <code>http://localhost:3000/api/soundcloud/oauth-callback</code></li>
+        <li>Still on that page you'll see a <strong>Client ID</strong> and a <strong>Client Secret</strong> - two long strings of letters and numbers. Copy each one into the matching box below.</li>
+        <li>Click <strong>Connect to SoundCloud</strong> below. SoundCloud will ask you to log in and allow it; that finishes the job.</li>
+      </ol>
 
-      <label for="soundcloud-privacy">Privacy</label>
-      <select id="soundcloud-privacy">
-        <option value="public" selected>Public - anybody can listen</option>
-        <option value="private">Private - only you (and anyone granted access)</option>
-      </select>
+      <div class="field">
+        <label for="soundcloud-client-id-input">Client ID</label>
+        <input type="text" id="soundcloud-client-id-input" autocomplete="off" placeholder="Paste it here" />
+      </div>
+      <div class="field">
+        <label for="soundcloud-client-secret-input">Client Secret</label>
+        <input type="password" id="soundcloud-client-secret-input" autocomplete="off" placeholder="Paste it here" />
+      </div>
+      <div class="field">
+        <label>Playlists <span class="field-optional">optional - sermons get added to these automatically</span></label>
+        <div id="soundcloud-playlist-rows" class="id-manager"></div>
+        <div class="id-manager-add">
+          <input type="text" id="soundcloud-playlist-add-input" autocomplete="off" placeholder="Paste a playlist link" />
+          <button type="button" id="soundcloud-playlist-add-btn" class="modal-btn-ghost">Add</button>
+        </div>
+        <div class="vimeo-setup-hint">On soundcloud.com, open the playlist and copy the web address at the top of your browser - it looks like <code>soundcloud.com/your-account/sets/sermons-2026</code>. Paste the whole address in above. (Only works once connected.)</div>
+        <div id="soundcloud-playlist-add-status" class="vimeo-setup-hint" hidden></div>
+        <div id="soundcloud-playlist-env-note" class="vimeo-setup-hint locked-note" hidden>This list came from a setting made outside the app when it was installed. Adding or removing a playlist here takes over from it for good.</div>
+      </div>
 
-      <p class="modal-hint">An MP3 is made either way - <strong>Skip the MP3</strong> renders the video on its own.</p>
+      <div id="soundcloud-setup-locked-note" class="vimeo-setup-hint" hidden>The Client ID and Secret are set on this machine outside the app and can't be edited here.</div>
+      <div id="soundcloud-setup-error" class="error-box" hidden></div>
 
-      <label>Add to playlists</label>
-      <div id="soundcloud-playlist-checks" class="vimeo-showcase-checks"></div>
+      <div class="vimeo-setup-actions">
+        <button type="button" id="soundcloud-setup-reset-btn" class="modal-btn-ghost" hidden>Forget these details</button>
+        <button type="button" id="soundcloud-setup-disconnect-btn" class="modal-btn-ghost" hidden>Disconnect SoundCloud</button>
+        <button type="button" id="soundcloud-setup-cancel-btn" class="modal-btn-ghost">Cancel</button>
+        <button type="button" id="soundcloud-setup-save-btn" class="modal-btn-primary">Connect to SoundCloud</button>
+      </div>
+    </div>
+  </div>
 
+  <div class="modal-overlay" id="publish-confirm-overlay" hidden>
+    <div class="modal-dialog">
+      <h3>Ready to go?</h3>
+      <p class="modal-hint">Here's what will happen when the video is finished:</p>
+      <ul class="publish-confirm-list" id="publish-confirm-list"></ul>
       <div class="modal-actions">
-        <button type="button" id="soundcloud-cancel-btn" class="modal-btn-ghost">Cancel</button>
-        <button type="button" id="soundcloud-skip-mp3-btn" class="modal-btn-ghost">Skip the MP3</button>
-        <button type="button" id="soundcloud-render-only-btn" class="modal-btn-secondary">Render Only</button>
-        <button type="button" id="soundcloud-render-publish-btn" class="modal-btn-primary">Render &amp; Publish to SoundCloud</button>
+        <button type="button" id="publish-confirm-cancel-btn" class="modal-btn-secondary">Go back</button>
+        <button type="button" id="publish-confirm-go-btn" class="modal-btn-primary">Yes, make it</button>
       </div>
     </div>
   </div>
@@ -515,11 +662,11 @@
   <div class="modal-overlay" id="claude-key-overlay" hidden>
     <div class="modal-dialog claude-key-dialog">
       <h3>Use Claude for title suggestions</h3>
-      <p class="modal-hint">Suggestions from this Mac are free and nothing leaves the building. Claude usually writes better titles, but it needs an Anthropic API key, and the sermon transcript is sent to Anthropic to be read. A suggestion costs a few cents.</p>
+      <p class="modal-hint">Suggestions made on this computer are free and nothing leaves the building. Claude usually writes better titles, but it needs an Anthropic API key, and the sermon transcript is sent to Anthropic to be read. A suggestion costs a few cents.</p>
       <ol class="vimeo-setup-steps">
         <li>Go to <a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noopener">console.anthropic.com/settings/keys</a> and sign in (or create an account).</li>
         <li>Click <strong>Create Key</strong>, give it any name, and copy the key it shows you - it starts with <code>sk-ant-</code> and is only shown once.</li>
-        <li>Paste it below. It's saved on this Mac only, and you won't be asked again.</li>
+        <li>Paste it below. It's saved on this computer only, and you won't be asked again.</li>
       </ol>
       <div class="field">
         <label for="claude-api-key">Anthropic API key</label>
@@ -537,12 +684,12 @@
 
   <div class="modal-overlay" id="whisper-setup-overlay" hidden>
     <div class="modal-dialog">
-      <h3>Set up transcription</h3>
+      <h3>Set up listening</h3>
       <p class="modal-hint" id="whisper-setup-reason"></p>
-      <p class="modal-hint">Title suggestions come from the words of the sermon, so the app needs to turn the audio into text first. That happens on this Mac, using Whisper - the recording isn't uploaded anywhere, whichever suggestion engine you pick.</p>
+      <p class="modal-hint">To suggest a title, the app first turns the sermon's audio into text. That happens on this computer - the recording isn't sent anywhere, whichever kind of suggestion you pick.</p>
       <ol class="vimeo-setup-steps">
-        <li id="whisper-step-install">Open Terminal and run <code>brew install whisper-cpp</code>. (If <code>brew</code> isn't installed, get it from <a href="https://brew.sh" target="_blank" rel="noopener">brew.sh</a> first.)</li>
-        <li id="whisper-step-model">Come back here and press Check again. The app downloads the language model itself - about 142 MB, once - and you can carry on editing while it does.</li>
+        <li id="whisper-step-install">Open the <strong>Terminal</strong> app and type this, then press return: <code>brew install whisper-cpp</code> (if it says <code>brew</code> isn't found, get it from <a href="https://brew.sh" target="_blank" rel="noopener">brew.sh</a> first).</li>
+        <li id="whisper-step-model">Come back here and press <strong>Check again</strong>. The app fetches what it needs itself - about 142 MB, once - and you can carry on editing while it does.</li>
       </ol>
       <div id="whisper-setup-status" class="setup-note" hidden></div>
       <div class="modal-actions">
@@ -554,8 +701,8 @@
 
   <div class="modal-overlay" id="library-edit-overlay" hidden>
     <div class="modal-dialog">
-      <h3>Bookend Image Library</h3>
-      <p class="modal-hint">Delete images you no longer need. This doesn't affect anything already rendered.</p>
+      <h3>Saved title pictures</h3>
+      <p class="modal-hint">Delete any you no longer need. This doesn't affect anything already made.</p>
       <div id="library-edit-list" class="library-edit-list"></div>
       <div class="modal-actions">
         <button type="button" id="library-edit-close-btn" class="modal-btn-secondary">Close</button>
@@ -565,7 +712,7 @@
 
   <div class="modal-overlay" id="library-delete-confirm-overlay" hidden>
     <div class="modal-dialog">
-      <h3>Delete this image?</h3>
+      <h3>Delete this picture?</h3>
       <p class="modal-hint" id="library-delete-confirm-name"></p>
       <div class="modal-actions">
         <button type="button" id="library-delete-cancel-btn" class="modal-btn-secondary">Cancel</button>
@@ -576,8 +723,8 @@
 
   <div class="modal-overlay" id="square-art-library-edit-overlay" hidden>
     <div class="modal-dialog">
-      <h3>Square Graphic Library</h3>
-      <p class="modal-hint">Delete images you no longer need. This doesn't affect anything already rendered.</p>
+      <h3>Saved square pictures</h3>
+      <p class="modal-hint">Delete any you no longer need. This doesn't affect anything already made.</p>
       <div id="square-art-library-edit-list" class="library-edit-list"></div>
       <div class="modal-actions">
         <button type="button" id="square-art-library-edit-close-btn" class="modal-btn-secondary">Close</button>
@@ -587,7 +734,7 @@
 
   <div class="modal-overlay" id="square-art-library-delete-confirm-overlay" hidden>
     <div class="modal-dialog">
-      <h3>Delete this image?</h3>
+      <h3>Delete this picture?</h3>
       <p class="modal-hint" id="square-art-library-delete-confirm-name"></p>
       <div class="modal-actions">
         <button type="button" id="square-art-library-delete-cancel-btn" class="modal-btn-secondary">Cancel</button>
@@ -604,7 +751,7 @@
       <div id="folder-browser-error" class="error-box" hidden></div>
       <div class="modal-actions">
         <button type="button" id="folder-browser-cancel-btn" class="modal-btn-ghost">Cancel</button>
-        <button type="button" id="folder-browser-select-btn" class="modal-btn-primary">Select This Folder</button>
+        <button type="button" id="folder-browser-select-btn" class="modal-btn-primary">Use this folder</button>
       </div>
     </div>
   </div>

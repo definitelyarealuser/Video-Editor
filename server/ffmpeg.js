@@ -685,38 +685,43 @@ function recommendNormalization({ integratedLufs, truePeakDb, loudnessRange, sam
   let verdict;
   if (distance <= LOUDNESS_CLOSE_ENOUGH_LU) {
     verdict = 'ok';
-    reasons.push(`Level: on target, within ${LOUDNESS_CLOSE_ENOUGH_LU} LU of ${targetLufs} LUFS.`);
+    reasons.push('The volume is where it should be.');
   } else if (distance <= LOUDNESS_WORTH_FIXING_LU) {
     verdict = 'optional';
-    reasons.push(`Level: ${distance.toFixed(1)} LU ${direction} than the ${targetLufs} LUFS target - a small difference most listeners won't pick up.`);
+    reasons.push(`A little ${direction} than usual - a difference most people wouldn't notice.`);
   } else {
     verdict = 'recommended';
-    reasons.push(`Level: ${distance.toFixed(1)} LU ${direction} than the ${targetLufs} LUFS target - enough to stand out next to a normally-levelled sermon.`);
+    reasons.push(`This sermon is noticeably ${direction} than a normal one - enough that people would reach for the volume.`);
   }
 
-  // Worth fixing on its own whatever the average level is doing: normalizing brings a true-peak
+  // Worth fixing on its own whatever the average level is doing: evening out brings a true-peak
   // ceiling with it, and these are the moments that distort.
   if (peaksTooHot) {
-    reasons.push(`Peaks: ${truePeakDb.toFixed(1)} dBTP${sampled ? ' in the sections checked' : ''}, over the ${TRUE_PEAK_CEILING_DB} dBTP ceiling - the loudest moments risk distorting once Vimeo and SoundCloud re-encode it.`);
+    reasons.push(`The loudest moments are close to distorting${sampled ? ' in the parts checked' : ''}, which gets worse once Vimeo and SoundCloud re-encode it.`);
     if (verdict !== 'recommended') verdict = 'recommended';
   }
 
   // Spoken word normally sits well under this. A wide range usually means the quiet passages are
-  // hard to hear at all, which normalizing evens out less than it might seem - so this is
-  // reported for information and never changes the verdict.
+  // hard to hear at all, which evening out helps less than it might seem - so this is reported
+  // for information and never changes the verdict.
   if (loudnessRange !== null && loudnessRange > 15) {
-    reasons.push(`Range: ${loudnessRange.toFixed(1)} LU between the quietest and loudest passages, which is wide for speech - worth a listen to the quiet parts.`);
+    reasons.push('The quiet parts are much quieter than the loud parts - worth a listen to the quiet ones.');
   }
 
+  // Said in the past tense because by the time anyone reads it, the app has already switched
+  // evening-out on. A recommendation nobody acts on is how a sermon goes out too quiet.
   const headline = verdict === 'ok'
-    ? 'Levels look good - no need to normalize'
+    ? 'The sound level is fine - nothing to do'
     : verdict === 'optional'
-      ? 'Close to target - normalizing optional'
+      ? 'The sound is slightly off, but close enough to leave alone'
       : distance <= LOUDNESS_WORTH_FIXING_LU && peaksTooHot
-        ? 'Normalizing recommended - peaks are too hot'
-        : `Normalizing recommended - this clip is noticeably ${direction}`;
+        ? 'The loudest moments are too loud, so the volume will be evened out'
+        : `The sound is noticeably ${direction} than usual, so it will be evened out`;
 
-  return { verdict, headline, gainDb, reasons };
+  // The real figures, for anyone who wants to check the verdict rather than take it on trust.
+  const technical = `Measured ${integratedLufs.toFixed(1)} LUFS, peaks ${truePeakDb === null ? 'unknown' : `${truePeakDb.toFixed(1)} dBTP`}; evening out would ${gainDb >= 0 ? 'add' : 'take off'} ${Math.abs(gainDb).toFixed(1)} dB.`;
+
+  return { verdict, headline, gainDb, reasons, technical };
 }
 
 /**

@@ -126,11 +126,11 @@ function getStatus() {
     binary,
     model,
     needs: !binary && !model ? 'both' : !binary ? 'binary' : 'model',
-    reason: !binary && !model
-      ? 'Transcription needs Whisper installed on this Mac.'
-      : !binary
-        ? 'The Whisper program is not installed on this Mac.'
-        : 'Whisper is installed but has no language model to work from.',
+    // Said the way someone who has never heard of Whisper would need to hear it. The setup
+    // dialog is where the word appears, next to the command that installs it.
+    reason: !binary
+      ? 'Listening isn\u2019t set up on this computer yet.'
+      : 'Nearly there - the listening tool still needs its language file.',
   };
 }
 

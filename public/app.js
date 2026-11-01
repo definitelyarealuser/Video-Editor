@@ -80,6 +80,8 @@
     reEditBtn.hidden = true;
     audioSaveStatus.hidden = true;
     downloadMp3Link.hidden = true;
+    // Back to editing, so the finished-video panel goes away with it.
+    document.getElementById('done-panel').hidden = true;
     renderBtn.textContent = idleRenderLabel();
     enterVideoEditingState(state.lastVideoJobId, state.lastVideoFile, state.lastVideoDuration);
   });
@@ -92,11 +94,10 @@
   const vimeoShowcaseList = document.getElementById('vimeo-showcase-list');
   const vimeoError = document.getElementById('vimeo-error');
 
-  const vimeoConfirmOverlay = document.getElementById('vimeo-confirm-overlay');
   const vimeoShowcaseChecks = document.getElementById('vimeo-showcase-checks');
-  const vimeoCancelBtn = document.getElementById('vimeo-cancel-btn');
-  const renderOnlyBtn = document.getElementById('render-only-btn');
-  const renderPublishBtn = document.getElementById('render-publish-btn');
+  const publishVimeoCheckbox = document.getElementById('publishVimeo');
+  const vimeoOptions = document.getElementById('vimeo-options');
+  const vimeoUnavailable = document.getElementById('vimeo-unavailable');
 
   const soundcloudStatusSection = document.getElementById('soundcloud-status-section');
   const soundcloudProgressFill = document.getElementById('soundcloud-progress-fill');
@@ -106,12 +107,17 @@
   const soundcloudPlaylistList = document.getElementById('soundcloud-playlist-list');
   const soundcloudError = document.getElementById('soundcloud-error');
 
-  const soundcloudConfirmOverlay = document.getElementById('soundcloud-confirm-overlay');
   const soundcloudPlaylistChecks = document.getElementById('soundcloud-playlist-checks');
-  const soundcloudCancelBtn = document.getElementById('soundcloud-cancel-btn');
-  const soundcloudRenderOnlyBtn = document.getElementById('soundcloud-render-only-btn');
-  const soundcloudSkipMp3Btn = document.getElementById('soundcloud-skip-mp3-btn');
-  const soundcloudRenderPublishBtn = document.getElementById('soundcloud-render-publish-btn');
+  const publishSoundcloudCheckbox = document.getElementById('publishSoundcloud');
+  const soundcloudOptions = document.getElementById('soundcloud-options');
+  const soundcloudUnavailable = document.getElementById('soundcloud-unavailable');
+  const exportMp3Checkbox = document.getElementById('exportMp3');
+  const mp3ForcedNote = document.getElementById('mp3-forced-note');
+
+  const publishConfirmOverlay = document.getElementById('publish-confirm-overlay');
+  const publishConfirmList = document.getElementById('publish-confirm-list');
+  const publishConfirmCancelBtn = document.getElementById('publish-confirm-cancel-btn');
+  const publishConfirmGoBtn = document.getElementById('publish-confirm-go-btn');
 
   const soundcloudConnectStatus = document.getElementById('soundcloud-connect-status');
   const soundcloudConnectBtn = document.getElementById('soundcloud-connect-btn');
@@ -590,7 +596,7 @@
     }
   });
 
-  loadVimeoStatus();
+  loadVimeoStatus().then(() => refreshVimeoShowcases()).then(() => refreshDestinations());
 
   state.soundcloudConnected = false;
   state.soundcloudHasOAuthApp = false;
@@ -822,7 +828,7 @@
     needsConnectionToAdd: true,
   });
 
-  loadSoundCloudStatus();
+  loadSoundCloudStatus().then(() => refreshSoundCloudPlaylists()).then(() => refreshDestinations());
 
   // Fetched once, up front, same as Vimeo's showcases - only returns anything once actually
   // connected (no access token to look playlists up with otherwise).
@@ -907,46 +913,19 @@
     });
   }
 
-  // Resolves with { cancelled: true } if the user backs out entirely (Cancel, clicking outside
-  // the dialog, or Escape) - the caller should skip rendering altogether in that case. Otherwise
-  // resolves with { publish, description, showcaseIds } - always a deliberate choice each time
-  // (no "remember this" option), per how this app is meant to be used.
-  function confirmVimeoPublish() {
-    return new Promise((resolve) => {
-      renderVimeoShowcaseChecks();
-      vimeoConfirmOverlay.hidden = false;
-
-      const onCancel = () => {
-        cleanup();
-        resolve({ cancelled: true });
-      };
-      const onRenderOnly = () => {
-        cleanup();
-        resolve({ publish: false, showcaseIds: [] });
-      };
-      const onRenderPublish = () => {
-        const showcaseIds = Array.from(vimeoShowcaseChecks.querySelectorAll('input[type="checkbox"]:checked')).map((c) => c.value);
-        const privacy = document.getElementById('vimeo-privacy').value;
-        cleanup();
-        resolve({ publish: true, showcaseIds, privacy });
-      };
-      const onKeydown = (e) => {
-        if (e.key === 'Escape') onCancel();
-      };
-      function cleanup() {
-        vimeoConfirmOverlay.hidden = true;
-        vimeoCancelBtn.removeEventListener('click', onCancel);
-        renderOnlyBtn.removeEventListener('click', onRenderOnly);
-        renderPublishBtn.removeEventListener('click', onRenderPublish);
-        unbindOverlayDismiss();
-        document.removeEventListener('keydown', onKeydown);
-      }
-      vimeoCancelBtn.addEventListener('click', onCancel);
-      renderOnlyBtn.addEventListener('click', onRenderOnly);
-      renderPublishBtn.addEventListener('click', onRenderPublish);
-      const unbindOverlayDismiss = bindOverlayDismiss(vimeoConfirmOverlay, onCancel);
-      document.addEventListener('keydown', onKeydown);
-    });
+  // What "Where this goes" currently says about Vimeo. This used to be a dialog that appeared
+  // after the render button was pressed, which asked for decisions nobody was expecting at the
+  // moment they had already committed. The choices are the same ones; they are just on the page
+  // now, where they can be read before pressing anything.
+  function vimeoChoiceFromPage() {
+    if (!state.vimeoConnected || !publishVimeoCheckbox.checked) {
+      return { publish: false, showcaseIds: [] };
+    }
+    return {
+      publish: true,
+      showcaseIds: Array.from(vimeoShowcaseChecks.querySelectorAll('input[type="checkbox"]:checked')).map((c) => c.value),
+      privacy: document.getElementById('vimeo-privacy').value,
+    };
   }
 
   function renderSoundCloudPlaylistChecks() {
@@ -974,51 +953,51 @@
 
   // Same shape/behavior as confirmVimeoPublish() - a separate, deliberate confirmation each
   // time rather than combined into the Vimeo dialog, so a "no" on one doesn't quietly affect
-  // the other. Cancel here backs out of the whole render, same as Vimeo's Cancel does.
-  function confirmSoundCloudPublish() {
-    return new Promise((resolve) => {
-      renderSoundCloudPlaylistChecks();
-      soundcloudConfirmOverlay.hidden = false;
+  // the other. Both are read off the page now rather than asked for after the fact.
+  function soundcloudChoiceFromPage() {
+    if (!state.soundcloudConnected || !publishSoundcloudCheckbox.checked) {
+      return { publish: false, playlistIds: [] };
+    }
+    return {
+      publish: true,
+      playlistIds: Array.from(soundcloudPlaylistChecks.querySelectorAll('input[type="checkbox"]:checked')).map((c) => c.value),
+      privacy: document.getElementById('soundcloud-privacy').value,
+    };
+  }
 
-      const onCancel = () => {
-        cleanup();
-        resolve({ cancelled: true });
+  /**
+   * The one confirmation before anything leaves this computer. The switches above remember last
+   * week, which saves a handful of clicks every Sunday but means nobody has necessarily made a
+   * decision this week - so whatever is about to happen in public gets said in full, once, in
+   * plain words. A render that publishes nowhere is not worth interrupting and isn't.
+   */
+  function confirmPublishing(lines) {
+    return new Promise((resolve) => {
+      publishConfirmList.innerHTML = '';
+      lines.forEach((line) => {
+        const li = document.createElement('li');
+        li.textContent = line;
+        publishConfirmList.appendChild(li);
+      });
+      publishConfirmOverlay.hidden = false;
+
+      const finish = (answer) => {
+        publishConfirmOverlay.hidden = true;
+        publishConfirmCancelBtn.removeEventListener('click', onCancel);
+        publishConfirmGoBtn.removeEventListener('click', onGo);
+        document.removeEventListener('keydown', onKeydown);
+        unbindDismiss();
+        resolve(answer);
       };
-      const onRenderOnly = () => {
-        cleanup();
-        resolve({ publish: false, playlistIds: [] });
-      };
-      // Skipping the MP3 and not publishing are one decision, not two - there is nothing to
-      // upload without a file. That is what lets this replace the old "Render MP3" checkbox
-      // without adding a setting anywhere: it is a choice made once, at the point it matters.
-      const onSkipMp3 = () => {
-        cleanup();
-        resolve({ publish: false, playlistIds: [], skipMp3: true });
-      };
-      const onRenderPublish = () => {
-        const playlistIds = Array.from(soundcloudPlaylistChecks.querySelectorAll('input[type="checkbox"]:checked')).map((c) => c.value);
-        const privacy = document.getElementById('soundcloud-privacy').value;
-        cleanup();
-        resolve({ publish: true, playlistIds, privacy });
-      };
+      const onCancel = () => finish(false);
+      const onGo = () => finish(true);
       const onKeydown = (e) => {
         if (e.key === 'Escape') onCancel();
       };
-      function cleanup() {
-        soundcloudConfirmOverlay.hidden = true;
-        soundcloudCancelBtn.removeEventListener('click', onCancel);
-        soundcloudRenderOnlyBtn.removeEventListener('click', onRenderOnly);
-        soundcloudSkipMp3Btn.removeEventListener('click', onSkipMp3);
-        soundcloudRenderPublishBtn.removeEventListener('click', onRenderPublish);
-        unbindOverlayDismiss();
-        document.removeEventListener('keydown', onKeydown);
-      }
-      soundcloudCancelBtn.addEventListener('click', onCancel);
-      soundcloudRenderOnlyBtn.addEventListener('click', onRenderOnly);
-      soundcloudSkipMp3Btn.addEventListener('click', onSkipMp3);
-      soundcloudRenderPublishBtn.addEventListener('click', onRenderPublish);
-      const unbindOverlayDismiss = bindOverlayDismiss(soundcloudConfirmOverlay, onCancel);
+      publishConfirmCancelBtn.addEventListener('click', onCancel);
+      publishConfirmGoBtn.addEventListener('click', onGo);
       document.addEventListener('keydown', onKeydown);
+      const unbindDismiss = bindOverlayDismiss(publishConfirmOverlay, onCancel);
     });
   }
 
@@ -1043,6 +1022,11 @@
   let loudnessCheckInFlight = false;
   let loudnessDebounceTimer = null;
   let loudnessAbort = null;
+  // Whether the evening-out on screen was this app's doing, and whether the person has since
+  // said they don't want it - which has to stick, or the next measurement would switch it back
+  // on and silently overrule them.
+  let evenedOutAutomatically = false;
+  let userTurnedOffEvening = false;
 
   // Trimming changes the answer, so the measurement follows the trim rather than being taken once
   // at upload and left to go stale. Debounced because dragging a handle fires constantly, and
@@ -1101,19 +1085,25 @@
         loudnessReasons.appendChild(li);
       });
       if (data.integratedLufs !== null) {
-        // The raw figures, spelled out - the same numbers anyone would get checking this
-        // by hand, so the recommendation above can be sanity-checked rather than trusted blind.
-        // No note about how it was measured in the ordinary case - measuring the whole clip is
-        // just what it does, and saying so is detail nobody needs. Sampling is worth a word only
-        // because it makes the figure an estimate, and that happens on long clips alone.
-        loudnessMeasured.textContent =
-          `Measured ${data.integratedLufs.toFixed(1)} LUFS, peaks ${data.truePeakDb.toFixed(1)} dBTP. ` +
-          `Normalizing would ${data.gainDb >= 0 ? 'add' : 'take off'} ${Math.abs(data.gainDb).toFixed(1)} dB.` +
-          (data.sampled ? ' Estimated from samples across the clip.' : '');
+        // The raw numbers, kept but demoted: anyone who wants to check the verdict can, and
+        // nobody else has to read "dBTP" to use the app.
+        loudnessMeasured.textContent = data.technical
+          + (data.sampled ? ' Estimated from samples across the sermon.' : '');
       }
-      // Only offered when it would actually change something, and only as a one-click shortcut
-      // for the checkbox just above - never applied automatically.
-      applyNormalizeBtn.hidden = normalizeAudioCheckbox.checked || data.verdict !== 'recommended';
+      // Applied rather than merely suggested. Somebody who does not know what normalizing is
+      // cannot act on a recommendation to do it, and the result of ignoring it is a sermon
+      // published noticeably quieter than last week's. It says what it did, and undoing it is
+      // one click - but the default is the one that produces the right sound.
+      const shouldEvenOut = data.verdict === 'recommended';
+      if (shouldEvenOut && !normalizeAudioCheckbox.checked && !userTurnedOffEvening) {
+        normalizeAudioCheckbox.checked = true;
+        targetLufsSelect.disabled = false;
+        evenedOutAutomatically = true;
+        updateAdvancedSummary();
+      }
+      // Once it has been turned on, the button becomes the way back out.
+      applyNormalizeBtn.hidden = !normalizeAudioCheckbox.checked || !evenedOutAutomatically;
+      applyNormalizeBtn.textContent = 'Leave the volume alone';
     } catch (err) {
       // An aborted request means a newer measurement is already on its way, so the "Measuring…"
       // state is left alone for it to replace - swapping in an error here would flash a failure
@@ -1130,8 +1120,17 @@
 
   checkLoudnessBtn.addEventListener('click', runLoudnessCheck);
   applyNormalizeBtn.addEventListener('click', () => {
-    normalizeAudioCheckbox.checked = true;
-    targetLufsSelect.disabled = false;
+    normalizeAudioCheckbox.checked = false;
+    targetLufsSelect.disabled = true;
+    userTurnedOffEvening = true;
+    evenedOutAutomatically = false;
+    applyNormalizeBtn.hidden = true;
+    updateAdvancedSummary();
+  });
+  // Touching the box by hand settles it either way - the measurement stops having an opinion.
+  normalizeAudioCheckbox.addEventListener('change', () => {
+    userTurnedOffEvening = !normalizeAudioCheckbox.checked;
+    evenedOutAutomatically = false;
     applyNormalizeBtn.hidden = true;
   });
   // Changing the target changes the verdict, so a result measured against the old one is stale.
@@ -1149,7 +1148,8 @@
   const suggestTitleBtn = document.getElementById('suggest-title-btn');
   const titleSuggestNote = document.getElementById('title-suggest-note');
   const sermonTitleInput = document.getElementById('sermonTitle');
-  const engineButtons = Array.from(document.querySelectorAll('.engine-option'));
+  const engineSelect = document.getElementById('title-engine-default');
+  const engineSwapBtn = document.getElementById('title-engine-swap');
 
   const ENGINE_LABELS = { local: 'this Mac', claude: 'Claude' };
   let titleEngine = localStorage.getItem('titleEngine') === 'claude' ? 'claude' : 'local';
@@ -1202,10 +1202,27 @@
   }
 
   function showEngineChoice() {
-    engineButtons.forEach((btn) => {
-      btn.classList.toggle('is-active', btn.dataset.engine === titleEngine);
-    });
+    engineSelect.value = titleEngine;
+    // Kept on the page, quietly, because which engine writes better titles is still a live
+    // question and answering it means trying both on the same sermon.
+    engineSwapBtn.hidden = false;
+    engineSwapBtn.textContent = titleEngine === 'claude' ? 'try this computer instead' : 'try Claude instead';
     updateTitleNote();
+  }
+
+  function chooseEngine(next) {
+    if (next === titleEngine) return;
+    titleEngine = next;
+    localStorage.setItem('titleEngine', titleEngine);
+    // The other engine's list is not this engine's list, so the next press asks afresh.
+    suggestions = [];
+    suggestionIndex = -1;
+    suggestionsFor = '';
+    titleMessage = '';
+    showEngineChoice();
+    if (titleEngine === 'claude' && !(engineStatus && engineStatus.claude && engineStatus.claude.configured)) {
+      openClaudeKeyDialog();
+    }
   }
 
   // One line under the button, describing only what someone would want to know before pressing
@@ -1229,7 +1246,11 @@
         const percent = transcriptState.modelPercent;
         parts.push(`Downloading the language model${percent ? ` (${percent}%)` : ''} - this happens once`);
       } else if (transcriptState.available === false) {
-        parts.push(transcriptState.reason || 'Transcription is not set up on this Mac yet');
+        // Only when the message above isn't already saying the same thing - pressing the button
+        // with no transcription set up used to print the identical sentence twice, separated by
+        // a dot, which reads as a stutter rather than as information.
+        const reason = transcriptState.reason || 'Listening isn\u2019t set up on this computer yet';
+        if (reason !== titleMessage) parts.push(reason);
       } else if (transcriptState.windowsTotal) {
         const done = `${transcriptState.minutesTranscribed || 0} of ${Math.round((transcriptState.windowsTotal * 5))} minutes`;
         parts.push(transcriptState.working ? `Listening to the sermon - ${done} so far` : `Listened to ${done}`);
@@ -1398,22 +1419,8 @@
     updateTitleNote('');
   }
 
-  engineButtons.forEach((btn) => {
-    btn.addEventListener('click', () => {
-      if (btn.dataset.engine === titleEngine) return;
-      titleEngine = btn.dataset.engine;
-      localStorage.setItem('titleEngine', titleEngine);
-      // The other engine's list is not this engine's list, so the next press asks afresh.
-      suggestions = [];
-      suggestionIndex = -1;
-      suggestionsFor = '';
-      titleMessage = '';
-      showEngineChoice();
-      if (titleEngine === 'claude' && !(engineStatus && engineStatus.claude && engineStatus.claude.configured)) {
-        openClaudeKeyDialog();
-      }
-    });
-  });
+  engineSelect.addEventListener('change', () => chooseEngine(engineSelect.value));
+  engineSwapBtn.addEventListener('click', () => chooseEngine(titleEngine === 'claude' ? 'local' : 'claude'));
 
   // --- The Anthropic API key, entered in the app like every other credential here ---
   const claudeKeyOverlay = document.getElementById('claude-key-overlay');
@@ -1591,7 +1598,7 @@
   // An MP3 is made on every render now, so the label is fixed. Opting out happens in the
   // SoundCloud step, by which point this button has already been pressed.
   function idleRenderLabel() {
-    return 'Render Audio and Video';
+    return destinationSummaryForButton();
   }
   function refreshIdleRenderLabel() {
     if (renderBtn.textContent !== 'Rendering…') renderBtn.textContent = idleRenderLabel();
@@ -1602,11 +1609,21 @@
   // covers most people's needs now) - checking it reveals both path fields, since a render
   // always produces an MP4 and an MP3 to put somewhere.
   const saveLocallyCheckbox = document.getElementById('saveLocally');
-  const videoSavePathBlock = document.getElementById('videoSavePathBlock');
-  const audioSavePathBlock = document.getElementById('audioSavePathBlock');
+  const saveLocallyBody = document.getElementById('save-locally-body');
+  const saveFolderSummary = document.getElementById('save-folder-summary');
+  // The folders themselves are a one-time setting and live in Settings; the weekly page only
+  // says where the copy will land, which is the part worth checking before pressing go.
   function updateSavePathVisibility() {
-    videoSavePathBlock.hidden = !saveLocallyCheckbox.checked;
-    audioSavePathBlock.hidden = !saveLocallyCheckbox.checked;
+    saveLocallyBody.hidden = !saveLocallyCheckbox.checked;
+    const video = document.getElementById('videoSavePath').value.trim();
+    const audio = document.getElementById('audioSavePath').value.trim();
+    if (!video && !audio) {
+      saveFolderSummary.textContent = 'No folder chosen yet - nothing will be saved on this computer.';
+    } else if (video === audio) {
+      saveFolderSummary.textContent = `Saving both files to ${video}`;
+    } else {
+      saveFolderSummary.textContent = `Video to ${video || '(nowhere)'} · MP3 to ${audio || '(nowhere)'}`;
+    }
   }
   saveLocallyCheckbox.addEventListener('change', updateSavePathVisibility);
   saveLocallyCheckbox.addEventListener('change', () => updateRenderButton());
@@ -2188,11 +2205,11 @@
       });
     }
 
-    function selectImage(img) {
+    function selectImage(img, { carriedOver = false } = {}) {
       state[stateKey] = { libraryId: img.id, name: img.name, url: img.url };
       showDzState(dz, 'dz-filled');
       document.getElementById(previewImgId).src = img.url;
-      document.getElementById(filenameId).textContent = img.name;
+      document.getElementById(filenameId).textContent = carriedOver ? `${img.name} (used last time)` : img.name;
       updateRenderButton();
     }
 
@@ -2217,6 +2234,12 @@
         if (!data) return;
         images = data.images || [];
         renderThumbs();
+        // The same two graphics are used most weeks, and the list arrives most-recently-used
+        // first, so the form starts filled in rather than starting from empty every Sunday.
+        // Nothing is locked in: "Change" is right there, and a dropped file still wins.
+        if (images.length && !state[stateKey]) {
+          selectImage(images[0], { carriedOver: true });
+        }
       })
       .catch(() => {
         // Non-critical - the dropzone still works without the library.
@@ -2643,7 +2666,8 @@
       .replace(/…/g, '...')
       .trim()
       .replace(/[:/\\|]/g, ' ')
-      .replace(/[^a-zA-Z0-9-_ .',&()]/g, '')
+      // Keeps accented letters, matching the server's sanitizeFilename - see the note there.
+      .replace(/[^\p{L}\p{M}0-9-_ .',&()]/gu, '')
       .replace(/\.{2,}/g, '.')
       .replace(/\s+/g, ' ')
       .replace(/^[.\s]+|[.\s]+$/g, '')
@@ -2663,9 +2687,9 @@
   // always obvious what's left rather than leaving a greyed-out button unexplained.
   function updateRenderButton() {
     const missing = [];
-    if (!state.png) missing.push('a bookend image');
-    if (!state.squareArt) missing.push('a square SoundCloud graphic');
-    if (!state.videoJobId) missing.push('a video file');
+    if (!state.png) missing.push('a title picture');
+    if (!state.squareArt) missing.push('a square picture');
+    if (!state.videoJobId) missing.push('the recording');
     // Series/Sermon Title/Speaker's Name/Sermon Date/Core Text are all optional -
     // computeOutputName() and the server's own filename sanitizer both already handle any
     // subset of the name fields being blank, and an empty description is a valid choice too.
@@ -2673,20 +2697,22 @@
     // asked for now, since a render always produces an MP4 and an MP3; skipping the MP3 happens
     // later, in the SoundCloud step, by which point this has long since been satisfied.
     const cutIssue = cutProblem();
-    if (cutIssue) missing.push('a workable section to remove');
+    if (cutIssue) missing.push('a workable section to take out of the middle');
     if (saveLocallyCheckbox.checked) {
-      if (!document.getElementById('videoSavePath').value.trim()) missing.push('a folder to save the MP4 to');
+      if (!document.getElementById('videoSavePath').value.trim()) missing.push('a folder to keep the video in');
       if (!document.getElementById('audioSavePath').value.trim()) {
-        missing.push('a folder to save the MP3 to');
+        missing.push('a folder to keep the MP3 in');
       }
     }
 
     renderBtn.disabled = missing.length > 0;
     renderRequirements.hidden = missing.length === 0;
     if (missing.length > 0) {
-      renderRequirements.textContent = `Still needed before you can render: ${missing.join(', ')}.`;
+      renderRequirements.textContent = `Still needed: ${missing.join(', ')}.`;
     }
     updateOutputNamePreview();
+    refreshIdleRenderLabel();
+    updateStepTicks();
   }
 
   nameFieldIds.forEach((id) => {
@@ -2696,22 +2722,72 @@
 
   const coreTextInput = document.getElementById('coreText');
   const coreTextPreview = document.getElementById('coreTextPreview');
+  // Shows exactly what gets published, nothing more. It used to print "Core text: " in front,
+  // which is not part of the description anyone ends up reading on Vimeo or SoundCloud.
+  function updateDescriptionPreview() {
+    const written = coreTextInput.value.trim();
+    coreTextPreview.textContent = written || 'Nothing written yet - the video will have no description.';
+    coreTextPreview.classList.toggle('preview-empty', !written);
+  }
   coreTextInput.addEventListener('input', () => {
-    coreTextPreview.textContent = `Core text: ${coreTextInput.value.trim()}`;
+    updateDescriptionPreview();
     updateRenderButton();
   });
+  updateDescriptionPreview();
 
-  function fillTodayDate() {
-    const today = new Date();
-    const mm = String(today.getMonth() + 1).padStart(2, '0');
-    const dd = String(today.getDate()).padStart(2, '0');
-    const yy = String(today.getFullYear()).slice(-2);
-    const sermonDateInput = document.getElementById('sermonDate');
-    sermonDateInput.value = `${mm} ${dd} ${yy}`;
+  // A calendar rather than typing "MM DD YY" from a label, but the name on the file keeps that
+  // format - it is what every sermon this church has published is already called.
+  const sermonDatePicker = document.getElementById('sermonDatePicker');
+  const sermonDateInput = document.getElementById('sermonDate');
+  const sermonDateHint = document.getElementById('sermonDateHint');
+
+  function formatSermonDate(date) {
+    const mm = String(date.getMonth() + 1).padStart(2, '0');
+    const dd = String(date.getDate()).padStart(2, '0');
+    const yy = String(date.getFullYear()).slice(-2);
+    return `${mm} ${dd} ${yy}`;
+  }
+
+  function mostRecentSunday() {
+    const date = new Date();
+    date.setHours(12, 0, 0, 0);
+    date.setDate(date.getDate() - date.getDay());
+    return date;
+  }
+
+  function setSermonDate(date) {
+    const yyyy = date.getFullYear();
+    const mm = String(date.getMonth() + 1).padStart(2, '0');
+    const dd = String(date.getDate()).padStart(2, '0');
+    sermonDatePicker.value = `${yyyy}-${mm}-${dd}`;
+    syncSermonDate();
+  }
+
+  function syncSermonDate() {
+    if (!sermonDatePicker.value) {
+      sermonDateInput.value = '';
+      sermonDateHint.textContent = '';
+      updateRenderButton();
+      return;
+    }
+    // Read as a plain calendar date rather than a timestamp: `new Date('2026-11-01')` is midnight
+    // UTC, which in a western time zone is still the 31st.
+    const [yyyy, mm, dd] = sermonDatePicker.value.split('-').map(Number);
+    const date = new Date(yyyy, mm - 1, dd, 12);
+    sermonDateInput.value = formatSermonDate(date);
+    sermonDateHint.textContent = `Written as ${sermonDateInput.value}`;
     updateRenderButton();
   }
 
-  document.getElementById('use-today-btn').addEventListener('click', fillTodayDate);
+  sermonDatePicker.addEventListener('input', syncSermonDate);
+  sermonDatePicker.addEventListener('change', syncSermonDate);
+  document.getElementById('use-today-btn').addEventListener('click', () => {
+    const today = new Date();
+    today.setHours(12, 0, 0, 0);
+    setSermonDate(today);
+  });
+  // Sermons are nearly always dated the Sunday just gone, so that is where it starts.
+  setSermonDate(mostRecentSunday());
 
   // Desktop notification when a render finishes (or fails) while the tab isn't the one you're
   // looking at - permission has to be requested from a real user gesture (the Render click
@@ -2757,6 +2833,9 @@
     videoSaveStatus.hidden = true;
     audioSaveStatus.hidden = true;
     progressSection.hidden = false;
+    // Everything from here on - progress, the files, the publishing, what to do next - now sits
+    // in one panel instead of five that appeared separately down the page.
+    document.getElementById('done-panel').hidden = false;
     progressFill.style.width = '0%';
     progressLabel.textContent = 'Uploading files…';
     progressTime.hidden = true;
@@ -2782,6 +2861,267 @@
     updateRenderButton();
   }
 
+
+  // ═══════════════════════ Settings, kept away from the weekly job ═══════════════════════
+  // Connecting accounts, choosing folders and installing the listening tool are things done once
+  // on this computer. They used to sit in the middle of the page every week, which meant anyone
+  // working through it passed four things they must not touch on the way to the button.
+  const settingsPanel = document.getElementById('settings-panel');
+  const setupChecklist = document.getElementById('setup-checklist');
+
+  function openSettings(section) {
+    settingsPanel.hidden = false;
+    refreshSetupChecklist();
+    document.body.classList.add('settings-open');
+    if (section) {
+      const target = document.getElementById(`settings-${section}`);
+      if (target) {
+        target.scrollIntoView({ block: 'center' });
+        target.classList.add('settings-section-flash');
+        setTimeout(() => target.classList.remove('settings-section-flash'), 1200);
+      }
+    }
+  }
+
+  function closeSettings() {
+    settingsPanel.hidden = true;
+    document.body.classList.remove('settings-open');
+    // Folders can have changed while it was open, and the weekly page quotes them.
+    updateSavePathVisibility();
+    refreshDestinations();
+  }
+
+  document.getElementById('open-settings-btn').addEventListener('click', () => openSettings());
+  document.getElementById('close-settings-btn').addEventListener('click', closeSettings);
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && !settingsPanel.hidden) closeSettings();
+  });
+  // Every "Set it up" on the weekly page lands on the part of Settings that fixes it, rather
+  // than dropping someone at the top of a page of settings to hunt through.
+  document.querySelectorAll('[data-open-settings]').forEach((btn) => {
+    btn.addEventListener('click', () => openSettings(btn.dataset.openSettings));
+  });
+
+  // A list rather than a hunt, for setting up a machine from scratch.
+  function refreshSetupChecklist() {
+    const whisper = (engineStatus && engineStatus.whisper) || {};
+    const claude = (engineStatus && engineStatus.claude) || {};
+    const items = [
+      { done: !!state.vimeoConnected, label: 'Vimeo connected', missing: 'Vimeo not connected - sermons can still be made, just not put on Vimeo' },
+      { done: !!state.soundcloudConnected, label: 'SoundCloud connected', missing: 'SoundCloud not connected - audio can still be made, just not put on SoundCloud' },
+      {
+        done: !!document.getElementById('videoSavePath').value.trim(),
+        label: 'Folder chosen for saved copies',
+        missing: 'No folder chosen for saved copies',
+      },
+      {
+        done: !!whisper.available,
+        label: `Listening set up${whisper.modelName ? ` (${whisper.modelName})` : ''}`,
+        missing: 'Listening not set up - titles can’t be suggested yet',
+      },
+      {
+        done: titleEngine !== 'claude' || !!claude.configured,
+        label: titleEngine === 'claude' ? 'Claude key saved' : 'Title suggestions come from this computer',
+        missing: 'Claude is chosen for titles but has no API key saved',
+      },
+    ];
+    setupChecklist.innerHTML = '';
+    items.forEach((item) => {
+      const li = document.createElement('li');
+      li.className = item.done ? 'setup-done' : 'setup-todo';
+      li.textContent = `${item.done ? '✓' : '○'} ${item.done ? item.label : item.missing}`;
+      setupChecklist.appendChild(li);
+    });
+    const transcription = document.getElementById('transcription-status');
+    transcription.textContent = whisper.available
+      ? `Ready, using ${whisper.modelName}`
+      : (whisper.reason || 'Not set up on this computer yet');
+  }
+
+  document.getElementById('open-whisper-setup-btn').addEventListener('click', () => openWhisperSetup(''));
+  document.getElementById('open-claude-key-btn').addEventListener('click', () => openClaudeKeyDialog());
+
+  fetch('/api/update/status')
+    .then((res) => res.json())
+    .then((data) => {
+      const version = document.getElementById('version-status');
+      if (data && data.current) {
+        version.textContent = `Running ${data.current.hash.slice(0, 7)} - "${data.current.message}" on ${data.branch}. Updates install themselves when the app starts.`;
+      }
+    })
+    .catch(() => {});
+
+  // ═══════════════════════════ Where this goes ═══════════════════════════
+  // The switches remember last week, which is worth several clicks every Sunday. What stops that
+  // becoming an accidental publish is the button saying what it will do and the single
+  // confirmation before anything leaves the building - not making the choice over again.
+  const DESTINATION_MEMORY = 'destinations';
+
+  function rememberDestinations() {
+    try {
+      localStorage.setItem(DESTINATION_MEMORY, JSON.stringify({
+        vimeo: publishVimeoCheckbox.checked,
+        soundcloud: publishSoundcloudCheckbox.checked,
+        save: saveLocallyCheckbox.checked,
+        mp3: exportMp3Checkbox.checked,
+        vimeoPrivacy: document.getElementById('vimeo-privacy').value,
+        soundcloudPrivacy: document.getElementById('soundcloud-privacy').value,
+      }));
+    } catch {
+      // Private browsing, or storage turned off. The switches simply start from their defaults.
+    }
+  }
+
+  function recallDestinations() {
+    let saved = null;
+    try {
+      saved = JSON.parse(localStorage.getItem(DESTINATION_MEMORY) || 'null');
+    } catch {
+      saved = null;
+    }
+    if (!saved) return;
+    publishVimeoCheckbox.checked = !!saved.vimeo;
+    publishSoundcloudCheckbox.checked = !!saved.soundcloud;
+    saveLocallyCheckbox.checked = !!saved.save;
+    if (saved.mp3 !== undefined) exportMp3Checkbox.checked = !!saved.mp3;
+    if (saved.vimeoPrivacy) document.getElementById('vimeo-privacy').value = saved.vimeoPrivacy;
+    if (saved.soundcloudPrivacy) document.getElementById('soundcloud-privacy').value = saved.soundcloudPrivacy;
+  }
+
+  // What is offered depends on what this computer is actually connected to. An unconnected
+  // service says so in plain words and points at the one place that fixes it, rather than
+  // inviting someone who cannot fix it to start pasting in API credentials.
+  function refreshDestinations() {
+    const vimeoReady = !!state.vimeoConnected;
+    publishVimeoCheckbox.disabled = !vimeoReady;
+    if (!vimeoReady) publishVimeoCheckbox.checked = false;
+    vimeoUnavailable.hidden = vimeoReady;
+    vimeoOptions.hidden = !(vimeoReady && publishVimeoCheckbox.checked);
+    if (vimeoReady && publishVimeoCheckbox.checked) renderVimeoShowcaseChecks();
+
+    const scReady = !!state.soundcloudConnected;
+    publishSoundcloudCheckbox.disabled = !scReady;
+    if (!scReady) publishSoundcloudCheckbox.checked = false;
+    soundcloudUnavailable.hidden = scReady;
+    soundcloudOptions.hidden = !(scReady && publishSoundcloudCheckbox.checked);
+    if (scReady && publishSoundcloudCheckbox.checked) renderSoundCloudPlaylistChecks();
+
+    // An MP3 has to exist for SoundCloud to upload one, so the switch is held on and the reason
+    // given - rather than being quietly ignored, which is what used to happen.
+    const forced = scReady && publishSoundcloudCheckbox.checked;
+    mp3ForcedNote.hidden = !forced;
+    exportMp3Checkbox.disabled = forced;
+    if (forced) exportMp3Checkbox.checked = true;
+
+    updateSavePathVisibility();
+    updateRenderButton();
+    updateStepTicks();
+  }
+
+  [publishVimeoCheckbox, publishSoundcloudCheckbox, saveLocallyCheckbox, exportMp3Checkbox].forEach((el) => {
+    el.addEventListener('change', () => {
+      refreshDestinations();
+      rememberDestinations();
+    });
+  });
+  ['vimeo-privacy', 'soundcloud-privacy'].forEach((id) => {
+    document.getElementById(id).addEventListener('change', rememberDestinations);
+  });
+
+  /** Spelled out in full, because this is the sentence that stops an accident. */
+  function publishSummaryLines() {
+    const lines = [];
+    const title = computeOutputName() || 'sermon-final';
+    if (publishVimeoCheckbox.checked && state.vimeoConnected) {
+      const privacy = document.getElementById('vimeo-privacy');
+      const who = privacy.options[privacy.selectedIndex].textContent.toLowerCase();
+      const showcases = Array.from(vimeoShowcaseChecks.querySelectorAll('input:checked'))
+        .map((c) => c.parentElement.textContent.trim());
+      lines.push(`Put "${title}" on Vimeo, where ${who} can watch it${showcases.length ? `, in ${showcases.join(' and ')}` : ''}.`);
+    }
+    if (publishSoundcloudCheckbox.checked && state.soundcloudConnected) {
+      const privacy = document.getElementById('soundcloud-privacy');
+      const who = privacy.options[privacy.selectedIndex].textContent.toLowerCase();
+      const playlists = Array.from(soundcloudPlaylistChecks.querySelectorAll('input:checked'))
+        .map((c) => c.parentElement.textContent.trim());
+      lines.push(`Put the audio on SoundCloud, where ${who} can listen${playlists.length ? `, in ${playlists.join(' and ')}` : ''}.`);
+    }
+    if (saveLocallyCheckbox.checked) {
+      const folder = document.getElementById('videoSavePath').value.trim();
+      if (folder) lines.push(`Save a copy in ${folder}.`);
+    }
+    return lines;
+  }
+
+  // The button says what pressing it does. Nobody should have to remember what the switches
+  // above were set to by the time they have scrolled this far.
+  function destinationSummaryForButton() {
+    const going = [];
+    if (publishVimeoCheckbox.checked && state.vimeoConnected) going.push('Vimeo');
+    if (publishSoundcloudCheckbox.checked && state.soundcloudConnected) going.push('SoundCloud');
+    if (!going.length) return 'Make the video';
+    return `Make the video and put it on ${going.join(' and ')}`;
+  }
+
+  // ═══════════════════════════ Step ticks ═══════════════════════════
+  // Each numbered step shows a tick once it is satisfied, so the page can be read at a glance by
+  // someone who has never seen it - without turning into a wizard that makes you click Next.
+  function updateStepTicks() {
+    const ticks = {
+      'tick-graphics': !!(state.png && state.squareArt),
+      'tick-video': !!state.videoJobId,
+      'tick-trim': !!state.videoJobId && !cutProblem(),
+      // The date fills itself in, so a name only counts as given once a person has typed one of
+      // the other three - otherwise step 4 would tick green before anyone had touched it.
+      'tick-name': !!(document.getElementById('sermonTitle').value.trim()
+        || document.getElementById('seriesName').value.trim()
+        || document.getElementById('speakerName').value.trim()),
+      // An MP3 on its own isn't a destination - it's still sitting on this screen. This ticks
+      // once the video is actually going somewhere.
+      'tick-destinations': (publishVimeoCheckbox.checked && !!state.vimeoConnected)
+        || (publishSoundcloudCheckbox.checked && !!state.soundcloudConnected)
+        || saveLocallyCheckbox.checked,
+    };
+    Object.entries(ticks).forEach(([id, done]) => {
+      const el = document.getElementById(id);
+      if (el) el.hidden = !done;
+    });
+  }
+
+  // ═══════════════════════════ Finer trim nudges ═══════════════════════════
+  // Tenths of a second are for chasing a frame, which is a thing you do perhaps twice a year.
+  // They are one click away rather than on screen for everyone, every week.
+  const finerNudgesBtn = document.getElementById('finer-nudges-btn');
+  let finerNudges = false;
+  finerNudgesBtn.addEventListener('click', () => {
+    finerNudges = !finerNudges;
+    document.querySelectorAll('.nudge-fine').forEach((btn) => { btn.hidden = !finerNudges; });
+    finerNudgesBtn.textContent = finerNudges ? 'simpler' : 'finer';
+    finerNudgesBtn.classList.toggle('is-active', finerNudges);
+  });
+
+  // ═══════════════════════════ Advanced summary ═══════════════════════════
+  // Collapsed, but never a mystery: the closed row says what it currently holds.
+  const advancedSummary = document.getElementById('advanced-summary');
+  function updateAdvancedSummary() {
+    const start = document.getElementById('startDuration').value;
+    const transition = document.getElementById('transition').value;
+    const fade = document.getElementById('fadeOut').value;
+    const evening = document.getElementById('normalizeAudio').checked ? ', volume evened out' : '';
+    advancedSummary.textContent = `${start}s picture, ${transition}s fade, ${fade}s fade to black${evening}`;
+  }
+  ['startDuration', 'endDuration', 'transition', 'fadeOut', 'normalizeAudio', 'targetLufs'].forEach((id) => {
+    document.getElementById(id).addEventListener('change', updateAdvancedSummary);
+    document.getElementById(id).addEventListener('input', updateAdvancedSummary);
+  });
+  updateAdvancedSummary();
+
+  // Last week's switches, before anything else touches them. refreshDestinations() runs again
+  // once the Vimeo and SoundCloud status come back, which is what turns off a switch pointing at
+  // a service this computer isn't connected to.
+  recallDestinations();
+  refreshDestinations();
+
   form.addEventListener('submit', async (e) => {
     e.preventDefault();
     if (!state.videoJobId || !state.png || !state.squareArt) return;
@@ -2790,29 +3130,25 @@
     // require for a permission prompt like this.
     requestNotificationPermission();
 
-    // Confirmed up front, before rendering even starts, so publishing can run automatically
-    // once the render finishes with no further approval needed - but it's always a fresh,
-    // deliberate choice, never remembered from a previous render.
-    const vimeoChoice = state.vimeoConnected
-      ? await confirmVimeoPublish()
-      : { publish: false, showcaseIds: [] };
-    if (vimeoChoice.cancelled) return; // back out entirely - no render, nothing changes
-
-    // Offered purely on being connected. It used to also require the "Render MP3" box, which
-    // meant unticking that quietly removed SoundCloud from the flow - the server renders an MP3
-    // for the upload regardless of whether you asked to keep one.
-    const soundcloudChoice = state.soundcloudConnected
-      ? await confirmSoundCloudPublish()
-      : { publish: false, playlistIds: [] };
-    if (soundcloudChoice.cancelled) return; // same as Vimeo's Cancel - back out entirely
+    // Taken from "Where this goes", which was decided before the button was pressed rather than
+    // in a dialog afterwards. Publishing still runs automatically once the render finishes, so
+    // the machine can be left alone from here.
+    const vimeoChoice = vimeoChoiceFromPage();
+    const soundcloudChoice = soundcloudChoiceFromPage();
 
     const { publish: publishToVimeo, showcaseIds: vimeoShowcaseIds, privacy: vimeoPrivacy } = vimeoChoice;
     const { publish: publishToSoundCloud, playlistIds: soundcloudPlaylistIds, privacy: soundcloudPrivacy } = soundcloudChoice;
-    // Every render makes an MP3 unless the SoundCloud step was used to say otherwise.
-    const exportMp3 = !soundcloudChoice.skipMp3;
-    // Read independently of either dialog - description is the same Core Text either way, and
-    // needs to be correct even when only one of the two platforms is actually being published to
-    // (e.g. Vimeo isn't configured at all, so vimeoChoice never touches this).
+    // SoundCloud has to have a file to upload, so publishing there makes one whatever the switch
+    // says - which is why the switch is forced on and explained rather than quietly overridden.
+    const exportMp3 = exportMp3Checkbox.checked || publishToSoundCloud;
+
+    // Anything about to become public gets said out loud, once, before it happens.
+    if (publishToVimeo || publishToSoundCloud) {
+      if (!(await confirmPublishing(publishSummaryLines()))) return;
+    }
+
+    // The same description either way, and it has to be right even when only one of the two is
+    // being published to.
     const coreTextDescription = document.getElementById('coreText').value.trim();
 
     resetPanels();

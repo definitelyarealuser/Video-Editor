@@ -119,7 +119,12 @@ function sanitizeFilename(name) {
     // "Romans 8 28" instead of the misleading "Romans 828". (Colons and slashes genuinely can't
     // stay - Finder treats both as path separators.)
     .replace(/[:/\\|]/g, ' ')
-    .replace(/[^a-zA-Z0-9-_ .',&()]/g, '')
+    // Letters with accents are letters. The character class below used to be plain A-Z, which
+    // silently turned "Café" into "Caf" and "Señor" into "Seor" - a misspelled title on every
+    // file, for the one week someone preaches on something with an accent in it. \p{L} covers
+    // any letter in any language and \p{M} the marks that attach to them; everything genuinely
+    // unsafe for a filename is still dropped.
+    .replace(/[^\p{L}\p{M}0-9-_ .',&()]/gu, '')
     .replace(/\.{2,}/g, '.')
     .replace(/\s+/g, ' ')
     .replace(/^[.\s]+|[.\s]+$/g, '')
