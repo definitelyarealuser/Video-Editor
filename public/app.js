@@ -1149,7 +1149,6 @@
   const titleSuggestNote = document.getElementById('title-suggest-note');
   const sermonTitleInput = document.getElementById('sermonTitle');
   const engineSelect = document.getElementById('title-engine-default');
-  const engineSwapBtn = document.getElementById('title-engine-swap');
 
   const ENGINE_LABELS = { local: 'this Mac', claude: 'Claude' };
   let titleEngine = localStorage.getItem('titleEngine') === 'claude' ? 'claude' : 'local';
@@ -1201,12 +1200,10 @@
     showEngineChoice();
   }
 
+  // Where suggestions come from is a Settings choice and nothing else - the weekly page just has
+  // the one button.
   function showEngineChoice() {
     engineSelect.value = titleEngine;
-    // Kept on the page, quietly, because which engine writes better titles is still a live
-    // question and answering it means trying both on the same sermon.
-    engineSwapBtn.hidden = false;
-    engineSwapBtn.textContent = titleEngine === 'claude' ? 'try this computer instead' : 'try Claude instead';
     updateTitleNote();
   }
 
@@ -1420,7 +1417,6 @@
   }
 
   engineSelect.addEventListener('change', () => chooseEngine(engineSelect.value));
-  engineSwapBtn.addEventListener('click', () => chooseEngine(titleEngine === 'claude' ? 'local' : 'claude'));
 
   // --- The Anthropic API key, entered in the app like every other credential here ---
   const claudeKeyOverlay = document.getElementById('claude-key-overlay');
@@ -2735,17 +2731,15 @@
   });
   updateDescriptionPreview();
 
-  // A calendar rather than typing "MM DD YY" from a label, but the name on the file keeps that
-  // format - it is what every sermon this church has published is already called.
+  // A calendar rather than typing the date from a label. The file name still gets the church's
+  // own "MM DD" convention, with the full year written out.
   const sermonDatePicker = document.getElementById('sermonDatePicker');
   const sermonDateInput = document.getElementById('sermonDate');
-  const sermonDateHint = document.getElementById('sermonDateHint');
 
   function formatSermonDate(date) {
     const mm = String(date.getMonth() + 1).padStart(2, '0');
     const dd = String(date.getDate()).padStart(2, '0');
-    const yy = String(date.getFullYear()).slice(-2);
-    return `${mm} ${dd} ${yy}`;
+    return `${mm} ${dd} ${date.getFullYear()}`;
   }
 
   function mostRecentSunday() {
@@ -2766,7 +2760,6 @@
   function syncSermonDate() {
     if (!sermonDatePicker.value) {
       sermonDateInput.value = '';
-      sermonDateHint.textContent = '';
       updateRenderButton();
       return;
     }
@@ -2774,8 +2767,9 @@
     // UTC, which in a western time zone is still the 31st.
     const [yyyy, mm, dd] = sermonDatePicker.value.split('-').map(Number);
     const date = new Date(yyyy, mm - 1, dd, 12);
+    // No separate "written as" line: the file name preview a few rows down already shows it,
+    // in the name it will actually have.
     sermonDateInput.value = formatSermonDate(date);
-    sermonDateHint.textContent = `Written as ${sermonDateInput.value}`;
     updateRenderButton();
   }
 
@@ -3032,19 +3026,22 @@
   function publishSummaryLines() {
     const lines = [];
     const title = computeOutputName() || 'sermon-final';
+    // The dropdowns carry Vimeo's and SoundCloud's own labels, which don't fit inside a sentence
+    // - so each option also carries the phrase that does.
+    const phraseFor = (id) => {
+      const select = document.getElementById(id);
+      const option = select.options[select.selectedIndex];
+      return option.dataset.summary || option.textContent.toLowerCase();
+    };
     if (publishVimeoCheckbox.checked && state.vimeoConnected) {
-      const privacy = document.getElementById('vimeo-privacy');
-      const who = privacy.options[privacy.selectedIndex].textContent.toLowerCase();
       const showcases = Array.from(vimeoShowcaseChecks.querySelectorAll('input:checked'))
         .map((c) => c.parentElement.textContent.trim());
-      lines.push(`Put "${title}" on Vimeo, where ${who} can watch it${showcases.length ? `, in ${showcases.join(' and ')}` : ''}.`);
+      lines.push(`Put "${title}" on Vimeo, where ${phraseFor('vimeo-privacy')}${showcases.length ? `, in ${showcases.join(' and ')}` : ''}.`);
     }
     if (publishSoundcloudCheckbox.checked && state.soundcloudConnected) {
-      const privacy = document.getElementById('soundcloud-privacy');
-      const who = privacy.options[privacy.selectedIndex].textContent.toLowerCase();
       const playlists = Array.from(soundcloudPlaylistChecks.querySelectorAll('input:checked'))
         .map((c) => c.parentElement.textContent.trim());
-      lines.push(`Put the audio on SoundCloud, where ${who} can listen${playlists.length ? `, in ${playlists.join(' and ')}` : ''}.`);
+      lines.push(`Put the audio on SoundCloud, where ${phraseFor('soundcloud-privacy')}${playlists.length ? `, in ${playlists.join(' and ')}` : ''}.`);
     }
     if (saveLocallyCheckbox.checked) {
       const folder = document.getElementById('videoSavePath').value.trim();

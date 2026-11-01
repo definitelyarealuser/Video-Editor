@@ -238,7 +238,6 @@
             <div id="title-suggest" class="title-suggest" hidden>
               <div class="title-suggest-row">
                 <button type="button" id="suggest-title-btn" class="inline-action-btn">Suggest a title</button>
-                <button type="button" id="title-engine-swap" class="link-btn" hidden>try Claude instead</button>
               </div>
               <div id="title-suggest-note" class="title-suggest-note"></div>
             </div>
@@ -254,7 +253,6 @@
               <button type="button" id="use-today-btn" class="use-today-btn">Today</button>
             </div>
             <input type="hidden" id="sermonDate" name="sermonDate" />
-            <div class="field-hint" id="sermonDateHint"></div>
           </div>
           <div class="field field-wide">
             <label>The file will be called</label>
@@ -291,10 +289,13 @@
           <div class="destination-body" id="vimeo-options" hidden>
             <div class="field">
               <label for="vimeo-privacy">Who can watch it</label>
+              <!-- Vimeo's own words for these settings, so what is chosen here reads the same as
+                   what shows up against the video on Vimeo itself. data-summary is the phrase the
+                   confirmation uses, since the labels don't fit mid-sentence. -->
               <select id="vimeo-privacy">
-                <option value="nobody">Only me</option>
-                <option value="unlisted">Anyone with the link</option>
-                <option value="anybody" selected>Anybody</option>
+                <option value="anybody" selected data-summary="anyone can watch it">Public - anyone can watch</option>
+                <option value="unlisted" data-summary="only people with the link can watch it">Unlisted - only people with the link</option>
+                <option value="nobody" data-summary="only you can watch it">Private - only you and your team</option>
               </select>
             </div>
             <div class="field">
@@ -316,9 +317,10 @@
           <div class="destination-body" id="soundcloud-options" hidden>
             <div class="field">
               <label for="soundcloud-privacy">Who can listen</label>
+              <!-- SoundCloud only offers these two, in these words. -->
               <select id="soundcloud-privacy">
-                <option value="public" selected>Anybody</option>
-                <option value="private">Only me</option>
+                <option value="public" selected data-summary="anyone can listen">Public - anyone can listen, and it shows on your profile</option>
+                <option value="private" data-summary="only people with the private link can listen">Private - only people with the private link</option>
               </select>
             </div>
             <div class="field">
