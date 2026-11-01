@@ -234,9 +234,22 @@ Two ways, depending on whether you can send a 100 MB file.
 
 ### One script they run in Terminal (no file to send)
 
-`tools/install-sermon-video-editor.command` is a single self-contained script. Send it to them,
-or have them run it from Terminal; it sets up a Mac that has nothing on it, start to finish, and
-asks for nothing - **no Homebrew, no Xcode tools, no Mac password**. It works out whether the Mac
+The least that can go wrong is one line pasted into Terminal, with no file to send at all:
+
+```
+bash -c "$(curl -fsSL https://raw.githubusercontent.com/definitelyarealuser/Video-Editor/claude/sermon-video-editor-fa7r7w/tools/install-sermon-video-editor.command)"
+```
+
+To hand your connections over at the same time, put the line from `print-connections.command` in
+front of it: `CONNECTIONS="…" bash -c "$(curl …)"`.
+
+That runs `tools/install-sermon-video-editor.command`, which can equally be sent as a file - but
+if you do send it, tell them to run it as `bash <the file>` rather than double-clicking it.
+Email and chat apps strip the execute permission off attachments, and the error macOS then gives
+("could not be executed because you do not have appropriate access privileges") sends people to
+Get Info, which doesn't show that permission at all. Prefixing with `bash` ignores it entirely.
+
+Either way it sets up a Mac that has nothing on it, start to finish, and asks for nothing - **no Homebrew, no Xcode tools, no Mac password**. It works out whether the Mac
 is Apple Silicon or Intel, downloads a matching Node and ffmpeg *into the app's own folder*,
 downloads the app, installs its components, puts a **Sermon Video Editor** shortcut on the
 Desktop, and starts it. Nothing goes anywhere else on the machine, so uninstalling is deleting

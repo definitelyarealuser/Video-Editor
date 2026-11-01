@@ -19,6 +19,23 @@ To set it up, do this once:
      minute and doesn't ask you anything. When it finishes, the app
      opens in your web browser on its own.
 
+
+If step 1 says "you do not have appropriate access privileges"
+--------------------------------------------------------------
+
+That means the file lost its "this is a program" permission on the way
+to you, which happens with email and most chat apps. Get Info won't
+show the problem, because it doesn't list that particular permission.
+
+Do this instead:
+
+  1. Open Terminal (press Cmd+Space, type Terminal, press Return).
+  2. Type   bash   followed by a space. Don't press Return yet.
+  3. Drag the "START HERE" file from Finder onto the Terminal window.
+  4. Press Return.
+
+It runs exactly the same way.
+
 After that, to use it:
 
   Double-click "Sermon Video Editor" on your Desktop.

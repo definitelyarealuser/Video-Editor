@@ -3,13 +3,21 @@
 #   Sermon Video Editor - complete installer for a Mac that has nothing on it
 #   ========================================================================
 #
-#   Run this in Terminal and it sets up everything, start to finish:
+#   EASIEST WAY - nothing to download, nothing to double-click. Open Terminal (press Cmd+Space,
+#   type Terminal, press Return), paste this one line, and press Return:
+#
+#       bash -c "$(curl -fsSL https://raw.githubusercontent.com/definitelyarealuser/Video-Editor/claude/sermon-video-editor-fa7r7w/tools/install-sermon-video-editor.command)"
+#
+#   IF YOU WERE SENT THIS AS A FILE, run it like this - type `bash ` with a space, then drag the
+#   file onto the Terminal window, then press Return:
 #
 #       bash ~/Downloads/install-sermon-video-editor.command
 #
-#   ...or just double-click the file in Finder. (The first time, macOS may say it is from an
-#   unidentified developer - right-click the file and choose Open instead, and the warning gets
-#   an Open button.)
+#   Do NOT expect double-clicking to work on a file that was emailed or messaged to you. macOS
+#   strips the "this is a program" permission off anything that arrives that way, and the error
+#   it gives - "could not be executed because you do not have appropriate access privileges" -
+#   does not mention permissions you can see in Get Info, because Get Info does not show that
+#   particular one. Running it with `bash` sidesteps it entirely.
 #
 #   It needs no Homebrew, no Xcode tools, no Mac password and nothing installed beforehand. It
 #   downloads its own copy of Node and ffmpeg, puts them inside the app's own folder, and leaves
@@ -22,14 +30,17 @@
 set -uo pipefail
 
 # ─────────────────────────────────────────────────────────────────────────────
-#  Paste a connections line here to hand over an already-connected Vimeo and
-#  SoundCloud. Get it by running tools/print-connections.command on the Mac that
-#  is already set up. Leave it empty and the app simply asks whoever uses it to
-#  connect their own accounts in Settings.
+#  An already-connected Vimeo and SoundCloud can be handed over with this. Get
+#  the line by running tools/print-connections.command on the Mac that is
+#  already set up, then either paste it between the quotes below, or hand it in
+#  front of the command, which works with the one-line version above too:
 #
-#  This line is the keys to those accounts. Treat it like a password.
+#      CONNECTIONS="…that line…" bash -c "$(curl -fsSL …)"
+#
+#  Left empty, the app simply asks whoever uses it to connect their own accounts
+#  in Settings. This line is the keys to those accounts: treat it as a password.
 # ─────────────────────────────────────────────────────────────────────────────
-CONNECTIONS=""
+CONNECTIONS="${CONNECTIONS:-}"
 
 APP_DIR="$HOME/Video-Editor"
 REPO="definitelyarealuser/Video-Editor"
