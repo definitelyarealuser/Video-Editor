@@ -228,6 +228,51 @@ transcript; they differ in what turns it into a title.
 Both are offered so they can be compared on actual sermons. The choice is remembered in the browser
 and is never changed for you.
 
+## Handing the app to someone else
+
+`tools/make-handoff-zip.command` (double-click it) builds **Sermon Video Editor.zip** on your
+Desktop: one file to send to someone who needs to make a sermon video and shouldn't have to set
+anything up.
+
+It has to run on your Mac, because the things that make the result useful only exist there - your
+Vimeo and SoundCloud connections, and a copy of Node and ffmpeg for a Mac. What goes in:
+
+- the app with its dependencies already installed, so nothing is fetched from npm;
+- **Node and ffmpeg**, so the other Mac needs no Homebrew, no admin password and no internet;
+- **your Vimeo and SoundCloud connections**, so publishing works immediately;
+- your saved graphics and the last render's fade timings, so step 1 and Advanced arrive filled in.
+
+Not included: your Anthropic API key (it bills per use, and title suggestions work without it -
+pass `--with-claude-key` if you want it in), your save folders (they're paths on *your* Mac), and
+the transcript cache and Whisper model.
+
+On the other Mac it is two actions: double-click the zip, then **right-click the file called
+"START HERE" and choose Open**. The right-click is needed only the first time, and only because
+macOS blocks anything unsigned that arrived from the internet - double-clicking shows the same
+warning with no way past it. From there it runs on its own: it copies the app into their home
+folder, puts the connections where the app looks for them, checks Node and ffmpeg actually run on
+that machine, puts a **Sermon Video Editor** shortcut on their Desktop for every launch after
+this one, and starts the app. It's safe to run again, and running a newer zip's installer updates
+an existing install in place rather than making a second one.
+
+If the two Macs have different chips (Apple Silicon vs Intel) the bundled Node and ffmpeg won't
+run there. The installer notices, says so, and installs them with Homebrew instead - the one
+point where it asks for their Mac password.
+
+**The zip contains live credentials.** Anyone holding it can publish to the church's Vimeo and
+SoundCloud. Send it directly to the person, not to a channel or a shared drive. It is still a
+better thing to hand over than the account passwords, because it can be revoked without changing
+them:
+
+- **Vimeo**: go to [developer.vimeo.com/apps](https://developer.vimeo.com/apps), open the app you
+  made during setup, and reset the Client Secret. Every copy of the app stops publishing, including
+  yours, so reconnect afterwards in Settings.
+- **SoundCloud**: the same, from
+  [developers.soundcloud.com](https://developers.soundcloud.com) - regenerate the client secret.
+
+A handed-off copy has no git history, so it does not update itself the way an installed-from-source
+copy does. To give them a new version, build a new zip and have them run its installer again.
+
 ## Output quality
 
 Fixed, with nothing to choose: H.264 at CRF 18 (`libx264`) for video, 192 kbps for MP3. There used

@@ -1,0 +1,52 @@
+Sermon Video Editor
+===================
+
+To set it up, do this once:
+
+  1. Right-click (or Control-click) the file called
+         START HERE - Install Sermon Video Editor
+     and choose Open from the menu that appears.
+
+  2. A window will say the file is from an unidentified developer.
+     Click Open.
+
+     (You have to do it this way the first time. Double-clicking it
+     shows the same warning with no way past it - that is macOS being
+     careful about anything that arrived from the internet, not
+     anything being wrong with the app.)
+
+  3. A black window appears and sets everything up. It takes about a
+     minute and doesn't ask you anything. When it finishes, the app
+     opens in your web browser on its own.
+
+After that, to use it:
+
+  Double-click "Sermon Video Editor" on your Desktop.
+
+  The app opens in your browser. Leave the black Terminal window that
+  appears running while you work - closing it stops the app. When
+  you're finished, close that window.
+
+
+What's already set up for you
+-----------------------------
+
+  - Publishing to the church's Vimeo and SoundCloud. It's connected;
+    you don't need any passwords for them.
+  - The title and square graphics used on recent sermons - they'll
+    already be filled in on step 1.
+  - The fade timings, matching the last sermon that was made.
+
+The only thing it won't do on its own is suggest sermon titles. That
+needs one extra install, and the app walks you through it if you press
+"Suggest a title". Everything else works without it.
+
+
+If something goes wrong
+-----------------------
+
+Run the START HERE file again - it's safe to run as many times as you
+like, and it repairs an install rather than making a second one.
+
+If that doesn't help, send a photo of the black window to whoever gave
+you this zip.
