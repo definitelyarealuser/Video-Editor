@@ -10,15 +10,19 @@
 # exactly the same way.
 cd "$(dirname "$0")" || exit 1
 
-if [[ -d "$PWD/runtime" ]]; then
-  PATH="$PWD/runtime:$PATH"
-  export PATH
-fi
+# Two shapes of bundled runtime, depending on how this was installed:
+#   runtime/node, runtime/ffmpeg          - from the handover zip, single copied binaries
+#   runtime/node-dist/bin/node            - from the one-script installer, a whole Node release
+# Both get looked in, and neither has to exist.
+for dir in "$PWD/runtime" "$PWD/runtime/node-dist/bin"; do
+  [[ -d "$dir" ]] && PATH="$dir:$PATH"
+done
+export PATH
 
 if ! command -v node >/dev/null 2>&1; then
   echo ""
   echo "Node isn't available, so the app can't start."
-  echo "Run the 'START HERE - Install Sermon Video Editor' file again to put it back."
+  echo "Run the installer again to put it back."
   echo ""
   read -n 1 -s -r -p "Press any key to close this window..."
   echo ""

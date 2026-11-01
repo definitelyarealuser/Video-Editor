@@ -230,6 +230,25 @@ and is never changed for you.
 
 ## Handing the app to someone else
 
+Two ways, depending on whether you can send a 100 MB file.
+
+### One script they run in Terminal (no file to send)
+
+`tools/install-sermon-video-editor.command` is a single self-contained script. Send it to them,
+or have them run it from Terminal; it sets up a Mac that has nothing on it, start to finish, and
+asks for nothing - **no Homebrew, no Xcode tools, no Mac password**. It works out whether the Mac
+is Apple Silicon or Intel, downloads a matching Node and ffmpeg *into the app's own folder*,
+downloads the app, installs its components, puts a **Sermon Video Editor** shortcut on the
+Desktop, and starts it. Nothing goes anywhere else on the machine, so uninstalling is deleting
+`~/Video-Editor`. Running it again is also how you update.
+
+To hand over your Vimeo and SoundCloud at the same time: double-click
+`tools/print-connections.command` on your Mac, copy the single line it prints, and paste it into
+the installer at the line reading `CONNECTIONS=""`. That line is a live login for the church's
+accounts - see the warning below.
+
+### A zip with everything already in it
+
 `tools/make-handoff-zip.command` (double-click it) builds **Sermon Video Editor.zip** on your
 Desktop: one file to send to someone who needs to make a sermon video and shouldn't have to set
 anything up.
@@ -271,7 +290,9 @@ them:
   [developers.soundcloud.com](https://developers.soundcloud.com) - regenerate the client secret.
 
 A handed-off copy has no git history, so it does not update itself the way an installed-from-source
-copy does. To give them a new version, build a new zip and have them run its installer again.
+copy does. To give them a new version: with the script, they re-run it; with the zip, build a new
+one and have them run its installer again. Either way an existing install is updated in place and
+their graphics, connections and settings are kept.
 
 ## Output quality
 
