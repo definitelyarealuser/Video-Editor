@@ -12,9 +12,46 @@
 # without it. Pass --with-claude-key to include it anyway.
 
 set -uo pipefail
-cd "$(dirname "$0")/.." || exit 1
-DATA="$PWD/data"
-[[ -d "$DATA" ]] || { echo "No data folder found at $DATA - is this the right Mac?"; exit 1; }
+
+# Finds the installed app rather than assuming this file is sitting inside it. It used to work
+# out the location from its own path, which meant it only worked when run from inside the app's
+# tools folder: saved to Downloads and double-clicked, it looked for ~/data and gave up, and run
+# straight off the internet with `bash -c "$(curl …)"` - where $0 is just "bash" - it looked in
+# whatever folder the Terminal happened to be in. Both are the normal ways someone would run it.
+find_data_dir() {
+  local candidates=(
+    "$HOME/Video-Editor/data"
+    "$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")/.." 2>/dev/null && pwd)/data"
+    "$PWD/data"
+    "$HOME/Desktop/Video-Editor/data"
+    "$HOME/Documents/Video-Editor/data"
+  )
+  for dir in "${candidates[@]}"; do
+    # A folder with the app's own files in it, not just any folder called "data".
+    if [[ -d "$dir" ]] && compgen -G "$dir/*.json" >/dev/null 2>&1; then
+      printf '%s' "$dir"
+      return 0
+    fi
+  done
+  return 1
+}
+
+if ! DATA="$(find_data_dir)"; then
+  echo ""
+  echo "Couldn't find the Sermon Video Editor's settings on this Mac."
+  echo ""
+  echo "This has to run on the Mac that already has the app set up and connected."
+  echo "It looked in ~/Video-Editor/data and a few other likely places."
+  echo ""
+  echo "If the app lives somewhere else, run this instead, with the path to it:"
+  echo "    SVE_DIR=/path/to/Video-Editor bash \"\$0\""
+  echo ""
+  exit 1
+fi
+# An explicit override, for an install in an unusual place.
+if [[ -n "${SVE_DIR:-}" && -d "${SVE_DIR}/data" ]]; then
+  DATA="${SVE_DIR}/data"
+fi
 
 INCLUDE_CLAUDE_KEY=false
 for arg in "$@"; do [[ "$arg" == "--with-claude-key" ]] && INCLUDE_CLAUDE_KEY=true; done

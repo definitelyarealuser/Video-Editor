@@ -92,9 +92,18 @@ WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
 
 # `curl -fL`: fail on an HTTP error instead of saving the error page as if it were the file, and
-# follow redirects, which every one of these downloads uses.
+# follow redirects, which every one of these downloads uses. The reason for a failure is printed
+# rather than swallowed - "could not download" on its own sends people looking at their wifi when
+# the real answer might be a moved file or a blocked address.
 fetch() {
-  curl -fL --retry 3 --retry-delay 2 --connect-timeout 20 -o "$2" "$1" 2>/dev/null
+  local url="$1" out="$2" code
+  code="$(curl -fL --retry 3 --retry-delay 2 --connect-timeout 20 -o "$out" -w '%{http_code}' "$url" 2>/dev/null)"
+  local status=$?
+  if [[ $status -ne 0 ]]; then
+    printf '        could not fetch %s\n' "$url"
+    printf '        (curl gave up with code %s%s)\n' "$status" "$([[ -n "$code" ]] && printf ', HTTP %s' "$code")"
+    return 1
+  fi
 }
 
 # ─────────────────────────────────────────────────────── 2. the app itself
