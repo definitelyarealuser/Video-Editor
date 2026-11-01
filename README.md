@@ -16,8 +16,11 @@ who does this every week:
 2. **The recording** - the whole service, straight off the camera.
 3. **Trim to just the sermon** - two handles, nudge buttons at ±1s and ±5s (±0.1s behind
    **finer**), and the optional section taken out of the middle.
-4. **Name it** - series, title, who preached, and the date from a calendar that starts on the most
-   recent Sunday. The date is written into the file name as `MM DD YYYY`.
+4. **Name it** - series, title, who preached, and the date, a plain `MM DD YY` box filled in with
+   the Sunday just gone. (It was a calendar picker briefly; a native date input renders whatever
+   format the browser's locale says and can't be told to use another.) Spaces, slashes and dashes
+   all work when typing, and the box tidies itself up when you move on. The date goes into the
+   file name as `MM DD YYYY`.
 5. **Where this goes** - switches for Vimeo, SoundCloud and keeping a copy, each with their
    options inline. These remember what you chose last week.
 

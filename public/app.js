@@ -2729,9 +2729,18 @@
 
   // A calendar rather than typing the date from a label. The file name still gets the church's
   // own "MM DD" convention, with the full year written out.
-  const sermonDatePicker = document.getElementById('sermonDatePicker');
   const sermonDateInput = document.getElementById('sermonDate');
 
+  const sermonDateText = document.getElementById('sermonDateText');
+
+  /** What the box shows, and what the church has always called its sermons. */
+  function formatTwoDigitYear(date) {
+    const mm = String(date.getMonth() + 1).padStart(2, '0');
+    const dd = String(date.getDate()).padStart(2, '0');
+    return `${mm} ${dd} ${String(date.getFullYear()).slice(-2)}`;
+  }
+
+  /** What goes into the file name, with the year written out. */
   function formatSermonDate(date) {
     const mm = String(date.getMonth() + 1).padStart(2, '0');
     const dd = String(date.getDate()).padStart(2, '0');
@@ -2745,32 +2754,44 @@
     return date;
   }
 
-  function setSermonDate(date) {
-    const yyyy = date.getFullYear();
-    const mm = String(date.getMonth() + 1).padStart(2, '0');
-    const dd = String(date.getDate()).padStart(2, '0');
-    sermonDatePicker.value = `${yyyy}-${mm}-${dd}`;
-    syncSermonDate();
+  /**
+   * Reads what was typed. Spaces, slashes and dashes all separate, because people type all three,
+   * and a two-digit year means this century - these are sermons that have already happened, not
+   * ones from 1926. Returns null for anything that isn't a real date, which leaves the typing
+   * alone rather than rewriting it under the cursor.
+   */
+  function parseTypedDate(typed) {
+    const parts = String(typed || '').trim().split(/[^0-9]+/).filter(Boolean);
+    if (parts.length !== 3) return null;
+    const [mm, dd, rawYear] = parts.map(Number);
+    const year = rawYear < 100 ? 2000 + rawYear : rawYear;
+    if (!(mm >= 1 && mm <= 12) || !(dd >= 1 && dd <= 31) || !(year >= 1900 && year <= 2999)) return null;
+    const date = new Date(year, mm - 1, dd, 12);
+    // Rejects the 31st of February and friends, which Date would otherwise roll into March.
+    if (date.getMonth() !== mm - 1 || date.getDate() !== dd) return null;
+    return date;
   }
 
-  function syncSermonDate() {
-    if (!sermonDatePicker.value) {
-      sermonDateInput.value = '';
-      updateRenderButton();
-      return;
-    }
-    // Read as a plain calendar date rather than a timestamp: `new Date('2026-11-01')` is midnight
-    // UTC, which in a western time zone is still the 31st.
-    const [yyyy, mm, dd] = sermonDatePicker.value.split('-').map(Number);
-    const date = new Date(yyyy, mm - 1, dd, 12);
-    // No separate "written as" line: the file name preview a few rows down already shows it,
-    // in the name it will actually have.
+  function setSermonDate(date) {
+    sermonDateText.value = formatTwoDigitYear(date);
     sermonDateInput.value = formatSermonDate(date);
     updateRenderButton();
   }
 
-  sermonDatePicker.addEventListener('input', syncSermonDate);
-  sermonDatePicker.addEventListener('change', syncSermonDate);
+  // Typed into the box: accepted as it is understood, and left alone when it isn't - a half-typed
+  // date is not an error, it is somebody still typing.
+  sermonDateText.addEventListener('input', () => {
+    const date = parseTypedDate(sermonDateText.value);
+    sermonDateInput.value = date ? formatSermonDate(date) : '';
+    updateRenderButton();
+  });
+
+  // Tidies up what was typed once they move on: "3/9/26" becomes "03 09 26".
+  sermonDateText.addEventListener('blur', () => {
+    const date = parseTypedDate(sermonDateText.value);
+    if (date) sermonDateText.value = formatTwoDigitYear(date);
+  });
+
   document.getElementById('use-today-btn').addEventListener('click', () => {
     const today = new Date();
     today.setHours(12, 0, 0, 0);

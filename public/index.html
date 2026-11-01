@@ -247,9 +247,12 @@
             <input type="text" id="speakerName" name="speakerName" placeholder="Speaker's name" />
           </div>
           <div class="field">
-            <label for="sermonDatePicker">Date preached</label>
+            <label for="sermonDateText">Date preached</label>
+            <!-- A plain text box in the church's own MM DD YY form, filled in with the Sunday
+                 just gone. It was a native date input, but one of those renders whatever format
+                 the browser's locale says and cannot be told to use another. -->
             <div class="date-input">
-              <input type="date" id="sermonDatePicker" />
+              <input type="text" id="sermonDateText" inputmode="numeric" autocomplete="off" placeholder="MM DD YY" />
               <button type="button" id="use-today-btn" class="use-today-btn">Today</button>
             </div>
             <input type="hidden" id="sermonDate" name="sermonDate" />
