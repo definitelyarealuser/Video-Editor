@@ -2018,3 +2018,31 @@ button.soundcloud-connect-link {
   flex: 0 0 auto;
   padding: 10px 22px;
 }
+
+/* The saved-copy block stacks its parts instead of running them along one line. */
+.destination-body-stacked {
+  flex-direction: column;
+  gap: 8px;
+  align-items: flex-start;
+}
+
+/* In Settings a field is followed directly by a row of buttons, and neither carried any space
+   of its own - so the select sat on top of the line beneath it. */
+.settings-section .field {
+  margin-bottom: 16px;
+}
+
+.settings-section .soundcloud-connect-section {
+  flex-wrap: wrap;
+  row-gap: 10px;
+  margin-bottom: 0;
+}
+
+.settings-section .field + .soundcloud-connect-section {
+  margin-top: 4px;
+}
+
+.settings-section select,
+.settings-section .path-input input {
+  max-width: 100%;
+}

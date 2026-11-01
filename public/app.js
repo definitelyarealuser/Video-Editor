@@ -1010,10 +1010,7 @@
   const loudnessHeadline = document.getElementById('loudnessHeadline');
   const loudnessReasons = document.getElementById('loudnessReasons');
   const loudnessMeasured = document.getElementById('loudnessMeasured');
-  const applyNormalizeBtn = document.getElementById('applyNormalizeBtn');
-  normalizeAudioCheckbox.addEventListener('change', () => {
-    targetLufsSelect.disabled = !normalizeAudioCheckbox.checked;
-  });
+  const normalizeNote = document.getElementById('normalizeNote');
   targetLufsSelect.disabled = !normalizeAudioCheckbox.checked;
 
   // Measures the clip and says whether normalizing is worth switching on, so "does this week
@@ -1051,7 +1048,6 @@
     loudnessHeadline.textContent = headline;
     loudnessReasons.innerHTML = '';
     loudnessMeasured.textContent = '';
-    applyNormalizeBtn.hidden = true;
   }
 
   async function runLoudnessCheck() {
@@ -1090,10 +1086,10 @@
         loudnessMeasured.textContent = data.technical
           + (data.sampled ? ' Estimated from samples across the sermon.' : '');
       }
-      // Applied rather than merely suggested. Somebody who does not know what normalizing is
+      // Ticked rather than merely suggested. Somebody who does not know what normalizing is
       // cannot act on a recommendation to do it, and the result of ignoring it is a sermon
-      // published noticeably quieter than last week's. It says what it did, and undoing it is
-      // one click - but the default is the one that produces the right sound.
+      // published noticeably quieter than last week's. The box can be unticked, and once it has
+      // been, the measurement stops having an opinion about it.
       const shouldEvenOut = data.verdict === 'recommended';
       if (shouldEvenOut && !normalizeAudioCheckbox.checked && !userTurnedOffEvening) {
         normalizeAudioCheckbox.checked = true;
@@ -1101,9 +1097,7 @@
         evenedOutAutomatically = true;
         updateAdvancedSummary();
       }
-      // Once it has been turned on, the button becomes the way back out.
-      applyNormalizeBtn.hidden = !normalizeAudioCheckbox.checked || !evenedOutAutomatically;
-      applyNormalizeBtn.textContent = 'Leave the volume alone';
+      updateNormalizeNote();
     } catch (err) {
       // An aborted request means a newer measurement is already on its way, so the "Measuring…"
       // state is left alone for it to replace - swapping in an error here would flash a failure
@@ -1118,20 +1112,22 @@
     }
   }
 
+  // Why the box is ticked when nobody ticked it. Without this the app looks like it has a
+  // setting that switches itself on at random.
+  function updateNormalizeNote() {
+    const show = normalizeAudioCheckbox.checked && evenedOutAutomatically;
+    normalizeNote.hidden = !show;
+    if (show) normalizeNote.textContent = 'Switched on for you because of the measurement above. Untick it to leave the sound as it was recorded.';
+  }
+
   checkLoudnessBtn.addEventListener('click', runLoudnessCheck);
-  applyNormalizeBtn.addEventListener('click', () => {
-    normalizeAudioCheckbox.checked = false;
-    targetLufsSelect.disabled = true;
-    userTurnedOffEvening = true;
-    evenedOutAutomatically = false;
-    applyNormalizeBtn.hidden = true;
-    updateAdvancedSummary();
-  });
   // Touching the box by hand settles it either way - the measurement stops having an opinion.
   normalizeAudioCheckbox.addEventListener('change', () => {
     userTurnedOffEvening = !normalizeAudioCheckbox.checked;
     evenedOutAutomatically = false;
-    applyNormalizeBtn.hidden = true;
+    targetLufsSelect.disabled = !normalizeAudioCheckbox.checked;
+    updateNormalizeNote();
+    updateAdvancedSummary();
   });
   // Changing the target changes the verdict, so a result measured against the old one is stale.
   targetLufsSelect.addEventListener('change', () => {
@@ -3006,6 +3002,10 @@
     mp3ForcedNote.hidden = !forced;
     exportMp3Checkbox.disabled = forced;
     if (forced) exportMp3Checkbox.checked = true;
+    // The switch only appears alongside the copy being kept. While it is out of sight it goes
+    // back to on, so an MP3 is still made and still downloadable from the finished panel - a
+    // hidden switch quietly suppressing a file is worse than an extra file nobody wanted.
+    else if (!saveLocallyCheckbox.checked) exportMp3Checkbox.checked = true;
 
     updateSavePathVisibility();
     updateRenderButton();

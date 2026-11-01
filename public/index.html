@@ -339,18 +339,17 @@
             <input type="checkbox" id="saveLocally" />
             <span class="destination-name">Keep a copy on this computer</span>
           </label>
-          <div class="destination-body" id="save-locally-body" hidden>
+          <div class="destination-body destination-body-stacked" id="save-locally-body" hidden>
             <div class="field-hint" id="save-folder-summary"></div>
+            <!-- Only worth asking about alongside the copy being kept: it is a question about
+                 which files you end up with, which has no meaning when none are being kept. -->
+            <label class="inline-check">
+              <input type="checkbox" id="exportMp3" checked />
+              Keep an audio-only MP3 too
+            </label>
+            <div class="field-hint" id="mp3-forced-note" hidden>SoundCloud needs the MP3, so it's made whenever that's switched on.</div>
             <button type="button" class="link-btn" data-open-settings="folders">Change the folders</button>
           </div>
-        </div>
-
-        <div class="destination">
-          <label class="inline-check destination-switch">
-            <input type="checkbox" id="exportMp3" checked />
-            <span class="destination-name">Make an audio-only MP3 as well</span>
-          </label>
-          <div class="field-hint" id="mp3-forced-note" hidden>SoundCloud needs the MP3, so it's made whenever that's switched on.</div>
         </div>
       </section>
 
@@ -361,8 +360,15 @@
           <div class="loudness-headline"><span id="loudnessIcon" class="loudness-icon"></span><span id="loudnessHeadline"></span></div>
           <ul id="loudnessReasons" class="loudness-reasons"></ul>
           <div class="loudness-measured" id="loudnessMeasured"></div>
-          <button type="button" id="applyNormalizeBtn" class="loudness-apply" hidden>Even out the volume</button>
         </div>
+        <!-- The control sits with the verdict that drives it, rather than in Advanced: the app
+             ticks it by itself when the sermon is too quiet, and a tickbox someone can untick
+             reads as a setting, where a button reads as an action still to be taken. -->
+        <label class="inline-check">
+          <input type="checkbox" id="normalizeAudio" />
+          Even out the volume
+        </label>
+        <div class="field-hint" id="normalizeNote" hidden></div>
       </section>
 
       <details class="advanced-panel" id="advanced-panel">
@@ -395,10 +401,7 @@
             </div>
           </div>
           <div class="toggle-row">
-            <label class="inline-check">
-              <input type="checkbox" id="normalizeAudio" />
-              Even out the volume, to
-            </label>
+            <label for="targetLufs">Even out the volume to</label>
             <select id="targetLufs">
               <option value="-20">-20</option>
               <option value="-19">-19</option>
